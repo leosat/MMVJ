@@ -1,0 +1,2238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Config",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/ConfigNew"
+    },
+    {
+      "$ref": "#/$defs/ConfigOld"
+    }
+  ],
+  "$defs": {
+    "ConfigNew": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "default": ""
+        },
+        "global": {
+          "$ref": "#/$defs/GlobalSettingsCfg"
+        },
+        "devices": {
+          "$ref": "#/$defs/DevicesCfgNew"
+        },
+        "variables": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/VariableState"
+          },
+          "default": {}
+        },
+        "mappings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Mapping"
+          },
+          "default": []
+        },
+        "ui": {
+          "$ref": "#/$defs/UiCfg",
+          "default": {}
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "global",
+        "devices"
+      ]
+    },
+    "GlobalSettingsCfg": {
+      "type": "object",
+      "properties": {
+        "idle_tick_rate": {
+          "description": "The program will run idle tick with this rate in Hz.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 10,
+          "default": 200
+        },
+        "persistent_joysticks": {
+          "description": "If true, all virtual joysticks will be persistent (not destroyed on hot-reload) by default.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "DevicesCfgNew": {
+      "type": "object",
+      "properties": {
+        "midi": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/MidiMatcherCfg"
+          }
+        },
+        "hid": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/HidDeviceCfg"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "MidiMatcherCfg": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "match_name_regex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "controls": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/MidiControlMatcherCfg"
+          },
+          "default": {}
+        }
+      },
+      "required": [
+        "enabled"
+      ]
+    },
+    "MidiControlMatcherCfg": {
+      "type": "object",
+      "properties": {
+        "midi_message": {
+          "$ref": "#/$defs/MidiMessageCfg"
+        },
+        "range": {
+          "$ref": "#/$defs/NumInterval"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "midi_message",
+        "range"
+      ]
+    },
+    "MidiMessageCfg": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/MappedCtlsMidi"
+        },
+        "channel": {
+          "$ref": "#/$defs/MidiChannelCfg",
+          "default": "any"
+        },
+        "number": {
+          "$ref": "#/$defs/MidiNumberCfg",
+          "default": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    "MappedCtlsMidi": {
+      "type": "string",
+      "enum": [
+        "pitch_wheel",
+        "note",
+        "control_change",
+        "program_change",
+        "aftertouch",
+        "poly_aftertouch",
+        "unhandled"
+      ]
+    },
+    "MidiChannelCfg": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "Any"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Number": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0,
+              "maximum": 255
+            }
+          },
+          "required": [
+            "Number"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "MidiNumberCfg": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0,
+            "maximum": 65535
+          }
+        },
+        {
+          "$ref": "#/$defs/MidiNumberSpecial"
+        }
+      ]
+    },
+    "MidiNumberSpecial": {
+      "anyOf": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "NumInterval": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "number",
+          "format": "float"
+        },
+        {
+          "type": "number",
+          "format": "float"
+        }
+      ],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "HidDeviceCfg": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string",
+          "default": ""
+        },
+        "controls": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/HidControlMatcherCfg"
+          },
+          "default": {}
+        }
+      },
+      "required": [
+        "enabled"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/HidMatcherParamsCfg"
+        },
+        {
+          "$ref": "#/$defs/HidVirtualParamsCfg"
+        }
+      ]
+    },
+    "HidMatcherParamsCfg": {
+      "type": "object",
+      "properties": {
+        "match_name_regex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "HidVirtualParamsCfg": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "default": ""
+        },
+        "persistent": {
+          "type": "boolean",
+          "default": false
+        },
+        "bus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HidDeviceBusSpecCfg"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "force_feedback": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HIDDeviceForceFeedbackCfg"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "HidDeviceBusSpecCfg": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/HidDeviceBusType",
+          "default": "Virtual"
+        },
+        "vendor_id": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0,
+          "maximum": 65535,
+          "default": 4660
+        },
+        "product_id": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0,
+          "maximum": 65535,
+          "default": 22136
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0,
+          "maximum": 65535,
+          "default": 256
+        }
+      },
+      "additionalProperties": false
+    },
+    "HidDeviceBusType": {
+      "type": "string",
+      "enum": [
+        "Virtual",
+        "Usb",
+        "IsaPnp",
+        "Isa",
+        "Gameport"
+      ]
+    },
+    "HIDDeviceForceFeedbackCfg": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HidFfEffect"
+          },
+          "default": []
+        },
+        "max_effects": {
+          "description": "Must support at least 1 effect if enabled",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 1,
+          "default": 16
+        },
+        "fake_accepting_all_effects": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "HidFfEffect": {
+      "type": "string",
+      "enum": [
+        "Constant",
+        "Periodic",
+        "Rumble",
+        "Spring",
+        "Friction",
+        "Damper",
+        "Intertia",
+        "Ramp",
+        "Square",
+        "Triangle",
+        "Sine",
+        "SawUp",
+        "SawDown",
+        "Custom",
+        "Gain",
+        "Autocenter"
+      ]
+    },
+    "HidControlMatcherCfg": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/MappedCtls"
+        },
+        "range": {
+          "$ref": "#/$defs/NumInterval"
+        },
+        "properties": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AxisProperties"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "initial_value": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "type",
+        "range"
+      ]
+    },
+    "MappedCtls": {
+      "description": "Internal event codes enumeration, flat and abstracting from platform-related\nimplementation, conversion from and to configuration string representation\nwith strum.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "ABS_X",
+            "ABS_Y",
+            "ABS_Z",
+            "ABS_RX",
+            "ABS_RY",
+            "ABS_RZ",
+            "ABS_THROTTLE",
+            "ABS_RUDDER",
+            "ABS_WHEEL",
+            "ABS_GAS",
+            "ABS_BRAKE",
+            "ABS_HAT0_X",
+            "ABS_HAT0_Y",
+            "ABS_HAT1_X",
+            "ABS_HAT1_Y",
+            "ABS_HAT2_X",
+            "ABS_HAT2_Y",
+            "ABS_HAT3_X",
+            "ABS_HAT3_Y",
+            "ABS_PRESSURE",
+            "ABS_DISTANCE",
+            "ABS_TILT_X",
+            "ABS_TILT_Y",
+            "ABS_TOOL_WIDTH",
+            "ABS_VOLUME",
+            "ABS_MISC",
+            "REL_X",
+            "REL_Y",
+            "REL_Z",
+            "REL_R_X",
+            "REL_R_Y",
+            "REL_R_Z",
+            "REL_HWHEEL",
+            "REL_DIAL",
+            "REL_WHEEL",
+            "REL_RESERVED",
+            "REL_MISC",
+            "REL_WHEEL_HI_RES",
+            "REL_HWHEEL_HI_RES",
+            "BTN_0",
+            "BTN_1",
+            "BTN_2",
+            "BTN_3",
+            "BTN_4",
+            "BTN_5",
+            "BTN_6",
+            "BTN_7",
+            "BTN_8",
+            "BTN_9",
+            "BTN_LEFT",
+            "BTN_RIGHT",
+            "BTN_MIDDLE",
+            "BTN_SIDE",
+            "BTN_EXTRA",
+            "BTN_FORWARD",
+            "BTN_BACK",
+            "BTN_TASK",
+            "BTN_TRIGGER",
+            "BTN_THUMB",
+            "BTN_THUMB2",
+            "BTN_TOP",
+            "BTN_TOP2",
+            "BTN_PINKIE",
+            "BTN_BASE",
+            "BTN_BASE2",
+            "BTN_BASE3",
+            "BTN_BASE4",
+            "BTN_BASE5",
+            "BTN_BASE6",
+            "BTN_DEAD",
+            "BTN_SOUTH",
+            "BTN_EAST",
+            "BTN_C",
+            "BTN_NORTH",
+            "BTN_WEST",
+            "BTN_Z",
+            "BTN_TL",
+            "BTN_TR",
+            "BTN_TL2",
+            "BTN_TR2",
+            "BTN_SELECT",
+            "BTN_START",
+            "BTN_MODE",
+            "BTN_THUMBL",
+            "BTN_THUMBR",
+            "BTN_TOOL_PEN",
+            "BTN_TOOL_RUBBER",
+            "BTN_TOOL_BRUSH",
+            "BTN_TOOL_PENCIL",
+            "BTN_TOOL_AIRBRUSH",
+            "BTN_TOOL_FINGER",
+            "BTN_TOOL_MOUSE",
+            "BTN_TOOL_LENS",
+            "BTN_TOOL_QUINTTAP",
+            "BTN_TOUCH",
+            "BTN_STYLUS",
+            "BTN_STYLUS2",
+            "BTN_TOOL_DOUBLETAP",
+            "BTN_TOOL_TRIPLETAP",
+            "BTN_TOOL_QUADTAP",
+            "BTN_GEAR_DOWN",
+            "BTN_GEAR_UP",
+            "BTN_DPAD_UP",
+            "BTN_DPAD_DOWN",
+            "BTN_DPAD_LEFT",
+            "BTN_DPAD_RIGHT",
+            "BTN_TRIGGER_HAPPY1",
+            "BTN_TRIGGER_HAPPY2",
+            "BTN_TRIGGER_HAPPY3",
+            "BTN_TRIGGER_HAPPY4",
+            "BTN_TRIGGER_HAPPY5",
+            "BTN_TRIGGER_HAPPY6",
+            "BTN_TRIGGER_HAPPY7",
+            "BTN_TRIGGER_HAPPY8",
+            "BTN_TRIGGER_HAPPY9",
+            "BTN_TRIGGER_HAPPY10",
+            "BTN_TRIGGER_HAPPY11",
+            "BTN_TRIGGER_HAPPY12",
+            "BTN_TRIGGER_HAPPY13",
+            "BTN_TRIGGER_HAPPY14",
+            "BTN_TRIGGER_HAPPY15",
+            "BTN_TRIGGER_HAPPY16",
+            "BTN_TRIGGER_HAPPY17",
+            "BTN_TRIGGER_HAPPY18",
+            "BTN_TRIGGER_HAPPY19",
+            "BTN_TRIGGER_HAPPY20",
+            "BTN_TRIGGER_HAPPY21",
+            "BTN_TRIGGER_HAPPY22",
+            "BTN_TRIGGER_HAPPY23",
+            "BTN_TRIGGER_HAPPY24",
+            "BTN_TRIGGER_HAPPY25",
+            "BTN_TRIGGER_HAPPY26",
+            "BTN_TRIGGER_HAPPY27",
+            "BTN_TRIGGER_HAPPY28",
+            "BTN_TRIGGER_HAPPY29",
+            "BTN_TRIGGER_HAPPY30",
+            "BTN_TRIGGER_HAPPY31",
+            "BTN_TRIGGER_HAPPY32",
+            "BTN_TRIGGER_HAPPY33",
+            "BTN_TRIGGER_HAPPY34",
+            "BTN_TRIGGER_HAPPY35",
+            "BTN_TRIGGER_HAPPY36",
+            "BTN_TRIGGER_HAPPY37",
+            "BTN_TRIGGER_HAPPY38",
+            "BTN_TRIGGER_HAPPY39",
+            "BTN_TRIGGER_HAPPY40",
+            "BTN_JOYSTICK",
+            "BTN_GAMEPAD",
+            "KEY_RESERVED",
+            "KEY_ESC",
+            "KEY_1",
+            "KEY_2",
+            "KEY_3",
+            "KEY_4",
+            "KEY_5",
+            "KEY_6",
+            "KEY_7",
+            "KEY_8",
+            "KEY_9",
+            "KEY_0",
+            "KEY_MINUS",
+            "KEY_EQUAL",
+            "KEY_BACKSPACE",
+            "KEY_TAB",
+            "KEY_Q",
+            "KEY_W",
+            "KEY_E",
+            "KEY_R",
+            "KEY_T",
+            "KEY_Y",
+            "KEY_U",
+            "KEY_I",
+            "KEY_O",
+            "KEY_P",
+            "KEY_LEFTBRACE",
+            "KEY_RIGHTBRACE",
+            "KEY_ENTER",
+            "KEY_LEFTCTRL",
+            "KEY_A",
+            "KEY_S",
+            "KEY_D",
+            "KEY_F",
+            "KEY_G",
+            "KEY_H",
+            "KEY_J",
+            "KEY_K",
+            "KEY_L",
+            "KEY_SEMICOLON",
+            "KEY_APOSTROPHE",
+            "KEY_GRAVE",
+            "KEY_LEFTSHIFT",
+            "KEY_BACKSLASH",
+            "KEY_Z",
+            "KEY_X",
+            "KEY_C",
+            "KEY_V",
+            "KEY_B",
+            "KEY_N",
+            "KEY_M",
+            "KEY_COMMA",
+            "KEY_DOT",
+            "KEY_SLASH",
+            "KEY_RIGHTSHIFT",
+            "KEY_KPASTERISK",
+            "KEY_LEFTALT",
+            "KEY_SPACE",
+            "KEY_CAPSLOCK",
+            "KEY_F1",
+            "KEY_F2",
+            "KEY_F3",
+            "KEY_F4",
+            "KEY_F5",
+            "KEY_F6",
+            "KEY_F7",
+            "KEY_F8",
+            "KEY_F9",
+            "KEY_F10",
+            "KEY_NUMLOCK",
+            "KEY_SCROLLLOCK",
+            "KEY_KP7",
+            "KEY_KP8",
+            "KEY_KP9",
+            "KEY_KPMINUS",
+            "KEY_KP4",
+            "KEY_KP5",
+            "KEY_KP6",
+            "KEY_KPPLUS",
+            "KEY_KP1",
+            "KEY_KP2",
+            "KEY_KP3",
+            "KEY_KP0",
+            "KEY_KPDOT",
+            "KEY_ZENKAKUHANKAKU",
+            "KEY_102ND",
+            "KEY_F11",
+            "KEY_F12",
+            "KEY_RO",
+            "KEY_KATAKANA",
+            "KEY_HIRAGANA",
+            "KEY_HENKAN",
+            "KEY_KATAKANAHIRAGANA",
+            "KEY_MUHENKAN",
+            "KEY_KPJPCOMMA",
+            "KEY_KPENTER",
+            "KEY_RIGHTCTRL",
+            "KEY_KPSLASH",
+            "KEY_SYSRQ",
+            "KEY_RIGHTALT",
+            "KEY_LINEFEED",
+            "KEY_HOME",
+            "KEY_UP",
+            "KEY_PAGEUP",
+            "KEY_LEFT",
+            "KEY_RIGHT",
+            "KEY_END",
+            "KEY_DOWN",
+            "KEY_PAGEDOWN",
+            "KEY_INSERT",
+            "KEY_DELETE",
+            "KEY_MACRO",
+            "KEY_MUTE",
+            "KEY_VOLUMEDOWN",
+            "KEY_VOLUMEUP",
+            "KEY_POWER",
+            "KEY_KPEQUAL",
+            "KEY_KPPLUSMINUS",
+            "KEY_PAUSE",
+            "KEY_SCALE",
+            "KEY_KPCOMMA",
+            "KEY_HANGEUL",
+            "KEY_HANJA",
+            "KEY_YEN",
+            "KEY_LEFTMETA",
+            "KEY_RIGHTMETA",
+            "KEY_COMPOSE",
+            "KEY_STOP",
+            "KEY_AGAIN",
+            "KEY_PROPS",
+            "KEY_UNDO",
+            "KEY_FRONT",
+            "KEY_COPY",
+            "KEY_OPEN",
+            "KEY_PASTE",
+            "KEY_FIND",
+            "KEY_CUT",
+            "KEY_HELP",
+            "KEY_MENU",
+            "KEY_CALC",
+            "KEY_SETUP",
+            "KEY_SLEEP",
+            "KEY_WAKEUP",
+            "KEY_FILE",
+            "KEY_SENDFILE",
+            "KEY_DELETEFILE",
+            "KEY_XFER",
+            "KEY_PROG1",
+            "KEY_PROG2",
+            "KEY_WWW",
+            "KEY_MSDOS",
+            "KEY_COFFEE",
+            "KEY_DIRECTION",
+            "KEY_ROTATE_DISPLAY",
+            "KEY_CYCLEWINDOWS",
+            "KEY_MAIL",
+            "KEY_BOOKMARKS",
+            "KEY_COMPUTER",
+            "KEY_BACK",
+            "KEY_FORWARD",
+            "KEY_CLOSECD",
+            "KEY_EJECTCD",
+            "KEY_EJECTCLOSECD",
+            "KEY_NEXTSONG",
+            "KEY_PLAYPAUSE",
+            "KEY_PREVIOUSSONG",
+            "KEY_STOPCD",
+            "KEY_RECORD",
+            "KEY_REWIND",
+            "KEY_PHONE",
+            "KEY_ISO",
+            "KEY_CONFIG",
+            "KEY_HOMEPAGE",
+            "KEY_REFRESH",
+            "KEY_EXIT",
+            "KEY_MOVE",
+            "KEY_EDIT",
+            "KEY_SCROLLUP",
+            "KEY_SCROLLDOWN",
+            "KEY_KPLEFTPAREN",
+            "KEY_KPRIGHTPAREN",
+            "KEY_NEW",
+            "KEY_REDO",
+            "KEY_F13",
+            "KEY_F14",
+            "KEY_F15",
+            "KEY_F16",
+            "KEY_F17",
+            "KEY_F18",
+            "KEY_F19",
+            "KEY_F20",
+            "KEY_F21",
+            "KEY_F22",
+            "KEY_F23",
+            "KEY_F24",
+            "KEY_PLAYCD",
+            "KEY_PAUSECD",
+            "KEY_PROG3",
+            "KEY_PROG4",
+            "KEY_DASHBOARD",
+            "KEY_SUSPEND",
+            "KEY_CLOSE",
+            "KEY_PLAY",
+            "KEY_FASTFORWARD",
+            "KEY_BASSBOOST",
+            "KEY_PRINT",
+            "KEY_HP",
+            "KEY_CAMERA",
+            "KEY_SOUND",
+            "KEY_QUESTION",
+            "KEY_EMAIL",
+            "KEY_CHAT",
+            "KEY_SEARCH",
+            "KEY_CONNECT",
+            "KEY_FINANCE",
+            "KEY_SPORT",
+            "KEY_SHOP",
+            "KEY_ALTERASE",
+            "KEY_CANCEL",
+            "KEY_BRIGHTNESSDOWN",
+            "KEY_BRIGHTNESSUP",
+            "KEY_MEDIA",
+            "KEY_SWITCHVIDEOMODE",
+            "KEY_KBDILLUMTOGGLE",
+            "KEY_KBDILLUMDOWN",
+            "KEY_KBDILLUMUP",
+            "KEY_SEND",
+            "KEY_REPLY",
+            "KEY_FORWARDMAIL",
+            "KEY_SAVE",
+            "KEY_DOCUMENTS",
+            "KEY_BATTERY",
+            "KEY_BLUETOOTH",
+            "KEY_WLAN",
+            "KEY_UWB",
+            "KEY_UNKNOWN",
+            "KEY_VIDEO_NEXT",
+            "KEY_VIDEO_PREV",
+            "KEY_BRIGHTNESS_CYCLE",
+            "KEY_BRIGHTNESS_AUTO",
+            "KEY_DISPLAY_OFF",
+            "KEY_WWAN",
+            "KEY_RFKILL",
+            "KEY_MICMUTE",
+            "KEY_OK",
+            "KEY_SELECT",
+            "KEY_GOTO",
+            "KEY_CLEAR",
+            "KEY_POWER2",
+            "KEY_OPTION",
+            "KEY_INFO",
+            "KEY_TIME",
+            "KEY_VENDOR",
+            "KEY_ARCHIVE",
+            "KEY_PROGRAM",
+            "KEY_CHANNEL",
+            "KEY_FAVORITES",
+            "KEY_EPG",
+            "KEY_PVR",
+            "KEY_MHP",
+            "KEY_LANGUAGE",
+            "KEY_TITLE",
+            "KEY_SUBTITLE",
+            "KEY_ANGLE",
+            "KEY_ZOOM",
+            "KEY_FULL_SCREEN",
+            "KEY_MODE",
+            "KEY_KEYBOARD",
+            "KEY_SCREEN",
+            "KEY_PC",
+            "KEY_TV",
+            "KEY_TV2",
+            "KEY_VCR",
+            "KEY_VCR2",
+            "KEY_SAT",
+            "KEY_SAT2",
+            "KEY_CD",
+            "KEY_TAPE",
+            "KEY_RADIO",
+            "KEY_TUNER",
+            "KEY_PLAYER",
+            "KEY_TEXT",
+            "KEY_DVD",
+            "KEY_AUX",
+            "KEY_MP3",
+            "KEY_AUDIO",
+            "KEY_VIDEO",
+            "KEY_DIRECTORY",
+            "KEY_LIST",
+            "KEY_MEMO",
+            "KEY_CALENDAR",
+            "KEY_RED",
+            "KEY_GREEN",
+            "KEY_YELLOW",
+            "KEY_BLUE",
+            "KEY_CHANNELUP",
+            "KEY_CHANNELDOWN",
+            "KEY_FIRST",
+            "KEY_LAST",
+            "KEY_AB",
+            "KEY_NEXT",
+            "KEY_RESTART",
+            "KEY_SLOW",
+            "KEY_SHUFFLE",
+            "KEY_BREAK",
+            "KEY_PREVIOUS",
+            "KEY_DIGITS",
+            "KEY_TEEN",
+            "KEY_TWEN",
+            "KEY_VIDEOPHONE",
+            "KEY_GAMES",
+            "KEY_ZOOMIN",
+            "KEY_ZOOMOUT",
+            "KEY_ZOOMRESET",
+            "KEY_WORDPROCESSOR",
+            "KEY_EDITOR",
+            "KEY_SPREADSHEET",
+            "KEY_GRAPHICSEDITOR",
+            "KEY_PRESENTATION",
+            "KEY_DATABASE",
+            "KEY_NEWS",
+            "KEY_VOICEMAIL",
+            "KEY_ADDRESSBOOK",
+            "KEY_MESSENGER",
+            "KEY_DISPLAYTOGGLE",
+            "KEY_SPELLCHECK",
+            "KEY_LOGOFF",
+            "KEY_DOLLAR",
+            "KEY_EURO",
+            "KEY_FRAMEBACK",
+            "KEY_FRAMEFORWARD",
+            "KEY_CONTEXT_MENU",
+            "KEY_MEDIA_REPEAT",
+            "KEY_10CHANNELSUP",
+            "KEY_10CHANNELSDOWN",
+            "KEY_IMAGES",
+            "KEY_PICKUP_PHONE",
+            "KEY_HANGUP_PHONE",
+            "KEY_DEL_EOL",
+            "KEY_DEL_EOS",
+            "KEY_INS_LINE",
+            "KEY_DEL_LINE",
+            "KEY_FN",
+            "KEY_FN_ESC",
+            "KEY_FN_F1",
+            "KEY_FN_F2",
+            "KEY_FN_F3",
+            "KEY_FN_F4",
+            "KEY_FN_F5",
+            "KEY_FN_F6",
+            "KEY_FN_F7",
+            "KEY_FN_F8",
+            "KEY_FN_F9",
+            "KEY_FN_F10",
+            "KEY_FN_F11",
+            "KEY_FN_F12",
+            "KEY_FN_1",
+            "KEY_FN_2",
+            "KEY_FN_D",
+            "KEY_FN_E",
+            "KEY_FN_F",
+            "KEY_FN_S",
+            "KEY_FN_B",
+            "KEY_BRL_DOT1",
+            "KEY_BRL_DOT2",
+            "KEY_BRL_DOT3",
+            "KEY_BRL_DOT4",
+            "KEY_BRL_DOT5",
+            "KEY_BRL_DOT6",
+            "KEY_BRL_DOT7",
+            "KEY_BRL_DOT8",
+            "KEY_BRL_DOT9",
+            "KEY_BRL_DOT10",
+            "KEY_NUMERIC_0",
+            "KEY_NUMERIC_1",
+            "KEY_NUMERIC_2",
+            "KEY_NUMERIC_3",
+            "KEY_NUMERIC_4",
+            "KEY_NUMERIC_5",
+            "KEY_NUMERIC_6",
+            "KEY_NUMERIC_7",
+            "KEY_NUMERIC_8",
+            "KEY_NUMERIC_9",
+            "KEY_NUMERIC_STAR",
+            "KEY_NUMERIC_POUND",
+            "KEY_NUMERIC_A",
+            "KEY_NUMERIC_B",
+            "KEY_NUMERIC_C",
+            "KEY_NUMERIC_D",
+            "KEY_CAMERA_FOCUS",
+            "KEY_WPS_BUTTON",
+            "KEY_TOUCHPAD_TOGGLE",
+            "KEY_TOUCHPAD_ON",
+            "KEY_TOUCHPAD_OFF",
+            "KEY_CAMERA_ZOOMIN",
+            "KEY_CAMERA_ZOOMOUT",
+            "KEY_CAMERA_UP",
+            "KEY_CAMERA_DOWN",
+            "KEY_CAMERA_LEFT",
+            "KEY_CAMERA_RIGHT",
+            "KEY_ATTENDANT_ON",
+            "KEY_ATTENDANT_OFF",
+            "KEY_ATTENDANT_TOGGLE",
+            "KEY_LIGHTS_TOGGLE",
+            "KEY_ALS_TOGGLE",
+            "KEY_BUTTONCONFIG",
+            "KEY_TASKMANAGER",
+            "KEY_JOURNAL",
+            "KEY_CONTROLPANEL",
+            "KEY_APPSELECT",
+            "KEY_SCREENSAVER",
+            "KEY_VOICECOMMAND",
+            "KEY_ASSISTANT",
+            "KEY_KBD_LAYOUT_NEXT",
+            "KEY_BRIGHTNESS_MIN",
+            "KEY_BRIGHTNESS_MAX",
+            "KEY_KBDINPUTASSIST_PREV",
+            "KEY_KBDINPUTASSIST_NEXT",
+            "KEY_KBDINPUTASSIST_PREVGROUP",
+            "KEY_KBDINPUTASSIST_NEXTGROUP",
+            "KEY_KBDINPUTASSIST_ACCEPT",
+            "KEY_KBDINPUTASSIST_CANCEL",
+            "KEY_RIGHT_UP",
+            "KEY_RIGHT_DOWN",
+            "KEY_LEFT_UP",
+            "KEY_LEFT_DOWN",
+            "KEY_ROOT_MENU",
+            "KEY_MEDIA_TOP_MENU",
+            "KEY_NUMERIC_11",
+            "KEY_NUMERIC_12",
+            "KEY_AUDIO_DESC",
+            "KEY_3D_MODE",
+            "KEY_NEXT_FAVORITE",
+            "KEY_STOP_RECORD",
+            "KEY_PAUSE_RECORD",
+            "KEY_VOD",
+            "KEY_UNMUTE",
+            "KEY_FASTREVERSE",
+            "KEY_SLOWREVERSE",
+            "KEY_DATA",
+            "KEY_ONSCREEN_KEYBOARD",
+            "KEY_PRIVACY_SCREEN_TOGGLE",
+            "KEY_SELECTIVE_SCREENSHOT",
+            "PITCH_WHEEL",
+            "NOTE",
+            "CONTROL_CHANGE",
+            "PROGRAM_CHANGE",
+            "AFTERTOUCH",
+            "POLY_AFTERTOUCH",
+            "FORCE_FEEDBACK_X",
+            "FORCE_FEEDBACK_Y",
+            "UNHANDLED"
+          ]
+        },
+        {
+          "description": "MT slot being modified",
+          "type": "string",
+          "const": "ABS_MT_SLOT"
+        },
+        {
+          "description": "Major axis of touching ellipse",
+          "type": "string",
+          "const": "ABS_MT_TOUCH_MAJOR"
+        },
+        {
+          "description": "Minor axis (omit if circular)",
+          "type": "string",
+          "const": "ABS_MT_TOUCH_MINOR"
+        },
+        {
+          "description": "Major axis of approaching ellipse",
+          "type": "string",
+          "const": "ABS_MT_WIDTH_MAJOR"
+        },
+        {
+          "description": "Minor axis (omit if circular)",
+          "type": "string",
+          "const": "ABS_MT_WIDTH_MINOR"
+        },
+        {
+          "description": "Ellipse orientation",
+          "type": "string",
+          "const": "ABS_MT_ORIENTATION"
+        },
+        {
+          "description": "Center X touch position",
+          "type": "string",
+          "const": "ABS_MT_POSITION_X"
+        },
+        {
+          "description": "Center Y touch position",
+          "type": "string",
+          "const": "ABS_MT_POSITION_Y"
+        },
+        {
+          "description": "Type of touching device",
+          "type": "string",
+          "const": "ABS_MT_TOOL_TYPE"
+        },
+        {
+          "description": "Group a set of packets as a blob",
+          "type": "string",
+          "const": "ABS_MT_BLOB_ID"
+        },
+        {
+          "description": "Unique ID of the initiated contact",
+          "type": "string",
+          "const": "ABS_MT_TRACKING_ID"
+        },
+        {
+          "description": "Pressure on contact area",
+          "type": "string",
+          "const": "ABS_MT_PRESSURE"
+        },
+        {
+          "description": "Contact over distance",
+          "type": "string",
+          "const": "ABS_MT_DISTANCE"
+        },
+        {
+          "description": "Center X tool position",
+          "type": "string",
+          "const": "ABS_MT_TOOL_X"
+        },
+        {
+          "description": "Center Y tool position",
+          "type": "string",
+          "const": "ABS_MT_TOOL_Y"
+        }
+      ]
+    },
+    "AxisProperties": {
+      "type": "object",
+      "properties": {
+        "resolution": {
+          "description": "Resolution must be positive",
+          "type": "number",
+          "format": "float",
+          "minimum": 0.0,
+          "default": 1.0
+        },
+        "fuzz": {
+          "description": "Fuzz/Flat thresholds must be positive",
+          "type": "number",
+          "format": "float",
+          "minimum": 0.0,
+          "default": 0.0
+        },
+        "flat": {
+          "type": "number",
+          "format": "float",
+          "minimum": 0.0,
+          "default": 0.0
+        }
+      }
+    },
+    "VariableState": {
+      "type": "object",
+      "properties": {
+        "range": {
+          "$ref": "#/$defs/NumInterval"
+        }
+      },
+      "required": [
+        "range"
+      ]
+    },
+    "Mapping": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "default": ""
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "source": {
+          "$ref": "#/$defs/ValueSrcs"
+        },
+        "destination": {
+          "$ref": "#/$defs/ValueDsts"
+        },
+        "transformation": {
+          "$ref": "#/$defs/TfmSeqCfg",
+          "default": []
+        }
+      },
+      "required": [
+        "source",
+        "destination"
+      ]
+    },
+    "ValueSrcs": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StaticValueCfg"
+        },
+        {
+          "$ref": "#/$defs/DynValueRefs"
+        }
+      ]
+    },
+    "StaticValueCfg": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "float"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "number",
+              "format": "float"
+            },
+            "range": {
+              "$ref": "#/$defs/NumInterval",
+              "default": [
+                0.0,
+                1.0
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "value"
+          ]
+        }
+      ]
+    },
+    "DynValueRefs": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DeviceControlMatcherRef"
+        },
+        {
+          "$ref": "#/$defs/VariableRef"
+        }
+      ]
+    },
+    "DeviceControlMatcherRef": {
+      "type": "object",
+      "properties": {
+        "dev": {
+          "type": "string"
+        },
+        "ctl": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "dev",
+        "ctl"
+      ]
+    },
+    "VariableRef": {
+      "type": "object",
+      "properties": {
+        "var": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "var"
+      ]
+    },
+    "ValueDsts": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DynValueRefs"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "TfmSeqCfg": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TfmStepCfg"
+          }
+        },
+        {
+          "$ref": "#/$defs/TfmSeqFull"
+        }
+      ]
+    },
+    "TfmStepCfg": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "nop": {
+              "$ref": "#/$defs/NopCfg"
+            }
+          },
+          "required": [
+            "nop"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "invert": {
+              "$ref": "#/$defs/InvertCfg"
+            }
+          },
+          "required": [
+            "invert"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "integrate": {
+              "$ref": "#/$defs/IntegrateCfg"
+            }
+          },
+          "required": [
+            "integrate"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "steering": {
+              "$ref": "#/$defs/SteeringCfg"
+            }
+          },
+          "required": [
+            "steering"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "clamp": {
+              "$ref": "#/$defs/ClampCfg"
+            }
+          },
+          "required": [
+            "clamp"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "raise_fall": {
+              "$ref": "#/$defs/RaiseFallCfg"
+            }
+          },
+          "required": [
+            "raise_fall"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ema": {
+              "$ref": "#/$defs/EmaFilterCfg"
+            }
+          },
+          "required": [
+            "ema"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "linear": {
+              "$ref": "#/$defs/LinearCfg"
+            }
+          },
+          "required": [
+            "linear"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "smoothstep": {
+              "$ref": "#/$defs/SmoothstepCfg"
+            }
+          },
+          "required": [
+            "smoothstep"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "s_curve": {
+              "$ref": "#/$defs/SCurveCfg"
+            }
+          },
+          "required": [
+            "s_curve"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "exp": {
+              "$ref": "#/$defs/NormExpCfg"
+            }
+          },
+          "required": [
+            "exp"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "signed_power": {
+              "$ref": "#/$defs/SignedPowerCfg"
+            }
+          },
+          "required": [
+            "signed_power"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "one_euro": {
+              "$ref": "#/$defs/OneEuroFilterCfg"
+            }
+          },
+          "required": [
+            "one_euro"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "script": {
+              "$ref": "#/$defs/ScriptCfg"
+            }
+          },
+          "required": [
+            "script"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "__high_pass": {
+              "$ref": "#/$defs/HighPassCfg"
+            }
+          },
+          "required": [
+            "__high_pass"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "__force_feedback": {
+              "$ref": "#/$defs/ForceFeedbackCfg"
+            }
+          },
+          "required": [
+            "__force_feedback"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "NopCfg": {
+      "type": "boolean"
+    },
+    "InvertCfg": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "IntegrateCfg": {
+      "type": "object",
+      "properties": {
+        "desc": {
+          "$ref": "#/$defs/DescriptionCfg"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "range": {
+          "$ref": "#/$defs/NumInterval"
+        },
+        "deadzone_norm": {
+          "type": "number",
+          "format": "float",
+          "minimum": 0.0,
+          "default": 0.0
+        },
+        "smoothing_alpha": {
+          "type": "number",
+          "format": "float",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 1.0
+        },
+        "on_idle": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "range"
+      ]
+    },
+    "DescriptionCfg": {
+      "type": "string"
+    },
+    "SteeringCfg": {
+      "description": "Steering wheel emulation transform.\n\nConverts relative input (e.g. mouse movement) into an absolute wheel\nposition in [-1, +1], with force-feedback displacement, autocentering,\nand a configurable \"hold factor\" simulating grip strength.\n\nSee the doc/steering.md for a full\nguide, signal-flow diagram, and configuration examples.",
+      "type": "object",
+      "properties": {
+        "desc": {
+          "description": "Optional human-readable description shown in the GUI.",
+          "$ref": "#/$defs/DescriptionCfg"
+        },
+        "enabled": {
+          "description": "Master on/off switch. When `false` the input passes through unchanged.",
+          "type": "boolean",
+          "default": true
+        },
+        "accumulator": {
+          "description": "Optional external variable (or device control) that persists the raw\naccumulated wheel angle (`pre_filter`) across ticks.\n\nUseful for sharing wheel state across mappings or for inspection.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DynValueRefs"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "deadzone_counts": {
+          "description": "*(Reserved — currently unused.)*\n\nIntended deadzone in input counts below which movement is ignored.",
+          "type": "number",
+          "format": "float",
+          "minimum": 0.0,
+          "default": 0.0
+        },
+        "input_gain": {
+          "description": "Multiplier applied to the raw input **before**\naccumulation. Mapped from its own interval to [0, 1].\n\n- Low (0.05–0.15): heavy, slow steering.\n- High (0.3–0.5): quick, responsive steering.\n\nAccepts a static value or a dynamic reference (`var:` / `dev:`)\nfor runtime adjustment.\n\nYAML aliases: `smoothing_alpha`, `input_sensitivity`.",
+          "$ref": "#/$defs/ValueSrcs"
+        },
+        "auto_center_halflife": {
+          "description": "Half-life (in seconds) of the exponential autocentering decay.\n\n- `0`: autocentering disabled.\n- `0.1`: snappy return.\n- `0.3` (default): moderate, natural return.\n- `1.0+`: slow drift to center.\n\nDecay per tick: `(1 - 2^(-dt / halflife)) * (1 - hold_factor)`.\nOnly active when the user is idle and (FFB is negligible or\n`auto_center_along_force_feedback > 0`).",
+          "$ref": "#/$defs/ValueSrcs",
+          "default": 0.0
+        },
+        "auto_center_along_force_feedback": {
+          "description": "Allows autocentering to operate **alongside** active force feedback,\nscaled by this factor in [0, 1].\n\n- `0.0` (default): autocentering suppressed while FFB is present.\n- `1.0`: autocentering at full strength regardless of FFB.\n\nAccepts a bare `true`/`false` in YAML (converted to 1.0/0.0).",
+          "$ref": "#/$defs/ValueSrcs",
+          "default": 0.0
+        },
+        "hold_factor": {
+          "description": "Simulated grip strength in [0, 1]. Scales both FFB displacement\nand autocentering by `(1 - hold_factor)`.\n\n- `0.0` (default): hands off — FFB and autocentering act freely.\n- `0.5`: moderate grip — half effect.\n- `1.0`: locked grip — wheel immovable except by direct input.\n\nCommonly mapped to mouse Y via a separate `integrate` + `clamp`\nmapping for dynamic grip control.",
+          "$ref": "#/$defs/ValueSrcs",
+          "default": 0.0
+        },
+        "force_feedback": {
+          "description": "Force-feedback sub-configuration.\n\nWhen present and enabled, the step reads FFB forces from the\ndestination virtual device (or a `custom_source`), optionally\nfilters them through `transformation`, scales by `gain`, and\napplies the result as a positional offset weighted by\n`(1 - hold_factor) * dt`.\n\nOmit or set `enabled: false` to disable FFB entirely.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ForceFeedbackCfg"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "integrated_user_input_transform": {
+          "description": "Sub-pipeline applied to the accumulated user input **after**\nintegration but **before** FFB and autocentering.\n\nReceives the wheel angle in [-1, +1] (absolute). Use this to\nreshape the steering response curve:\n\n- `exp` with `base > 1, center_symmetric: true` — progressive\n  ratio (less sensitive in center).\n- `exp` with `base < 1` — inverted progressive (more sensitive\n  in center).\n- Empty (default) — linear 1:1 passthrough.",
+          "$ref": "#/$defs/TfmSeqCfg",
+          "default": []
+        }
+      },
+      "required": [
+        "input_gain"
+      ]
+    },
+    "ForceFeedbackCfg": {
+      "description": "Force-feedback configuration for the steering transform.\n\nControls how FFB forces from the game (read via the virtual HID device)\nare filtered, scaled, and applied as positional offsets to the emulated\nsteering wheel.",
+      "type": "object",
+      "properties": {
+        "desc": {
+          "description": "Optional human-readable description.",
+          "$ref": "#/$defs/DescriptionCfg"
+        },
+        "enabled": {
+          "description": "Enable/disable FFB processing. When `false`, no force is applied.",
+          "type": "boolean",
+          "default": true
+        },
+        "gain": {
+          "description": "Multiplier applied to the (optionally filtered) FFB force.\n\n- `1.0` (default): force applied as-is.\n- `> 1.0`: amplifies FFB effect.\n- `< 1.0`: dampens FFB effect.\n- `0.0`: effectively disables FFB without removing the config block.",
+          "type": "number",
+          "format": "float",
+          "minimum": 0.0,
+          "default": 1.0
+        },
+        "invert": {
+          "description": "Flips the sign of the FFB force.\n\nUse when the wheel turns the wrong way in response to game forces\n(e.g. assists the turn instead of resisting it).",
+          "type": "boolean",
+          "default": false
+        },
+        "component": {
+          "description": "Selects which FFB axis to read from the virtual device.\n\n- `X` (default): primary steering axis.\n- `Y`: secondary axis / separate effect channel.",
+          "$ref": "#/$defs/ForceFeedbackComponent",
+          "default": "X"
+        },
+        "transformation": {
+          "description": "Sub-pipeline applied to the raw FFB signal **before** `gain` and\n`invert`.\n\nReceives the force in [-1, +1] with relative semantics.\nTypical uses: `ema`/`one_euro` smoothing, `clamp` for peak\nlimiting, curves for reshaping the force response.",
+          "$ref": "#/$defs/TfmSeqCfg",
+          "default": []
+        },
+        "custom_source": {
+          "description": "Overrides the default FFB source.\n\nInstead of reading force from the destination virtual device's\ninternal FFB state, reads from this arbitrary `ValueSrc` (variable,\ndevice control, etc.). The value is mapped from the source's\ninterval to [-1, +1].",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueSrcs"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ForceFeedbackComponent": {
+      "type": "string",
+      "enum": [
+        "X",
+        "Y"
+      ]
+    },
+    "ClampCfg": {
+      "type": "object",
+      "properties": {
+        "desc": {
+          "$ref": "#/$defs/DescriptionCfg"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NumInterval"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "from": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "writeOnly": true
+        },
+        "to": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "writeOnly": true
+        },
+        "override_range": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "RaiseFallCfg": {
+      "type": "object",
+      "properties": {
+        "desc": {
+          "$ref": "#/$defs/DescriptionCfg"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "raise_rate": {
+          "type": "number",
+          "format": "float",
+          "minimum": 0.0
+        },
+        "fall_rate": {
+          "type": "number",
+          "format": "float",
+          "minimum": 0.0
+        },
+        "smoothing_alpha": {
+          "type": "number",
+          "format": "float",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 1.0
+        },
+        "fall_delay": {
+          "description": "Time delay must be positive",
+          "type": "number",
+          "format": "float",
+          "minimum": 0.0,
+          "default": 0.0
+        },
+        "fall_hold_factor": {
+          "$ref": "#/$defs/ValueSrcs",
+          "default": 0.0
+        },
+        "invert_fall_hold_factor": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "raise_rate",
+        "fall_rate"
+      ]
+    },
+    "EmaFilterCfg": {
+      "description": "An Exponential Moving Average (EMA) filter is a recursive lowpass filter.\nIt reduces noise in real-time data by giving more weight to recent data points.\nIt reacts faster to sudden changes than a standard moving average\nwhile smoothing out minor fluctuations.\n\na = 1 - (-dt / tau).exp()\ny[i] = a * x[i] + (1 - a) * y[i-1]",
+      "type": "object",
+      "properties": {
+        "desc": {
+          "description": "...",
+          "$ref": "#/$defs/DescriptionCfg"
+        },
+        "enabled": {
+          "description": "...",
+          "type": "boolean",
+          "default": true
+        },
+        "on_relative_input_feed_on_idle": {
+          "description": "...",
+          "type": "boolean"
+        },
+        "on_relative_input_reset_on_idle": {
+          "type": "boolean"
+        },
+        "tau": {
+          "description": "The time constant\nDefines the duration required for the filter's step response\nto reach about 63.2% (1 - 1/e) of its final steady-state value.",
+          "$ref": "#/$defs/ValueSrcs",
+          "default": 0.03999999910593033
+        }
+      },
+      "additionalProperties": false
+    },
+    "LinearCfg": {
+      "type": "object",
+      "properties": {
+        "desc": {
+          "$ref": "#/$defs/DescriptionCfg"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "slope": {
+          "type": "number",
+          "format": "float",
+          "default": 1.0
+        },
+        "shift_x": {
+          "type": "number",
+          "format": "float",
+          "default": 0.0
+        },
+        "shift_y": {
+          "type": "number",
+          "format": "float",
+          "default": 0.0
+        },
+        "center_symmetric": {
+          "type": "boolean",
+          "default": false
+        },
+        "on_idle": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SmoothstepCfg": {
+      "type": "object",
+      "properties": {
+        "desc": {
+          "$ref": "#/$defs/DescriptionCfg"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "on_idle": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SCurveCfg": {
+      "type": "object",
+      "properties": {
+        "desc": {
+          "$ref": "#/$defs/DescriptionCfg"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "steepness": {
+          "type": "number",
+          "format": "float",
+          "minimum": 0.0,
+          "default": 10.0
+        },
+        "on_idle": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "NormExpCfg": {
+      "type": "object",
+      "properties": {
+        "desc": {
+          "$ref": "#/$defs/DescriptionCfg"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "base": {
+          "description": "Base must be positive",
+          "type": "number",
+          "format": "float",
+          "minimum": 0.0,
+          "default": 1.0010000467300415
+        },
+        "center_symmetric": {
+          "type": "boolean",
+          "default": false
+        },
+        "on_idle": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SignedPowerCfg": {
+      "type": "object",
+      "properties": {
+        "desc": {
+          "$ref": "#/$defs/DescriptionCfg"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "power": {
+          "description": "Power must be positive",
+          "type": "number",
+          "format": "float",
+          "minimum": 0.0,
+          "default": 1.0
+        },
+        "center_symmetric": {
+          "type": "boolean",
+          "default": false
+        },
+        "on_idle": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "OneEuroFilterCfg": {
+      "description": "Adaptive 1€ (One-Euro) low-pass filter transform step.\n\nImplements the [1€ Filter](https://cristal.univ-lille.fr/~casiez/1euro/)\nalgorithm — a speed-adaptive low-pass filter that dynamically adjusts\nits cutoff frequency based on the rate of change of the input signal.\n\n- **Slow / stationary input** -> cutoff ~= `min_cutoff_hz` -> heavy\n  smoothing, jitter suppressed.\n- **Fast input** -> cutoff ramps up via `β · |dx|` -> light smoothing,\n  low latency.\n\nIdeal for smoothing noisy relative inputs (mouse,\ntrackball) before a steering step, as a final output smoother\nafter steering, or inside a force-feedback sub-pipeline.",
+      "type": "object",
+      "properties": {
+        "desc": {
+          "description": "Optional human-readable description shown in the GUI.",
+          "$ref": "#/$defs/DescriptionCfg"
+        },
+        "enabled": {
+          "description": "Master on/off switch for the entire one-euro step. When `false`,\nthe input value passes through unchanged and no filter state is updated.",
+          "type": "boolean",
+          "default": true
+        },
+        "on_relative_input_feed_on_idle": {
+          "description": "When `true` and the input has **relative** semantics, the last\nknown value is re-fed into the filter on idle ticks so the\noutput continues to converge.\n\nIgnored for absolute inputs (always processed every tick).\nMutually exclusive with `on_relative_input_reset_on_idle`.\n\n**Warning:** convergence speed depends on `global.idle_tick_rate`.",
+          "type": "boolean"
+        },
+        "on_relative_input_reset_on_idle": {
+          "description": "When `true` and the input has **relative** semantics, the filter\nstate (`x̂_prev`, `dx̂_prev`) is **reset** to the current input\non idle ticks.\n\nUse when the relative source may jump to a new baseline after a\npause and you want to avoid a smoothing transient.\nMutually exclusive with `on_relative_input_feed_on_idle`.",
+          "type": "boolean"
+        },
+        "beta": {
+          "description": "Speed coefficient (β). Controls how much the cutoff frequency\nincreases in response to fast input movement.\n\nAdaptive cutoff formula: `cutoff = min_cutoff_hz + β · |dx̂|`\n\n- `0.0` — fixed-cutoff filter (no speed adaptation).\n- `0.001 – 0.01` — gentle adaptation (recommended starting range).\n- `0.1 – 10.0` — aggressive adaptation; near-passthrough during\n  fast sweeps, may re-introduce jitter.\n\n**Tuning heuristic:** start at `0.0`, increase until fast\nmovements feel responsive, then back off slightly.",
+          "$ref": "#/$defs/ValueSrcs",
+          "default": 0.007000000216066837
+        },
+        "min_cutoff_hz": {
+          "description": "Minimum cutoff frequency in Hz. The cutoff used when the input\nis stationary or moving very slowly.\n\n- `0.1 – 0.5` — very heavy smoothing at rest (strong jitter\n  suppression, noticeable lag onset).\n- `1.0` *(default)* — moderate smoothing; good starting point.\n- `5.0 – 50.0` — light smoothing; use when input is already\n  clean or minimal latency is critical.\n\nThink of this as the **noise floor** of the filter.",
+          "$ref": "#/$defs/ValueSrcs",
+          "default": 1.0
+        },
+        "d_cutoff_hz": {
+          "description": "Cutoff frequency in Hz for the derivative (speed) low-pass\nfilter.\n\nThe raw derivative `(x - x̂_prev) / dt` amplifies sensor jitter.\nThis secondary filter smooths the derivative so the adaptive\ncutoff does not oscillate.\n\n- `0.01 – 0.1` — very smooth derivative; stable but slow to\n  react to speed changes.\n- `1.0` *(default)* — balanced; works well for most devices.\n- `10.0 – 100.0` — barely filtered derivative; fast tracking\n  but may oscillate on noisy inputs.\n\nRarely needs adjustment from the default.",
+          "$ref": "#/$defs/ValueSrcs",
+          "default": 1.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "ScriptCfg": {
+      "description": "User-script transform step.\n\nEmbeds a Luau script that runs on **every tick** of the mapping\npipeline, giving full programmatic control over the signal. The script\ncan read the main pipeline input and any number of auxiliary data\nsources, execute arbitrary logic (with persistent global state across\nticks), and write results back to the main pipeline output and/or\nauxiliary destinations.\n\nFive global API functions are injected into the Luau environment for\nthe duration of each tick:\n\n| Function | Purpose |\n|----------|---------|\n| `read(key)` | Read the main input (`0`) or an auxiliary source (string / 1-based index). |\n| `write(key, value)` | Write the main output (`0`) or an auxiliary destination. |\n| `transform(name, value)` | Invoke a named sub-pipeline from `aux_transformations`. |\n| `is_idle()` | `true` when the tick is an idle-clock tick (no user input). |\n| `base_rate()` | The configured idle tick rate in Hz. |\n\nSee `doc/script.md` for a full guide, signal-flow diagram, API\nreference, and configuration examples.",
+      "type": "object",
+      "properties": {
+        "desc": {
+          "description": "Optional human-readable description shown in the GUI.",
+          "$ref": "#/$defs/DescriptionCfg"
+        },
+        "enabled": {
+          "description": "Master on/off switch. When `false` the input passes through\nunchanged and the script is **not** executed.",
+          "type": "boolean",
+          "default": true
+        },
+        "lang": {
+          "description": "Scripting language to use. Currently only `Luau` is supported.\n\nDefaults to `Luau`; may be omitted entirely.",
+          "$ref": "#/$defs/ScriptLanguage",
+          "default": "Luau"
+        },
+        "script": {
+          "description": "Luau source code executed on every tick.\n\nCompiled **once** (lazily, on first execution) into a callable\nfunction; subsequent ticks re-use the compiled bytecode. On\ncompilation failure the error is logged and the step degrades to\na no-op.\n\nGlobal variables **persist** between ticks — this is the primary\nmechanism for maintaining state (accumulators, timers, flags).\nOn the first tick, uninitialized globals are `nil`.\n\nUse YAML block scalars (`|-`) for multi-line scripts.",
+          "type": "string",
+          "default": ""
+        },
+        "output_interval": {
+          "description": "Overrides the **output interval metadata** of this step.\n\nWhen `None` (default), the output interval is inherited from the\ninput. Set this when the script produces values in a different\nrange and downstream steps need the correct interval.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NumInterval"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "output_relativity": {
+          "description": "Overrides the **output relativity metadata** of this step.\n\nWhen `None` (default), the output relativity is inherited from\nthe input. Set to `Abs` or `Rel` when the script converts\nbetween relative and absolute semantics.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Relativity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "aux_srcs": {
+          "description": "Auxiliary data **sources** readable from the script via\n`read(\"<key>\")` or `read(<1-based index>)`.\n\nAccepts a YAML **map** (explicit string keys) or a **list**\n(auto-numbered `\"1\"`, `\"2\"`, …).\n\nYAML alias: `sources`.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ScriptSourceCfg"
+          }
+        },
+        "aux_dsts": {
+          "description": "Auxiliary data **destinations** writable from the script via\n`write(\"<key>\", value)` or `write(<1-based index>, value)`.\n\nAccepts a YAML **map** or a **list**, same as [`aux_srcs`](Self::aux_srcs).\n\nYAML alias: `destinations`.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ScriptDestinationCfg"
+          }
+        },
+        "aux_transformations": {
+          "description": "Named transformation **sub-pipelines** invocable from the script\nvia `transform(\"<name>\", value)`.\n\nEach entry is a standard transformation pipeline (list of\ntransform steps), identical in format to the top-level\n`transformation:` field of a mapping. Each sub-pipeline\nmaintains its own independent execution state.\n\nAccepts a YAML **map** or a **list**.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/TfmSeqCfg"
+          }
+        }
+      }
+    },
+    "ScriptLanguage": {
+      "description": "Scripting language selector for the [`ScriptCfg`] transform step.\n\nCurrently only [`Luau`](ScriptLanguage::Luau) is supported.",
+      "oneOf": [
+        {
+          "description": "Luau — a fast, sandboxed dialect of Lua 5.1 with gradual typing,\nexecuted via the `mlua` crate.",
+          "type": "string",
+          "const": "Luau"
+        }
+      ]
+    },
+    "Relativity": {
+      "type": "string",
+      "enum": [
+        "Rel",
+        "Abs"
+      ]
+    },
+    "ScriptSourceCfg": {
+      "description": "A single auxiliary data source entry within [`ScriptCfg::aux_srcs`].\n\nBinds an external value (variable, device control, or static number)\nto a key that the script references via `read()`.",
+      "type": "object",
+      "properties": {
+        "remap_to_interval": {
+          "description": "When set, the raw value read from [`source`](Self::source) is\n**remapped** from the source's native interval to this interval\nbefore the script sees it.\n\nExample: a force-feedback axis with native range \\[-32768, 32767\\]\nand `remap_to_interval: [-1.0, 1.0]` yields a normalized value\nin \\[-1, +1\\].\n\nWhen `None`, the raw value is passed through as-is.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NumInterval"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "description": "The data source to read from.\n\nAccepts any valid `ValueSrc`:\n- Device control: `{ dev: <device>, ctl: <control> }`\n- Variable: `{ var: <name> }`\n- Static value: `{ value: <number>, range: [from, to] }`",
+          "$ref": "#/$defs/ValueSrcs",
+          "default": 0.0
+        }
+      }
+    },
+    "ScriptDestinationCfg": {
+      "description": "A single auxiliary data destination entry within [`ScriptCfg::aux_dsts`].\n\nBinds an external target (variable or device control) to a key that\nthe script references via `write()`.",
+      "type": "object",
+      "properties": {
+        "remap_from_interval": {
+          "description": "When set, the value written by the script is **remapped** from\nthis interval to the destination's native interval before being\nstored.\n\nExample: script output in \\[-100, 100\\] with\n`remap_from_interval: [-100.0, 100.0]` and a destination\nvariable range of \\[-14000, 14000\\] scales automatically.\n\nWhen `None`, the value is written as-is.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NumInterval"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "destination": {
+          "description": "The target to write to.\n\nAccepts any valid `ValueDst`:\n- Device control: `{ dev: <device>, ctl: <control> }`\n- Variable: `{ var: <name> }`\n- `null` — void destination (writes silently discarded).",
+          "$ref": "#/$defs/ValueDsts",
+          "default": null
+        }
+      }
+    },
+    "HighPassCfg": {
+      "type": "object",
+      "properties": {
+        "desc": {
+          "$ref": "#/$defs/DescriptionCfg"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "cutoff": {
+          "type": "number",
+          "format": "float",
+          "minimum": 0.0
+        },
+        "on_idle": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "cutoff"
+      ]
+    },
+    "TfmSeqFull": {
+      "type": "object",
+      "properties": {
+        "desc": {
+          "$ref": "#/$defs/DescriptionCfg"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TfmStepCfg"
+          }
+        }
+      },
+      "anyOf": [
+        {
+          "$ref": "#/$defs/InputValueMetadata"
+        },
+        {
+          "$ref": "#/$defs/InputValueMetadata"
+        }
+      ],
+      "required": [
+        "steps"
+      ]
+    },
+    "InputValueMetadata": {
+      "type": "object",
+      "properties": {
+        "in_range": {
+          "$ref": "#/$defs/NumInterval"
+        },
+        "in_relativity": {
+          "$ref": "#/$defs/Relativity"
+        }
+      },
+      "required": [
+        "in_range",
+        "in_relativity"
+      ]
+    },
+    "UiCfg": {
+      "type": "object",
+      "properties": {
+        "monitors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/UiMonitorsCfg"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "UiMonitorsCfg": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UiAxisMonitorCfg"
+        }
+      ]
+    },
+    "UiAxisMonitorCfg": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "default": ""
+        },
+        "desc": {
+          "$ref": "#/$defs/DescriptionCfg",
+          "default": ""
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "position": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DynValueRefs"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hold": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DynValueRefs"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ConfigOld": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "default": ""
+        },
+        "global": {
+          "$ref": "#/$defs/GlobalSettingsCfg"
+        },
+        "midi_devices": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/MidiMatcherCfg"
+          }
+        },
+        "mouse_devices": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/HidDeviceCfg"
+          }
+        },
+        "virtual_joysticks": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/HidDeviceCfg"
+          }
+        },
+        "variables": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/VariableState"
+          },
+          "default": {}
+        },
+        "mappings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Mapping"
+          },
+          "default": []
+        },
+        "ui": {
+          "$ref": "#/$defs/UiCfg",
+          "default": {}
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "global"
+      ]
+    }
+  }
+}
