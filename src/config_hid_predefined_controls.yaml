@@ -1,0 +1,936 @@
+hid_controls:
+  FORCE_FEEDBACK_X:
+    type: FORCE_FEEDBACK_X
+    range: [ -32768, 32767 ]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Special, fake, control to expose force feedback X component coming from device. Currently R/O, write ignored (could reuse it to inject Constant force on unowned HID though)."
+
+  FORCE_FEEDBACK_Y:
+    type: FORCE_FEEDBACK_Y
+    range: [ -32768, 32767 ]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Special, fake, control to expose force feedback Y component coming from device. Currently R/O, write ignored (could reuse it to inject Constant force on unowned HID though)."
+
+  ABS_X:
+    type: ABS_X
+    range: [ 0, 32767 ] ## <--- this works by default with ffcfstress utility ##... and this doesn't ---> [-32768, 32767]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Primary X-axis (left stick horizontal), positive range."
+
+  ABS_Y:
+    type: ABS_Y
+    range: [ 0, 32767 ]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Primary Y-axis (left stick vertical)"
+
+  ABS_Z:
+    type: ABS_Z
+    range: [ 0, 32767 ]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Z-axis (left trigger analog)"
+
+  ABS_RX:
+    type: ABS_RX
+    range: [ 0, 32767 ]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Right X-axis (right stick horizontal)"
+
+  ABS_RY:
+    type: ABS_RY
+    range: [ 0, 32767 ]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Right Y-axis (right stick vertical)"
+
+  ABS_RZ:
+    type: ABS_RZ
+    range: [ 0, 32767 ]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Right Z-axis (right trigger analog)"
+
+  ABS_WHEEL:
+    type: ABS_WHEEL
+    range: [ 0, 32767 ]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Steering wheel axis"
+
+  ABS_GAS:
+    type: ABS_GAS
+    range: [0, 32767]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Gas/throttle pedal"
+
+  ABS_BRAKE:
+    type: ABS_BRAKE
+    range: [0, 32767]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Brake pedal"
+
+  ABS_HAT0X:
+    type: ABS_HAT0_X # TODO: HAT0X
+    range: [-1, 1]
+    initial_value: 0
+    description: "D-pad horizontal"
+
+  ABS_HAT0Y:
+    type: ABS_HAT0_Y
+    range: [-1, 1]
+    initial_value: 0
+    description: "D-pad vertical"
+
+  # Buttons - Xbox style naming
+  BTN_A:
+    type: BTN_SOUTH
+    range: [0, 1]
+    initial_value: 0
+    description: "A button (Xbox) / Cross (PlayStation)"
+
+  BTN_B:
+    type: BTN_EAST
+    range: [0, 1]
+    initial_value: 0
+    description: "B button (Xbox) / Circle (PlayStation)"
+
+  BTN_X:
+    type: BTN_NORTH
+    range: [0, 1]
+    initial_value: 0
+    description: "X button (Xbox) / Square (PlayStation)"
+
+  BTN_Y:
+    type: BTN_WEST
+    range: [0, 1]
+    initial_value: 0
+    description: "Y button (Xbox) / Triangle (PlayStation)"
+
+  # Buttons - Linux evdev naming (aliases)
+  BTN_SOUTH:
+    type: BTN_SOUTH
+    range: [0, 1]
+    initial_value: 0
+    description: "South button (A on Xbox)"
+
+  BTN_EAST:
+    type: BTN_EAST
+    range: [0, 1]
+    initial_value: 0
+    description: "East button (B on Xbox)"
+
+  BTN_NORTH:
+    type: BTN_NORTH
+    range: [0, 1]
+    initial_value: 0
+    description: "North button (X on Xbox)"
+
+  BTN_WEST:
+    type: BTN_WEST
+    range: [0, 1]
+    initial_value: 0
+    description: "West button (Y on Xbox)"
+
+  # Shoulder buttons
+  # BTN_TL:
+  #   type: BTN_TL
+  #   range: [0, 1]
+  #   initial_value: 0
+  #   description: "Left shoulder button (LB/L1)"
+
+  # BTN_TR:
+  #   type: BTN_TR
+  #   range: [0, 1]
+  #   initial_value: 0
+  #   description: "Right shoulder button (RB/R1)"
+
+  # BTN_TL2:
+  #   type: BTN_TL2
+  #   range: [0, 1]
+  #   initial_value: 0
+  #   description: "Left trigger button (LT/L2)"
+
+  # BTN_TR2:
+  #   type: BTN_TR2
+  #   range: [0, 1]
+  #   initial_value: 0
+  #   description: "Right trigger button (RT/R2)"
+
+  # Thumbstick buttons
+  # BTN_THUMBL:
+  #   type: BTN_THUMBL
+  #   range: [0, 1]
+  #   initial_value: 0
+  #   description: "Left thumbstick press (L3)"
+
+  # BTN_THUMBR:
+  #   type: BTN_THUMBR
+  #   range: [0, 1]
+  #   initial_value: 0
+  #   description: "Right thumbstick press (R3)"
+
+  BTN_SELECT:
+    type: BTN_SELECT
+    range: [0, 1]
+    initial_value: 0
+    description: "Select/Back button"
+
+  BTN_START:
+    type: BTN_START
+    range: [0, 1]
+    initial_value: 0
+    description: "Start/Menu button"
+
+  BTN_TRIGGER:
+    type: BTN_TRIGGER
+    range: [0, 1]
+    initial_value: 0
+    description: ""
+
+  # ----------------
+  # Mouse Controls
+  # ----------------
+  # Relative movement
+  REL_X:
+    type: REL_X
+    range: [-127, 127]
+    description: "Relative X movement (counts per tick)"
+
+  REL_Y:
+    type: REL_Y
+    range: [-127, 127]
+    description: "Relative Y movement (counts per tick)"
+
+  # Wheels
+  REL_WHEEL:
+    type: REL_WHEEL
+    range: [-10, 10]
+    description: "Vertical scroll wheel (steps)"
+
+  REL_HWHEEL:
+    type: REL_HWHEEL
+    range: [-10, 10]
+    description: "Horizontal scroll wheel (steps)"
+
+  # High-resolution wheels (if available)
+  REL_WHEEL_HI_RES:
+    type: REL_WHEEL_HI_RES
+    range: [-120, 120] ## Please test with your hi res mouse and report if app warns you about clamping all the time.
+                       ## Most probably this must be extended.
+    description: "High-resolution vertical wheel"
+
+  REL_HWHEEL_HI_RES:
+    type: REL_HWHEEL_HI_RES
+    range: [-120, 120] ## Please test with your hi res mouse and report if app warns you about clamping all the time.
+                       ## Most probably this must be extended.
+    description: "High-resolution vertical wheel"
+
+  # Buttons
+  BTN_LEFT:
+    type: BTN_LEFT
+    range: [0, 1]
+    description: "Left mouse button"
+
+  BTN_RIGHT:
+    type: BTN_RIGHT
+    range: [0, 1]
+    description: "Right mouse button"
+
+  BTN_MIDDLE:
+    type: BTN_MIDDLE
+    range: [0, 1]
+    description: "Middle mouse button"
+
+  BTN_SIDE:
+    type: BTN_SIDE
+    range: [0, 1]
+    description: "Side button (back)"
+
+  BTN_EXTRA:
+    type: BTN_EXTRA
+    range: [0, 1]
+    description: "Extra button (forward)"
+
+  # --- Alphanumeric Keys ---
+  KEY_ESC:
+    type: KEY_ESC
+    range: [0, 2]
+    description: "Escape key"
+
+  KEY_1:
+    type: KEY_1
+    range: [0, 2]
+    description: "Number 1 key"
+
+  KEY_2:
+    type: KEY_2
+    range: [0, 2]
+    description: "Number 2 key"
+
+  KEY_3:
+    type: KEY_3
+    range: [0, 2]
+    description: "Number 3 key"
+
+  KEY_4:
+    type: KEY_4
+    range: [0, 2]
+    description: "Number 4 key"
+
+  KEY_5:
+    type: KEY_5
+    range: [0, 2]
+    description: "Number 5 key"
+
+  KEY_6:
+    type: KEY_6
+    range: [0, 2]
+    description: "Number 6 key"
+
+  KEY_7:
+    type: KEY_7
+    range: [0, 2]
+    description: "Number 7 key"
+
+  KEY_8:
+    type: KEY_8
+    range: [0, 2]
+    description: "Number 8 key"
+
+  KEY_9:
+    type: KEY_9
+    range: [0, 2]
+    description: "Number 9 key"
+
+  KEY_0:
+    type: KEY_0
+    range: [0, 2]
+    description: "Number 0 key"
+
+  KEY_MINUS:
+    type: KEY_MINUS
+    range: [0, 2]
+    description: "Minus/Dash key"
+
+  KEY_EQUAL:
+    type: KEY_EQUAL
+    range: [0, 2]
+    description: "Equals key"
+
+  KEY_BACKSPACE:
+    type: KEY_BACKSPACE
+    range: [0, 2]
+    description: "Backspace key"
+
+  KEY_TAB:
+    type: KEY_TAB
+    range: [0, 2]
+    description: "Tab key"
+
+  KEY_Q:
+    type: KEY_Q
+    range: [0, 2]
+    description: "Q key"
+
+  KEY_W:
+    type: KEY_W
+    range: [0, 2]
+    description: "W key"
+
+  KEY_E:
+    type: KEY_E
+    range: [0, 2]
+    description: "E key"
+
+  KEY_R:
+    type: KEY_R
+    range: [0, 2]
+    description: "R key"
+
+  KEY_T:
+    type: KEY_T
+    range: [0, 2]
+    description: "T key"
+
+  KEY_Y:
+    type: KEY_Y
+    range: [0, 2]
+    description: "Y key"
+
+  KEY_U:
+    type: KEY_U
+    range: [0, 2]
+    description: "U key"
+
+  KEY_I:
+    type: KEY_I
+    range: [0, 2]
+    description: "I key"
+
+  KEY_O:
+    type: KEY_O
+    range: [0, 2]
+    description: "O key"
+
+  KEY_P:
+    type: KEY_P
+    range: [0, 2]
+    description: "P key"
+
+  KEY_LEFTBRACE:
+    type: KEY_LEFTBRACE
+    range: [0, 2]
+    description: "Left bracket/key"
+
+  KEY_RIGHTBRACE:
+    type: KEY_RIGHTBRACE
+    range: [0, 2]
+    description: "Right bracket/key"
+
+  KEY_ENTER:
+    type: KEY_ENTER
+    range: [0, 2]
+    description: "Enter/Return key"
+
+  KEY_LEFTCTRL:
+    type: KEY_LEFTCTRL
+    range: [0, 2]
+    description: "Left Control modifier key"
+
+  KEY_A:
+    type: KEY_A
+    range: [0, 2]
+    description: "A key"
+
+  KEY_S:
+    type: KEY_S
+    range: [0, 2]
+    description: "S key"
+
+  KEY_D:
+    type: KEY_D
+    range: [0, 2]
+    description: "D key"
+
+  KEY_F:
+    type: KEY_F
+    range: [0, 2]
+    description: "F key"
+
+  KEY_G:
+    type: KEY_G
+    range: [0, 2]
+    description: "G key"
+
+  KEY_H:
+    type: KEY_H
+    range: [0, 2]
+    description: "H key"
+
+  KEY_J:
+    type: KEY_J
+    range: [0, 2]
+    description: "J key"
+
+  KEY_K:
+    type: KEY_K
+    range: [0, 2]
+    description: "K key"
+
+  KEY_L:
+    type: KEY_L
+    range: [0, 2]
+    description: "L key"
+
+  KEY_SEMICOLON:
+    type: KEY_SEMICOLON
+    range: [0, 2]
+    description: "Semicolon key"
+
+  KEY_APOSTROPHE:
+    type: KEY_APOSTROPHE
+    range: [0, 2]
+    description: "Apostrophe/Quote key"
+
+  KEY_GRAVE:
+    type: KEY_GRAVE
+    range: [0, 2]
+    description: "Grave/Tilde key"
+
+  KEY_LEFTSHIFT:
+    type: KEY_LEFTSHIFT
+    range: [0, 2]
+    description: "Left Shift modifier key"
+
+  KEY_BACKSLASH:
+    type: KEY_BACKSLASH
+    range: [0, 2]
+    description: "Backslash/Pipe key"
+
+  KEY_Z:
+    type: KEY_Z
+    range: [0, 2]
+    description: "Z key"
+
+  KEY_X:
+    type: KEY_X
+    range: [0, 2]
+    description: "X key"
+
+  KEY_C:
+    type: KEY_C
+    range: [0, 2]
+    description: "C key"
+
+  KEY_V:
+    type: KEY_V
+    range: [0, 2]
+    description: "V key"
+
+  KEY_B:
+    type: KEY_B
+    range: [0, 2]
+    description: "B key"
+
+  KEY_N:
+    type: KEY_N
+    range: [0, 2]
+    description: "N key"
+
+  KEY_M:
+    type: KEY_M
+    range: [0, 2]
+    description: "M key"
+
+  KEY_COMMA:
+    type: KEY_COMMA
+    range: [0, 2]
+    description: "Comma/Less-than key"
+
+  KEY_DOT:
+    type: KEY_DOT
+    range: [0, 2]
+    description: "Period/Greater-than key"
+
+  KEY_SLASH:
+    type: KEY_SLASH
+    range: [0, 2]
+    description: "Slash/Question-mark key"
+
+  KEY_RIGHTSHIFT:
+    type: KEY_RIGHTSHIFT
+    range: [0, 2]
+    description: "Right Shift modifier key"
+
+  KEY_SPACE:
+    type: KEY_SPACE
+    range: [0, 2]
+    description: "Spacebar"
+
+  KEY_CAPSLOCK:
+    type: KEY_CAPSLOCK
+    range: [0, 2]
+    description: "Caps Lock toggle key"
+
+  # --- Function Keys ---
+  KEY_F1:
+    type: KEY_F1
+    range: [0, 2]
+    description: "Function key F1"
+
+  KEY_F2:
+    type: KEY_F2
+    range: [0, 2]
+    description: "Function key F2"
+
+  KEY_F3:
+    type: KEY_F3
+    range: [0, 2]
+    description: "Function key F3"
+
+  KEY_F4:
+    type: KEY_F4
+    range: [0, 2]
+    description: "Function key F4"
+
+  KEY_F5:
+    type: KEY_F5
+    range: [0, 2]
+    description: "Function key F5"
+
+  KEY_F6:
+    type: KEY_F6
+    range: [0, 2]
+    description: "Function key F6"
+
+  KEY_F7:
+    type: KEY_F7
+    range: [0, 2]
+    description: "Function key F7"
+
+  KEY_F8:
+    type: KEY_F8
+    range: [0, 2]
+    description: "Function key F8"
+
+  KEY_F9:
+    type: KEY_F9
+    range: [0, 2]
+    description: "Function key F9"
+
+  KEY_F10:
+    type: KEY_F10
+    range: [0, 2]
+    description: "Function key F10"
+
+  KEY_F11:
+    type: KEY_F11
+    range: [0, 2]
+    description: "Function key F11"
+
+  KEY_F12:
+    type: KEY_F12
+    range: [0, 2]
+    description: "Function key F12"
+
+  KEY_F13:
+    type: KEY_F13
+    range: [0, 2]
+    description: "Function key F13"
+
+  KEY_F14:
+    type: KEY_F14
+    range: [0, 2]
+    description: "Function key F14"
+
+  KEY_F15:
+    type: KEY_F15
+    range: [0, 2]
+    description: "Function key F15"
+
+  KEY_F16:
+    type: KEY_F16
+    range: [0, 2]
+    description: "Function key F16"
+
+  KEY_F17:
+    type: KEY_F17
+    range: [0, 2]
+    description: "Function key F17"
+
+  KEY_F18:
+    type: KEY_F18
+    range: [0, 2]
+    description: "Function key F18"
+
+  KEY_F19:
+    type: KEY_F19
+    range: [0, 2]
+    description: "Function key F19"
+
+  KEY_F20:
+    type: KEY_F20
+    range: [0, 2]
+    description: "Function key F20"
+
+  KEY_F21:
+    type: KEY_F21
+    range: [0, 2]
+    description: "Function key F21"
+
+  KEY_F22:
+    type: KEY_F22
+    range: [0, 2]
+    description: "Function key F22"
+
+  KEY_F23:
+    type: KEY_F23
+    range: [0, 2]
+    description: "Function key F23"
+
+  KEY_F24:
+    type: KEY_F24
+    range: [0, 2]
+    description: "Function key F24"
+
+  # --- Navigation & Editing Keys ---
+  KEY_PRINT:
+    type: KEY_PRINT
+    range: [0, 2]
+    description: "Print Screen key"
+
+  KEY_SCROLLLOCK:
+    type: KEY_SCROLLLOCK
+    range: [0, 2]
+    description: "Scroll Lock toggle key"
+
+  KEY_PAUSE:
+    type: KEY_PAUSE
+    range: [0, 2]
+    description: "Pause/Break key"
+
+  KEY_INSERT:
+    type: KEY_INSERT
+    range: [0, 2]
+    description: "Insert key"
+
+  KEY_HOME:
+    type: KEY_HOME
+    range: [0, 2]
+    description: "Home key"
+
+  KEY_PAGEUP:
+    type: KEY_PAGEUP
+    range: [0, 2]
+    description: "Page Up key"
+
+  KEY_DELETE:
+    type: KEY_DELETE
+    range: [0, 2]
+    description: "Delete key"
+
+  KEY_END:
+    type: KEY_END
+    range: [0, 2]
+    description: "End key"
+
+  KEY_PAGEDOWN:
+    type: KEY_PAGEDOWN
+    range: [0, 2]
+    description: "Page Down key"
+
+  KEY_RIGHT:
+    type: KEY_RIGHT
+    range: [0, 2]
+    description: "Right arrow key"
+
+  KEY_LEFT:
+    type: KEY_LEFT
+    range: [0, 2]
+    description: "Left arrow key"
+
+  KEY_DOWN:
+    type: KEY_DOWN
+    range: [0, 2]
+    description: "Down arrow key"
+
+  KEY_UP:
+    type: KEY_UP
+    range: [0, 2]
+    description: "Up arrow key"
+
+  # --- Keypad Keys ---
+  KEY_NUMLOCK:
+    type: KEY_NUMLOCK
+    range: [0, 2]
+    description: "Num Lock toggle key"
+
+  KEY_KPSLASH:
+    type: KEY_KPSLASH
+    range: [0, 2]
+    description: "Keypad divide key"
+
+  KEY_KPASTERISK:
+    type: KEY_KPASTERISK
+    range: [0, 2]
+    description: "Keypad multiply key"
+
+  KEY_KPMINUS:
+    type: KEY_KPMINUS
+    range: [0, 2]
+    description: "Keypad subtract key"
+
+  KEY_KP7:
+    type: KEY_KP7
+    range: [0, 2]
+    description: "Keypad 7 key"
+
+  KEY_KP8:
+    type: KEY_KP8
+    range: [0, 2]
+    description: "Keypad 8 key"
+
+  KEY_KP9:
+    type: KEY_KP9
+    range: [0, 2]
+    description: "Keypad 9 key"
+
+  KEY_KPPLUS:
+    type: KEY_KPPLUS
+    range: [0, 2]
+    description: "Keypad add key"
+
+  KEY_KP4:
+    type: KEY_KP4
+    range: [0, 2]
+    description: "Keypad 4 key"
+
+  KEY_KP5:
+    type: KEY_KP5
+    range: [0, 2]
+    description: "Keypad 5 key"
+
+  KEY_KP6:
+    type: KEY_KP6
+    range: [0, 2]
+    description: "Keypad 6 key"
+
+  KEY_KP1:
+    type: KEY_KP1
+    range: [0, 2]
+    description: "Keypad 1 key"
+
+  KEY_KP2:
+    type: KEY_KP2
+    range: [0, 2]
+    description: "Keypad 2 key"
+
+  KEY_KP3:
+    type: KEY_KP3
+    range: [0, 2]
+    description: "Keypad 3 key"
+
+  KEY_KP0:
+    type: KEY_KP0
+    range: [0, 2]
+    description: "Keypad 0 key"
+
+  KEY_KPDOT:
+    type: KEY_KPDOT
+    range: [0, 2]
+    description: "Keypad decimal point key"
+
+  KEY_KPENTER:
+    type: KEY_KPENTER
+    range: [0, 2]
+    description: "Keypad Enter key"
+
+  KEY_KPEQUAL:
+    type: KEY_KPEQUAL
+    range: [0, 2]
+    description: "Keypad equals key"
+
+  # --- Modifier Keys ---
+  KEY_RIGHTCTRL:
+    type: KEY_RIGHTCTRL
+    range: [0, 2]
+    description: "Right Control modifier key"
+
+  KEY_RIGHTALT:
+    type: KEY_RIGHTALT
+    range: [0, 2]
+    description: "Right Alt/AltGr modifier key"
+
+  KEY_LEFTMETA:
+    type: KEY_LEFTMETA
+    range: [0, 2]
+    description: "Left Meta/Windows/Super key"
+
+  KEY_RIGHTMETA:
+    type: KEY_RIGHTMETA
+    range: [0, 2]
+    description: "Right Meta/Windows/Super key"
+
+  KEY_COMPOSE:
+    type: KEY_COMPOSE
+    range: [0, 2]
+    description: "Compose key for special characters"
+
+  # --- System & Multimedia Keys ---
+  KEY_POWER:
+    type: KEY_POWER
+    range: [0, 2]
+    description: "Power button"
+
+  KEY_SLEEP:
+    type: KEY_SLEEP
+    range: [0, 2]
+    description: "Sleep/Suspend button"
+
+  KEY_WAKEUP:
+    type: KEY_WAKEUP
+    range: [0, 2]
+    description: "Wake-up event button"
+
+  KEY_MUTE:
+    type: KEY_MUTE
+    range: [0, 2]
+    description: "Audio mute toggle"
+
+  KEY_VOLUMEDOWN:
+    type: KEY_VOLUMEDOWN
+    range: [0, 2]
+    description: "Volume decrease button"
+
+  KEY_VOLUMEUP:
+    type: KEY_VOLUMEUP
+    range: [0, 2]
+    description: "Volume increase button"
+
+  KEY_NEXTSONG:
+    type: KEY_NEXTSONG
+    range: [0, 2]
+    description: "Next track button"
+
+  KEY_PREVIOUSSONG:
+    type: KEY_PREVIOUSSONG
+    range: [0, 2]
+    description: "Previous track button"
+
+  KEY_PLAYPAUSE:
+    type: KEY_PLAYPAUSE
+    range: [0, 2]
+    description: "Play/Pause toggle button"
+
+  KEY_STOPCD:
+    type: KEY_STOPCD
+    range: [0, 2]
+    description: "Stop media playback button"
+
+  KEY_HOMEPAGE:
+    type: KEY_HOMEPAGE
+    range: [0, 2]
+    description: "Open homepage/browser button"
+
+  KEY_MAIL:
+    type: KEY_MAIL
+    range: [0, 2]
+    description: "Open email client button"
+
+  KEY_SEARCH:
+    type: KEY_SEARCH
+    range: [0, 2]
+    description: "Search button"
+
+  KEY_BACK:
+    type: KEY_BACK
+    range: [0, 2]
+    description: "Browser back button"
+
+  KEY_FORWARD:
+    type: KEY_FORWARD
+    range: [0, 2]
+    description: "Browser forward button"
+
+  KEY_EJECTCD:
+    type: KEY_EJECTCD
+    range: [0, 2]
+    description: "Eject CD/DVD button"
+
+    # --- Miscellaneous Keys ---
+  KEY_SYSRQ:
+    type: KEY_SYSRQ
+    range: [0, 2]
+    description: "System Request/Print Screen key"
+
+  KEY_MENU:
+    type: KEY_MENU
+    range: [0, 2]
+    description: "Context menu key"
