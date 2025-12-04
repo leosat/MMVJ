@@ -1,0 +1,1772 @@
+midi_controls:
+  AFTERTOUCH:
+    midi_message:
+      type: aftertouch
+      channel: any
+      number: 0
+    range:
+    - 0.0
+    - 127.0
+    desc: Channel aftertouch
+  ATTACK_TIME:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 73
+    range:
+    - 0.0
+    - 127.0
+    desc: Attack time (CC73)
+  BREATH:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 2
+    range:
+    - 0.0
+    - 127.0
+    desc: Breath Controller (CC2)
+  DECAY_TIME:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 75
+    range:
+    - 0.0
+    - 127.0
+    desc: Decay time (CC75)
+  EXPRESSION_PEDAL:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 11
+    range:
+    - 0.0
+    - 127.0
+    desc: Expression pedal (CC11)
+  FILTER_CUTOFF:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 74
+    range:
+    - 0.0
+    - 127.0
+    desc: Filter cutoff (CC74)
+  FILTER_RESPONSE:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 71
+    range:
+    - 0.0
+    - 127.0
+    desc: Filter response (CC71)
+  MODULATION_WHEEL:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 1
+    range:
+    - 0.0
+    - 127.0
+    desc: Modulation wheel (CC1)
+  NOTE_A:
+    midi_message:
+      type: note
+      channel: any
+      number:
+      - 9
+      - 21
+      - 33
+      - 45
+      - 57
+      - 69
+      - 81
+      - 93
+      - 105
+      - 117
+    range:
+    - 0.0
+    - 127.0
+    desc: Note A (all octaves)
+  "NOTE_A#":
+    midi_message:
+      type: note
+      channel: any
+      number:
+      - 10
+      - 22
+      - 34
+      - 46
+      - 58
+      - 70
+      - 82
+      - 94
+      - 106
+      - 118
+    range:
+    - 0.0
+    - 127.0
+    desc: "Note A# (all octaves)"
+  NOTE_B:
+    midi_message:
+      type: note
+      channel: any
+      number:
+      - 11
+      - 23
+      - 35
+      - 47
+      - 59
+      - 71
+      - 83
+      - 95
+      - 107
+      - 119
+    range:
+    - 0.0
+    - 127.0
+    desc: Note B (all octaves)
+  NOTE_C:
+    midi_message:
+      type: note
+      channel: any
+      number:
+      - 0
+      - 12
+      - 24
+      - 36
+      - 48
+      - 60
+      - 72
+      - 84
+      - 96
+      - 108
+      - 120
+    range:
+    - 0.0
+    - 127.0
+    desc: Note C (all octaves)
+  "NOTE_C#":
+    midi_message:
+      type: note
+      channel: any
+      number:
+      - 1
+      - 13
+      - 25
+      - 37
+      - 49
+      - 61
+      - 73
+      - 85
+      - 97
+      - 109
+      - 121
+    range:
+    - 0.0
+    - 127.0
+    desc: "Note C# (all octaves)"
+  NOTE_D:
+    midi_message:
+      type: note
+      channel: any
+      number:
+      - 2
+      - 14
+      - 26
+      - 38
+      - 50
+      - 62
+      - 74
+      - 86
+      - 98
+      - 110
+      - 122
+    range:
+    - 0.0
+    - 127.0
+    desc: Note D (all octaves)
+  "NOTE_D#":
+    midi_message:
+      type: note
+      channel: any
+      number:
+      - 3
+      - 15
+      - 27
+      - 39
+      - 51
+      - 63
+      - 75
+      - 87
+      - 99
+      - 111
+      - 123
+    range:
+    - 0.0
+    - 127.0
+    desc: "Note D# (all octaves)"
+  NOTE_E:
+    midi_message:
+      type: note
+      channel: any
+      number:
+      - 4
+      - 16
+      - 28
+      - 40
+      - 52
+      - 64
+      - 76
+      - 88
+      - 100
+      - 112
+      - 124
+    range:
+    - 0.0
+    - 127.0
+    desc: Note E (all octaves)
+  NOTE_F:
+    midi_message:
+      type: note
+      channel: any
+      number:
+      - 5
+      - 17
+      - 29
+      - 41
+      - 53
+      - 65
+      - 77
+      - 89
+      - 101
+      - 113
+      - 125
+    range:
+    - 0.0
+    - 127.0
+    desc: Note F (all octaves)
+  "NOTE_F#":
+    midi_message:
+      type: note
+      channel: any
+      number:
+      - 6
+      - 18
+      - 30
+      - 42
+      - 54
+      - 66
+      - 78
+      - 90
+      - 102
+      - 114
+      - 126
+    range:
+    - 0.0
+    - 127.0
+    desc: "Note F# (all octaves)"
+  NOTE_G:
+    midi_message:
+      type: note
+      channel: any
+      number:
+      - 7
+      - 19
+      - 31
+      - 43
+      - 55
+      - 67
+      - 79
+      - 91
+      - 103
+      - 115
+      - 127
+    range:
+    - 0.0
+    - 127.0
+    desc: Note G (all octaves)
+  "NOTE_G#":
+    midi_message:
+      type: note
+      channel: any
+      number:
+      - 8
+      - 20
+      - 32
+      - 44
+      - 56
+      - 68
+      - 80
+      - 92
+      - 104
+      - 116
+    range:
+    - 0.0
+    - 127.0
+    desc: "Note G# (all octaves)"
+  PAN:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 10
+    range:
+    - 0.0
+    - 127.0
+    desc: Pan position (CC10)
+  PITCH_WHEEL:
+    midi_message:
+      type: pitch_wheel
+      channel: any
+      number: 0
+    range:
+    - -8192.0
+    - 8191.0
+    desc: Pitch bend wheel
+  PORTAMENTO_PEDAL:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 65
+    range:
+    - 0.0
+    - 127.0
+    desc: Portamento (CC65)
+  RELEASE_TIME:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 72
+    range:
+    - 0.0
+    - 127.0
+    desc: Release time (CC72)
+  SOFT_PEDAL:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 67
+    range:
+    - 0.0
+    - 127.0
+    desc: Soft (CC67)
+  SUSTAIN_PEDAL:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 64
+    range:
+    - 0.0
+    - 127.0
+    desc: Sustain pedal (CC64)
+  SUSTENUDO_PEDAL:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 66
+    range:
+    - 0.0
+    - 127.0
+    desc: Sostenudo (CC66)
+  VOLUME:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 7
+    range:
+    - 0.0
+    - 127.0
+    desc: Main volume (CC7)
+hid_controls:
+  ABS_BRAKE:
+    type: ABS_BRAKE
+    range:
+    - 0.0
+    - 32767.0
+    properties:
+      resolution: 1.0
+      fuzz: 0.0
+      flat: 0.0
+    initial_value: 0.0
+    desc: Brake pedal
+  ABS_GAS:
+    type: ABS_GAS
+    range:
+    - 0.0
+    - 32767.0
+    properties:
+      resolution: 1.0
+      fuzz: 0.0
+      flat: 0.0
+    initial_value: 0.0
+    desc: Gas/throttle pedal
+  ABS_HAT0X:
+    type: ABS_HAT0_X
+    range:
+    - -1.0
+    - 1.0
+    properties: null
+    initial_value: 0.0
+    desc: D-pad horizontal
+  ABS_HAT0Y:
+    type: ABS_HAT0_Y
+    range:
+    - -1.0
+    - 1.0
+    properties: null
+    initial_value: 0.0
+    desc: D-pad vertical
+  ABS_RX:
+    type: ABS_RX
+    range:
+    - 0.0
+    - 32767.0
+    properties:
+      resolution: 1.0
+      fuzz: 0.0
+      flat: 0.0
+    initial_value: 0.0
+    desc: Right X-axis (right stick horizontal)
+  ABS_RY:
+    type: ABS_RY
+    range:
+    - 0.0
+    - 32767.0
+    properties:
+      resolution: 1.0
+      fuzz: 0.0
+      flat: 0.0
+    initial_value: 0.0
+    desc: Right Y-axis (right stick vertical)
+  ABS_RZ:
+    type: ABS_RZ
+    range:
+    - 0.0
+    - 32767.0
+    properties:
+      resolution: 1.0
+      fuzz: 0.0
+      flat: 0.0
+    initial_value: 0.0
+    desc: Right Z-axis (right trigger analog)
+  ABS_WHEEL:
+    type: ABS_WHEEL
+    range:
+    - 0.0
+    - 32767.0
+    properties:
+      resolution: 1.0
+      fuzz: 0.0
+      flat: 0.0
+    initial_value: 0.0
+    desc: Steering wheel axis
+  ABS_X:
+    type: ABS_X
+    range:
+    - 0.0
+    - 32767.0
+    properties:
+      resolution: 1.0
+      fuzz: 0.0
+      flat: 0.0
+    initial_value: 0.0
+    desc: Primary X-axis (left stick horizontal), positive range.
+  ABS_Y:
+    type: ABS_Y
+    range:
+    - 0.0
+    - 32767.0
+    properties:
+      resolution: 1.0
+      fuzz: 0.0
+      flat: 0.0
+    initial_value: 0.0
+    desc: Primary Y-axis (left stick vertical)
+  ABS_Z:
+    type: ABS_Z
+    range:
+    - 0.0
+    - 32767.0
+    properties:
+      resolution: 1.0
+      fuzz: 0.0
+      flat: 0.0
+    initial_value: 0.0
+    desc: Z-axis (left trigger analog)
+  BTN_A:
+    type: BTN_SOUTH
+    range:
+    - 0.0
+    - 1.0
+    properties: null
+    initial_value: 0.0
+    desc: A button (Xbox) / Cross (PlayStation)
+  BTN_B:
+    type: BTN_EAST
+    range:
+    - 0.0
+    - 1.0
+    properties: null
+    initial_value: 0.0
+    desc: B button (Xbox) / Circle (PlayStation)
+  BTN_EAST:
+    type: BTN_EAST
+    range:
+    - 0.0
+    - 1.0
+    properties: null
+    initial_value: 0.0
+    desc: East button (B on Xbox)
+  BTN_EXTRA:
+    type: BTN_EXTRA
+    range:
+    - 0.0
+    - 1.0
+    properties: null
+    initial_value: 0.0
+    desc: Extra button (forward)
+  BTN_LEFT:
+    type: BTN_LEFT
+    range:
+    - 0.0
+    - 1.0
+    properties: null
+    initial_value: 0.0
+    desc: Left mouse button
+  BTN_MIDDLE:
+    type: BTN_MIDDLE
+    range:
+    - 0.0
+    - 1.0
+    properties: null
+    initial_value: 0.0
+    desc: Middle mouse button
+  BTN_NORTH:
+    type: BTN_NORTH
+    range:
+    - 0.0
+    - 1.0
+    properties: null
+    initial_value: 0.0
+    desc: North button (X on Xbox)
+  BTN_RIGHT:
+    type: BTN_RIGHT
+    range:
+    - 0.0
+    - 1.0
+    properties: null
+    initial_value: 0.0
+    desc: Right mouse button
+  BTN_SELECT:
+    type: BTN_SELECT
+    range:
+    - 0.0
+    - 1.0
+    properties: null
+    initial_value: 0.0
+    desc: Select/Back button
+  BTN_SIDE:
+    type: BTN_SIDE
+    range:
+    - 0.0
+    - 1.0
+    properties: null
+    initial_value: 0.0
+    desc: Side button (back)
+  BTN_SOUTH:
+    type: BTN_SOUTH
+    range:
+    - 0.0
+    - 1.0
+    properties: null
+    initial_value: 0.0
+    desc: South button (A on Xbox)
+  BTN_START:
+    type: BTN_START
+    range:
+    - 0.0
+    - 1.0
+    properties: null
+    initial_value: 0.0
+    desc: Start/Menu button
+  BTN_TRIGGER:
+    type: BTN_TRIGGER
+    range:
+    - 0.0
+    - 1.0
+    properties: null
+    initial_value: 0.0
+  BTN_WEST:
+    type: BTN_WEST
+    range:
+    - 0.0
+    - 1.0
+    properties: null
+    initial_value: 0.0
+    desc: West button (Y on Xbox)
+  BTN_X:
+    type: BTN_NORTH
+    range:
+    - 0.0
+    - 1.0
+    properties: null
+    initial_value: 0.0
+    desc: X button (Xbox) / Square (PlayStation)
+  BTN_Y:
+    type: BTN_WEST
+    range:
+    - 0.0
+    - 1.0
+    properties: null
+    initial_value: 0.0
+    desc: Y button (Xbox) / Triangle (PlayStation)
+  FORCE_FEEDBACK_X:
+    type: FORCE_FEEDBACK_X
+    range:
+    - -32768.0
+    - 32767.0
+    properties:
+      resolution: 1.0
+      fuzz: 0.0
+      flat: 0.0
+    initial_value: 0.0
+    desc: >-
+      Special, fake, control to expose force feedback X component coming from device.
+      Currently R/O, write ignored (could reuse it to inject Constant force on unowned
+      HID though).
+  FORCE_FEEDBACK_Y:
+    type: FORCE_FEEDBACK_Y
+    range:
+    - -32768.0
+    - 32767.0
+    properties:
+      resolution: 1.0
+      fuzz: 0.0
+      flat: 0.0
+    initial_value: 0.0
+    desc: >-
+      Special, fake, control to expose force feedback Y component coming from device.
+      Currently R/O, write ignored (could reuse it to inject Constant force on unowned
+      HID though).
+  KEY_0:
+    type: KEY_0
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Number 0 key
+  KEY_1:
+    type: KEY_1
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Number 1 key
+  KEY_2:
+    type: KEY_2
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Number 2 key
+  KEY_3:
+    type: KEY_3
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Number 3 key
+  KEY_4:
+    type: KEY_4
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Number 4 key
+  KEY_5:
+    type: KEY_5
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Number 5 key
+  KEY_6:
+    type: KEY_6
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Number 6 key
+  KEY_7:
+    type: KEY_7
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Number 7 key
+  KEY_8:
+    type: KEY_8
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Number 8 key
+  KEY_9:
+    type: KEY_9
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Number 9 key
+  KEY_A:
+    type: KEY_A
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: A key
+  KEY_APOSTROPHE:
+    type: KEY_APOSTROPHE
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Apostrophe/Quote key
+  KEY_B:
+    type: KEY_B
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: B key
+  KEY_BACK:
+    type: KEY_BACK
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Browser back button
+  KEY_BACKSLASH:
+    type: KEY_BACKSLASH
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Backslash/Pipe key
+  KEY_BACKSPACE:
+    type: KEY_BACKSPACE
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Backspace key
+  KEY_C:
+    type: KEY_C
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: C key
+  KEY_CAPSLOCK:
+    type: KEY_CAPSLOCK
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Caps Lock toggle key
+  KEY_COMMA:
+    type: KEY_COMMA
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Comma/Less-than key
+  KEY_COMPOSE:
+    type: KEY_COMPOSE
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Compose key for special characters
+  KEY_D:
+    type: KEY_D
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: D key
+  KEY_DELETE:
+    type: KEY_DELETE
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Delete key
+  KEY_DOT:
+    type: KEY_DOT
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Period/Greater-than key
+  KEY_DOWN:
+    type: KEY_DOWN
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Down arrow key
+  KEY_E:
+    type: KEY_E
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: E key
+  KEY_EJECTCD:
+    type: KEY_EJECTCD
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Eject CD/DVD button
+  KEY_END:
+    type: KEY_END
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: End key
+  KEY_ENTER:
+    type: KEY_ENTER
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Enter/Return key
+  KEY_EQUAL:
+    type: KEY_EQUAL
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Equals key
+  KEY_ESC:
+    type: KEY_ESC
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Escape key
+  KEY_F:
+    type: KEY_F
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: F key
+  KEY_F1:
+    type: KEY_F1
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F1
+  KEY_F10:
+    type: KEY_F10
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F10
+  KEY_F11:
+    type: KEY_F11
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F11
+  KEY_F12:
+    type: KEY_F12
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F12
+  KEY_F13:
+    type: KEY_F13
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F13
+  KEY_F14:
+    type: KEY_F14
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F14
+  KEY_F15:
+    type: KEY_F15
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F15
+  KEY_F16:
+    type: KEY_F16
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F16
+  KEY_F17:
+    type: KEY_F17
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F17
+  KEY_F18:
+    type: KEY_F18
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F18
+  KEY_F19:
+    type: KEY_F19
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F19
+  KEY_F2:
+    type: KEY_F2
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F2
+  KEY_F20:
+    type: KEY_F20
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F20
+  KEY_F21:
+    type: KEY_F21
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F21
+  KEY_F22:
+    type: KEY_F22
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F22
+  KEY_F23:
+    type: KEY_F23
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F23
+  KEY_F24:
+    type: KEY_F24
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F24
+  KEY_F3:
+    type: KEY_F3
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F3
+  KEY_F4:
+    type: KEY_F4
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F4
+  KEY_F5:
+    type: KEY_F5
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F5
+  KEY_F6:
+    type: KEY_F6
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F6
+  KEY_F7:
+    type: KEY_F7
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F7
+  KEY_F8:
+    type: KEY_F8
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F8
+  KEY_F9:
+    type: KEY_F9
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Function key F9
+  KEY_FORWARD:
+    type: KEY_FORWARD
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Browser forward button
+  KEY_G:
+    type: KEY_G
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: G key
+  KEY_GRAVE:
+    type: KEY_GRAVE
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Grave/Tilde key
+  KEY_H:
+    type: KEY_H
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: H key
+  KEY_HOME:
+    type: KEY_HOME
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Home key
+  KEY_HOMEPAGE:
+    type: KEY_HOMEPAGE
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Open homepage/browser button
+  KEY_I:
+    type: KEY_I
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: I key
+  KEY_INSERT:
+    type: KEY_INSERT
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Insert key
+  KEY_J:
+    type: KEY_J
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: J key
+  KEY_K:
+    type: KEY_K
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: K key
+  KEY_KP0:
+    type: KEY_KP0
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Keypad 0 key
+  KEY_KP1:
+    type: KEY_KP1
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Keypad 1 key
+  KEY_KP2:
+    type: KEY_KP2
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Keypad 2 key
+  KEY_KP3:
+    type: KEY_KP3
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Keypad 3 key
+  KEY_KP4:
+    type: KEY_KP4
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Keypad 4 key
+  KEY_KP5:
+    type: KEY_KP5
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Keypad 5 key
+  KEY_KP6:
+    type: KEY_KP6
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Keypad 6 key
+  KEY_KP7:
+    type: KEY_KP7
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Keypad 7 key
+  KEY_KP8:
+    type: KEY_KP8
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Keypad 8 key
+  KEY_KP9:
+    type: KEY_KP9
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Keypad 9 key
+  KEY_KPASTERISK:
+    type: KEY_KPASTERISK
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Keypad multiply key
+  KEY_KPDOT:
+    type: KEY_KPDOT
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Keypad decimal point key
+  KEY_KPENTER:
+    type: KEY_KPENTER
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Keypad Enter key
+  KEY_KPEQUAL:
+    type: KEY_KPEQUAL
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Keypad equals key
+  KEY_KPMINUS:
+    type: KEY_KPMINUS
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Keypad subtract key
+  KEY_KPPLUS:
+    type: KEY_KPPLUS
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Keypad add key
+  KEY_KPSLASH:
+    type: KEY_KPSLASH
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Keypad divide key
+  KEY_L:
+    type: KEY_L
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: L key
+  KEY_LEFT:
+    type: KEY_LEFT
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Left arrow key
+  KEY_LEFTBRACE:
+    type: KEY_LEFTBRACE
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Left bracket/key
+  KEY_LEFTCTRL:
+    type: KEY_LEFTCTRL
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Left Control modifier key
+  KEY_LEFTMETA:
+    type: KEY_LEFTMETA
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Left Meta/Windows/Super key
+  KEY_LEFTSHIFT:
+    type: KEY_LEFTSHIFT
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Left Shift modifier key
+  KEY_M:
+    type: KEY_M
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: M key
+  KEY_MAIL:
+    type: KEY_MAIL
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Open email client button
+  KEY_MENU:
+    type: KEY_MENU
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Context menu key
+  KEY_MINUS:
+    type: KEY_MINUS
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Minus/Dash key
+  KEY_MUTE:
+    type: KEY_MUTE
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Audio mute toggle
+  KEY_N:
+    type: KEY_N
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: N key
+  KEY_NEXTSONG:
+    type: KEY_NEXTSONG
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Next track button
+  KEY_NUMLOCK:
+    type: KEY_NUMLOCK
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Num Lock toggle key
+  KEY_O:
+    type: KEY_O
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: O key
+  KEY_P:
+    type: KEY_P
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: P key
+  KEY_PAGEDOWN:
+    type: KEY_PAGEDOWN
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Page Down key
+  KEY_PAGEUP:
+    type: KEY_PAGEUP
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Page Up key
+  KEY_PAUSE:
+    type: KEY_PAUSE
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Pause/Break key
+  KEY_PLAYPAUSE:
+    type: KEY_PLAYPAUSE
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Play/Pause toggle button
+  KEY_POWER:
+    type: KEY_POWER
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Power button
+  KEY_PREVIOUSSONG:
+    type: KEY_PREVIOUSSONG
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Previous track button
+  KEY_PRINT:
+    type: KEY_PRINT
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Print Screen key
+  KEY_Q:
+    type: KEY_Q
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Q key
+  KEY_R:
+    type: KEY_R
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: R key
+  KEY_RIGHT:
+    type: KEY_RIGHT
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Right arrow key
+  KEY_RIGHTALT:
+    type: KEY_RIGHTALT
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Right Alt/AltGr modifier key
+  KEY_RIGHTBRACE:
+    type: KEY_RIGHTBRACE
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Right bracket/key
+  KEY_RIGHTCTRL:
+    type: KEY_RIGHTCTRL
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Right Control modifier key
+  KEY_RIGHTMETA:
+    type: KEY_RIGHTMETA
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Right Meta/Windows/Super key
+  KEY_RIGHTSHIFT:
+    type: KEY_RIGHTSHIFT
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Right Shift modifier key
+  KEY_S:
+    type: KEY_S
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: S key
+  KEY_SCROLLLOCK:
+    type: KEY_SCROLLLOCK
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Scroll Lock toggle key
+  KEY_SEARCH:
+    type: KEY_SEARCH
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Search button
+  KEY_SEMICOLON:
+    type: KEY_SEMICOLON
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Semicolon key
+  KEY_SLASH:
+    type: KEY_SLASH
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Slash/Question-mark key
+  KEY_SLEEP:
+    type: KEY_SLEEP
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Sleep/Suspend button
+  KEY_SPACE:
+    type: KEY_SPACE
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Spacebar
+  KEY_STOPCD:
+    type: KEY_STOPCD
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Stop media playback button
+  KEY_SYSRQ:
+    type: KEY_SYSRQ
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: System Request/Print Screen key
+  KEY_T:
+    type: KEY_T
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: T key
+  KEY_TAB:
+    type: KEY_TAB
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Tab key
+  KEY_U:
+    type: KEY_U
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: U key
+  KEY_UP:
+    type: KEY_UP
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Up arrow key
+  KEY_V:
+    type: KEY_V
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: V key
+  KEY_VOLUMEDOWN:
+    type: KEY_VOLUMEDOWN
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Volume decrease button
+  KEY_VOLUMEUP:
+    type: KEY_VOLUMEUP
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Volume increase button
+  KEY_W:
+    type: KEY_W
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: W key
+  KEY_WAKEUP:
+    type: KEY_WAKEUP
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Wake-up event button
+  KEY_X:
+    type: KEY_X
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: X key
+  KEY_Y:
+    type: KEY_Y
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Y key
+  KEY_Z:
+    type: KEY_Z
+    range:
+    - 0.0
+    - 2.0
+    properties: null
+    initial_value: 0.0
+    desc: Z key
+  REL_HWHEEL:
+    type: REL_HWHEEL
+    range:
+    - -10.0
+    - 10.0
+    properties: null
+    initial_value: 0.0
+    desc: Horizontal scroll wheel (steps)
+  REL_HWHEEL_HI_RES:
+    type: REL_HWHEEL_HI_RES
+    range:
+    - -120.0
+    - 120.0
+    properties: null
+    initial_value: 0.0
+    desc: High-resolution vertical wheel
+  REL_WHEEL:
+    type: REL_WHEEL
+    range:
+    - -10.0
+    - 10.0
+    properties: null
+    initial_value: 0.0
+    desc: Vertical scroll wheel (steps)
+  REL_WHEEL_HI_RES:
+    type: REL_WHEEL_HI_RES
+    range:
+    - -120.0
+    - 120.0
+    properties: null
+    initial_value: 0.0
+    desc: High-resolution vertical wheel
+  REL_X:
+    type: REL_X
+    range:
+    - -127.0
+    - 127.0
+    properties: null
+    initial_value: 0.0
+    desc: Relative X movement (counts per tick)
+  REL_Y:
+    type: REL_Y
+    range:
+    - -127.0
+    - 127.0
+    properties: null
+    initial_value: 0.0
+    desc: Relative Y movement (counts per tick)
