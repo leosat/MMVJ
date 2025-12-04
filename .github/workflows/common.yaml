@@ -1,0 +1,53 @@
+name: Common testing
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  common-testing:
+    name: Common testing
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install ALSA dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "rust-cache-shared" 
+
+      # - name: Set up Python
+      #   uses: actions/setup-python@v5
+      #   with:
+      #     python-version: '3.x'
+
+      - name: Execute Pre-Commit Hooks
+        uses: pre-commit/action@v3.0.1
+
+      - name: Check example configs
+        run: | 
+          cargo build
+          for cfg in conf/example*.yaml; do 
+            cargo run -- -c "$cfg" validate-config false
+          done
+
+      - name: Build and Test NDF and partial (Debug Mode)
+        run: | 
+          cargo test --no-default-features
+          cargo test --no-default-features --features=midi
+          cargo test --no-default-features --features=gui
