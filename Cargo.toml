@@ -1,0 +1,120 @@
+[package]
+name = "mmvj"
+version = "2026.9.6-0"
+edition = "2024"
+# rust-version = "1.85.0"
+authors = ["Leonid Satanovskiy"]
+description = "HID and MIDI transforming I/O mapper and force-feedback-enabled virtual HID manager."
+license-file = "LICENSE"
+
+[features]
+default = [ "midi", "gui" ]
+gui = [ "dep:eframe","dep:winit" ]
+midi = [ "dep:midir" ]
+more_debug = []
+base_num_f64 = []
+# base_num_fixed = []
+
+[lib]
+name = "mmvj_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mmvj"
+path = "src/bin/main.rs"
+
+[dependencies]
+with_doc_str = { path = "src/with_doc_str" }
+mmvj_derive = { path = "src/mmvj_derive" }
+anyhow = "1.0"
+atomic_float = { version = "1.1.0", features = ["serde"] }
+bitflags = "2.11.1"
+chrono = { version = "0.4", features = ["serde"] }
+circular-buffer = "1.2.0"
+clap = { version = "4.6.1", features = ["derive"] }
+colored = "3.0.0"
+crossbeam-utils = "0.8.21"
+deserialize_untagged_verbose_error = "0.1.5"
+eframe = { version = "0.34.2", optional = true, features = [ "glow", "persistence" ]}
+egui-file-dialog = "0.13.0"
+egui_logger = "0.10.0"
+egui = { version = "0.34.2", features = ["persistence", "serde"] }
+#enum_delegate = "0.2.0"
+enumflags2 = { version = "0.7.12", features = ["serde", "std"] }
+env_logger = "0.11.10"
+evdev = { version = "0.13.2", features = ["tokio"] }
+# fixed = { version = "1.31.0", features = ["num-traits", "serde", "std"] }
+lasso = { version = "0.7.3", features = ["multi-threaded"] }
+log = "0.4"
+midir = { version = "0.11.0", optional = true }
+mlua = { version = "0.11.6", features = ["luau", "send"] } ## async send 
+nix = { version = "0.31.3", features = ["user", "poll"] }
+notify-debouncer-full = "0.7.0"
+num-traits = "0.2.19"
+#nutype = { version = "0.6.2", features = ["serde", "schemars08"] }
+#papaya = "0.2.3"
+parking_lot = { version = "0.12.5", features = ["serde", "arc_lock", "owning_ref", "send_guard", "hardware-lock-elision"] }
+regex = "1.10"
+schemars = { version = "1.2.0", features = ["derive", "preserve_order", "chrono04"] }
+serde_json = "1.0.148"
+serde_regex = "1.1.0"
+serde-saphyr = { version = "0.0.29", features = ["garde"] }
+serde-value = "0.7.0"
+serde = { version = "1.0", features = ["alloc", "derive", "rc", "serde_derive", "std"] }
+strum = "0.28.0"
+strum_macros = "0.28.0"
+tokio-util = "0.7.18"
+tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread", "signal", "sync", "test-util"] }
+traversable = { version = "0.2.0", features = ["derive", "std", "traverse-std", "traverse-trivial"] }
+unchecked-refcell = "0.2.2"
+winit = { version = "0.30.12", optional = true }
+garde = { version = "0.22.1", features = ["serde", "regex", "derive"] }
+cfg-if = "1.0.4"
+egui-phosphor = { version = "0.12.0", features = ["bold", "fill"] }
+branches = "0.4.4"
+fastrand = "2.5.0"
+nutype = { version = "0.7.0", features = ["arbitrary", "schemars08", "serde"] }
+enum_dispatch = "0.3.13"
+
+[dev-dependencies]
+tempfile = "3.10"
+pretty_assertions = "1.4"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+# codegen-units = 1
+strip = true
+debug = 1
+
+[profile.dev]
+opt-level = 0
+debug = true
+strip = false
+
+[profile.pgo-profiles]
+inherits = "release"
+opt-level = 2
+debug = true
+strip = false
+
+
+[profile.samply]
+inherits = "release"
+debug = true
+
+[package.metadata.appimage]
+# This will automatically find and bundle shared libraries.
+auto_link = true
+
+# Except for the below, that can break compatibility.
+auto_link_exclude_list = [
+    "libc.so*",
+    "libdl.so*",
+    "libpthread.so*",
+    "libgcc_s.so*",
+    "libm.so*",
+    "librt.so*",
+    "ld-linux-x86-64.so*"
+]
+
