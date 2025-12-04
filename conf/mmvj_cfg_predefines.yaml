@@ -1,0 +1,426 @@
+# MMVJ Predefined Controls
+# Internal control definitions for MIDI, Joystick, and Mouse controls
+# 
+# These predefines can be referenced in the config using either:
+#   - Shorthand: `my_control: "predefined_name"`
+#   - Full (with overrides): `my_control: { predefined_type: predefined_name, range: [...] }`
+
+#
+# Actually we can do any evdev-supported control.
+# TODO: author was lazy, fill up the list of 
+#       definitions here or generate.
+#
+
+# ----------------
+# MIDI Controls
+# ----------------
+midi_controls:
+  PITCH_WHEEL:
+    midi_message:
+      type: pitch_wheel
+      channel: any
+    range: [-8192, 8191]
+    description: "Pitch bend wheel"
+
+  MODULATION_WHEEL:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 1
+    range: [0, 127]
+    description: "Modulation wheel (CC1)"
+
+  EXPRESSION_PEDAL:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 11
+    range: [0, 127]
+    description: "Expression pedal (CC11)"
+
+  SUSTAIN_PEDAL:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 64
+    range: [0, 127]
+    description: "Sustain pedal (CC64)"
+
+  VOLUME:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 7
+    range: [0, 127]
+    description: "Main volume (CC7)"
+
+  PAN:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 10
+    range: [0, 127]
+    description: "Pan position (CC10)"
+
+  AFTERTOUCH:
+    midi_message:
+      type: aftertouch
+      channel: any
+    range: [0, 127]
+    description: "Channel aftertouch"
+
+  # Note definitions - all chromatic notes (all octaves)
+  NOTE_C:
+    midi_message:
+      type: note
+      channel: any
+      number: [0, 12, 24, 36, 48, 60, 72, 84, 96, 108, 120]
+    range: [0, 127]
+    description: "Note C (all octaves)"
+
+  NOTE_C#:
+    midi_message:
+      type: note
+      channel: any
+      number: [1, 13, 25, 37, 49, 61, 73, 85, 97, 109, 121]
+    range: [0, 127]
+    description: "Note C# (all octaves)"
+
+  NOTE_D:
+    midi_message:
+      type: note
+      channel: any
+      number: [2, 14, 26, 38, 50, 62, 74, 86, 98, 110, 122]
+    range: [0, 127]
+    description: "Note D (all octaves)"
+
+  NOTE_D#:
+    midi_message:
+      type: note
+      channel: any
+      number: [3, 15, 27, 39, 51, 63, 75, 87, 99, 111, 123]
+    range: [0, 127]
+    description: "Note D# (all octaves)"
+
+  NOTE_E:
+    midi_message:
+      type: note
+      channel: any
+      number: [4, 16, 28, 40, 52, 64, 76, 88, 100, 112, 124]
+    range: [0, 127]
+    description: "Note E (all octaves)"
+
+  NOTE_F:
+    midi_message:
+      type: note
+      channel: any
+      number: [5, 17, 29, 41, 53, 65, 77, 89, 101, 113, 125]
+    range: [0, 127]
+    description: "Note F (all octaves)"
+
+  NOTE_F#:
+    midi_message:
+      type: note
+      channel: any
+      number: [6, 18, 30, 42, 54, 66, 78, 90, 102, 114, 126]
+    range: [0, 127]
+    description: "Note F# (all octaves)"
+
+  NOTE_G:
+    midi_message:
+      type: note
+      channel: any
+      number: [7, 19, 31, 43, 55, 67, 79, 91, 103, 115, 127]
+    range: [0, 127]
+    description: "Note G (all octaves)"
+
+  NOTE_G#:
+    midi_message:
+      type: note
+      channel: any
+      number: [8, 20, 32, 44, 56, 68, 80, 92, 104, 116]
+    range: [0, 127]
+    description: "Note G# (all octaves)"
+
+  NOTE_A:
+    midi_message:
+      type: note
+      channel: any
+      number: [9, 21, 33, 45, 57, 69, 81, 93, 105, 117]
+    range: [0, 127]
+    description: "Note A (all octaves)"
+
+  NOTE_A#:
+    midi_message:
+      type: note
+      channel: any
+      number: [10, 22, 34, 46, 58, 70, 82, 94, 106, 118]
+    range: [0, 127]
+    description: "Note A# (all octaves)"
+
+  NOTE_B:
+    midi_message:
+      type: note
+      channel: any
+      number: [11, 23, 35, 47, 59, 71, 83, 95, 107, 119]
+    range: [0, 127]
+    description: "Note B (all octaves)"
+
+# ----------------
+# Joystick Controls
+# ----------------
+joystick_controls:
+  ABS_X:
+    type: ABS_X
+    range: [-32768, 32767]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Primary X-axis (left stick horizontal)"
+
+  AXIS_MUNDI:
+    type: ABS_X
+    range: [-32768, 32767]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Primary X-axis (left stick horizontal)"
+
+  ABS_Y:
+    type: ABS_Y
+    range: [-32768, 32767]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Primary Y-axis (left stick vertical)"
+
+  ABS_Z:
+    type: ABS_Z
+    range: [-32768, 32767]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Z-axis (left trigger analog)"
+
+  # Secondary axes (right stick)
+  ABS_RX:
+    type: ABS_RX
+    range: [-32768, 32767]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Right X-axis (right stick horizontal)"
+
+  ABS_RY:
+    type: ABS_RY
+    range: [-32768, 32767]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Right Y-axis (right stick vertical)"
+
+  ABS_RZ:
+    type: ABS_RZ
+    range: [-32768, 32767]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Right Z-axis (right trigger analog)"
+
+  # Steering/racing axes
+  ABS_WHEEL:
+    type: ABS_WHEEL
+    range: [-32768, 32767]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Steering wheel axis"
+
+  ABS_GAS:
+    type: ABS_GAS
+    range: [0, 32767]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Gas/throttle pedal"
+
+  ABS_BRAKE:
+    type: ABS_BRAKE
+    range: [0, 32767]
+    properties: { resolution: 1, fuzz: 0, flat: 0 }
+    initial_value: 0
+    description: "Brake pedal"
+
+  # D-pad / HAT
+  ABS_HAT0X:
+    type: ABS_HAT0_X # TODO: HAT0X
+    range: [-1, 1]
+    initial_value: 0
+    description: "D-pad horizontal"
+
+  ABS_HAT0Y:
+    type: ABS_HAT0_Y
+    range: [-1, 1]
+    initial_value: 0
+    description: "D-pad vertical"
+
+  # Buttons - Xbox style naming
+  BTN_A:
+    type: BTN_SOUTH
+    range: [0, 1]
+    initial_value: 0
+    description: "A button (Xbox) / Cross (PlayStation)"
+
+  BTN_B:
+    type: BTN_EAST
+    range: [0, 1]
+    initial_value: 0
+    description: "B button (Xbox) / Circle (PlayStation)"
+
+  BTN_X:
+    type: BTN_NORTH
+    range: [0, 1]
+    initial_value: 0
+    description: "X button (Xbox) / Square (PlayStation)"
+
+  BTN_Y:
+    type: BTN_WEST
+    range: [0, 1]
+    initial_value: 0
+    description: "Y button (Xbox) / Triangle (PlayStation)"
+
+  # Buttons - Linux evdev naming (aliases)
+  BTN_SOUTH:
+    type: BTN_SOUTH
+    range: [0, 1]
+    initial_value: 0
+    description: "South button (A on Xbox)"
+
+  BTN_EAST:
+    type: BTN_EAST
+    range: [0, 1]
+    initial_value: 0
+    description: "East button (B on Xbox)"
+
+  BTN_NORTH:
+    type: BTN_NORTH
+    range: [0, 1]
+    initial_value: 0
+    description: "North button (X on Xbox)"
+
+  BTN_WEST:
+    type: BTN_WEST
+    range: [0, 1]
+    initial_value: 0
+    description: "West button (Y on Xbox)"
+
+  # Shoulder buttons
+  # BTN_TL:
+  #   type: BTN_TL
+  #   range: [0, 1]
+  #   initial_value: 0
+  #   description: "Left shoulder button (LB/L1)"
+
+  # BTN_TR:
+  #   type: BTN_TR
+  #   range: [0, 1]
+  #   initial_value: 0
+  #   description: "Right shoulder button (RB/R1)"
+
+  # BTN_TL2:
+  #   type: BTN_TL2
+  #   range: [0, 1]
+  #   initial_value: 0
+  #   description: "Left trigger button (LT/L2)"
+
+  # BTN_TR2:
+  #   type: BTN_TR2
+  #   range: [0, 1]
+  #   initial_value: 0
+  #   description: "Right trigger button (RT/R2)"
+
+  # Thumbstick buttons
+  # BTN_THUMBL:
+  #   type: BTN_THUMBL
+  #   range: [0, 1]
+  #   initial_value: 0
+  #   description: "Left thumbstick press (L3)"
+
+  # BTN_THUMBR:
+  #   type: BTN_THUMBR
+  #   range: [0, 1]
+  #   initial_value: 0
+  #   description: "Right thumbstick press (R3)"
+
+  # Menu buttons
+  BTN_SELECT:
+    type: BTN_SELECT
+    range: [0, 1]
+    initial_value: 0
+    description: "Select/Back button"
+
+  BTN_START:
+    type: BTN_START
+    range: [0, 1]
+    initial_value: 0
+    description: "Start/Menu button"
+
+  # BTN_MODE:
+  #   type: BTN_MODE
+  #   range: [0, 1]
+  #   initial_value: 0
+  #   description: "Mode/Guide button"
+
+# ----------------
+# Mouse Controls
+# ----------------
+mouse_controls:
+  # Relative movement
+  REL_X:
+    type: REL_X
+    range: [-127, 127]
+    description: "Relative X movement (counts per tick)"
+
+  REL_Y:
+    type: REL_Y
+    range: [-127, 127]
+    description: "Relative Y movement (counts per tick)"
+
+  # Wheels
+  REL_WHEEL:
+    type: REL_WHEEL
+    range: [-10, 10]
+    description: "Vertical scroll wheel (steps)"
+
+  REL_HWHEEL:
+    type: REL_HWHEEL
+    range: [-10, 10]
+    description: "Horizontal scroll wheel (steps)"
+
+  # High-resolution wheels (if available)
+  REL_WHEEL_HI_RES:
+    type: REL_WHEEL_HI_RES
+    range: [-120, 120]
+    description: "High-resolution vertical wheel"
+
+  # hwheel_hi_res:
+  #   type: REL_HWHEEL_HI_RES
+  #   range: [-120, 120]
+  #   description: "High-resolution horizontal wheel"
+
+  # Buttons
+  BTN_LEFT:
+    type: BTN_LEFT
+    range: [0, 1]
+    description: "Left mouse button"
+
+  BTN_RIGHT:
+    type: BTN_RIGHT
+    range: [0, 1]
+    description: "Right mouse button"
+
+  BTN_MIDDLE:
+    type: BTN_MIDDLE
+    range: [0, 1]
+    description: "Middle mouse button"
+
+  BTN_SIDE:
+    type: BTN_SIDE
+    range: [0, 1]
+    description: "Side button (back)"
+
+  BTN_EXTRA:
+    type: BTN_EXTRA
+    range: [0, 1]
+    description: "Extra button (forward)"

@@ -1,0 +1,51 @@
+####################################################################
+#
+# User can specify custom sections with reusable chunks for YAML.
+# Referenced with anchors (&) and reused below with merge keys (<<:) 
+#
+Shared user-defined MIDI controls example:
+  C4 note: &note_c4
+    midi_message: { type: note, channel: any, number: 60 }
+    range: [0, 127]
+    description: Middle C (velocity used as value) user-defined.
+  Another name for C4: { <<: *note_c4 }
+  Any note, clamped to On or Off states: &note_any__on_off
+    midi_message: { type: note, channel: any }
+    range: [0, 1] # We can specify custom initial range and if the input value is out of it
+                  # the value will be assigned and clamped (see below) to it.
+                  # So, value transformation strarts with specifying the value range and goes on
+                  # in mappings, see below.
+    description: Any note, saturated early (every value not set to 0 will resulte in max output),
+                 user-defined.
+  #
+  # With this notation we reuse a predefined control 
+  # without overriding any of its properties.
+  # 
+  # Predefined controls can bee seen in mmvj_cfg_predefines.yaml.
+  #
+  Pitch: PITCH_WHEEL
+  #
+  # With this notation we reuse a predefined control 
+  # but redefine the control input range. E.g. here we make 
+  # anything that is -1 or less and 1 and more saturate below and above those bounds.
+  # This results in effect that a pitch wheel if mapped from this control definition
+  # will behave as a tripolar button having values of -1,0,1.
+  #
+  # Predefined controls can bee seen in mmvj_cfg_predefines.yaml.
+  #
+  Pitch 3-polar: { merge_from: PITCH_WHEEL, range: [1,-1] }
+  Modulation: MODULATION_WHEEL
+  Expression Pedal: EXPRESSION_PEDAL
+  Any C: NOTE_C
+  Any C#: NOTE_C#
+  Any D: NOTE_D
+  Any D#: NOTE_D#
+  Any E: NOTE_E
+  Any F: NOTE_F
+  Any F#: NOTE_F#
+  Any G: NOTE_G
+  Any G#: NOTE_G#
+  Any A: NOTE_A
+  Any A#: NOTE_A#
+  Any B: NOTE_B
+

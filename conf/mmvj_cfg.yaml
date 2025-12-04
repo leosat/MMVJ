@@ -1,0 +1,215 @@
+####################################################################
+global:
+  idle_tick_update_rate: 60
+  persistent_joysticks: true
+####################################################################
+midi_devices:
+  ####################################################################
+  default_midi:
+    enabled: true
+    match_name_regex: "."
+    controls: { _include: mmvj_cfg_SHARED.yaml/Shared user-defined MIDI controls example/.+ }
+####################################################################
+virtual_joysticks:
+  ####################################################################
+  VJoy1:
+    enabled: true
+    persistent: true
+    name: "Steering wheel joystick."
+    properties:
+      vendor_id: 0x6
+      product_id: 0x6
+      version: 0x6
+    force_feedback:
+        enabled: true 
+        effects: [ constant ]
+    controls:
+      Steering Wheel: ABS_X
+      Handbreak: { merge_from: ABS_Y, range: [0, 32767], initial_value: 32767 }
+      Clutch Pedal: { merge_from: ABS_Z, initial_value: 32767 }
+      Wheel 2: ABS_RX
+      Steering Hold Factor: ABS_RY
+      3-polar Switch: ABS_RZ
+      Button South:  BTN_SOUTH
+      Button East:  BTN_EAST
+      Button North:  BTN_NORTH
+      Button West:  BTN_WEST
+  ####################################################################
+  VJoy2:
+    enabled: true
+    persistent: true
+    name: "Auxiliary joystick."
+    properties:
+      vendor_id: 0x7
+      product_id: 0x7
+      version: 0x7
+    controls:
+      Footbreak Pedal: { merge_from: ABS_X, range: [0, 32767], initial_value: 32767 }
+      Throttle Pedal: { merge_from: ABS_Y, range: [-32768, 32767], initial_value: 32767 }
+      Handbreak: { merge_from: ABS_RX, range: [0, 32767], initial_value: 32767 }
+      Axis RZ: { merge_from: ABS_RZ, initial_value: -32768 }
+      Button South:  BTN_SOUTH
+      Button East:  BTN_EAST
+      Button North:  BTN_NORTH
+      Button West:  BTN_WEST
+####################################################################
+mouse_devices:
+  default_mouse:
+    enabled: true
+    match_name_regex: "."
+    controls:
+      Left to Right Movement: REL_X
+      Front to Back Movement: REL_Y
+      Scrolling Hi-Res: REL_WHEEL_HI_RES
+      Scrolling Lo-Res: REL_WHEEL
+      Left Button: BTN_LEFT
+      Right Button: BTN_RIGHT
+####################################################################
+mappings:
+  - name: "Mouse-controlled steering wheel."
+    source: { device: default_mouse, control: Left to Right Movement }
+    destination: { joystick: VJoy1, control: Steering Wheel }
+    enabled: true
+    transformation:
+      ####################################################################
+      - steering:
+          counts_to_lock: 600
+          deadzone_counts: 0
+          smoothing_alpha: 0.3
+          user_input_ema_filter: { tau: 0.01 }
+          user_input_power_curve: { power: 1.01 }
+          auto_center_halflife: 0.1
+          hold_factor: { device: VJoy1, control: Steering Hold Factor }
+          ## hold_factor: 1
+          force_feedback:
+            enabled: true
+            constant_force_influence: 0.4
+            constant_force_scale: 1.0
+            constant_force_invert: true #!# Warning: test with a particular game.
+                                        #!#          set auto_center_halflife above to something big like 100
+                                        #!#          to disable autocentering. Then check if steering wheel comes to 
+                                        #!#          the center when accelerating. If it moves in some other direction,
+                                        #!#          you may need to set this to false (or inverse in game)
+      # - ema_filter:
+      #     on_idle: true
+      #     tau: 1.5
+      # - lowpass:
+      #     on_idle: false
+      #     time_constant: 0.005
+  - name: "Steering wheel hold factor (how firmly your hands hold it)"
+    source: { device: default_mouse, control: Front to Back Movement }
+    destination: { joystick: VJoy1, control: Steering Hold Factor }
+    enabled: true
+    transformation:
+      - integrate:
+          range: [0, 600]
+          deadzone_norm: 0
+          smoothing_alpha: 0.5
+      #- power: { power: 2.5 }
+      # - s_curve: { steepness: 5 }
+      - clamp: { from: 0, to: 500, override_range: true }
+      # - lowpass:
+      #     on_idle: true
+      #     time_constant: 0.10
+  ####################################################################
+  - name: "Steering wheel control with MIDI pitch wheel #1: curved mapping." 
+    source: { device: default_midi, control: Pitch }
+    destination: { joystick: VJoy1, control: Steering Wheel }
+    transformation:
+      - symmetric_power: { power: 1.8  }
+      - clamp: {}
+  ####################################################################
+  - name: "3-polar switch using input MIDI pitch wheel." 
+    enabled: false
+    source: { device: default_midi, control: Pitch 3-polar }
+    destination: { joystick: VJoy1, control: 3-polar Switch }
+  ####################################################################
+  - name: "`Pressed unless pressed` #1"
+    source: { device: default_mouse, control: Left Button }
+    destination: { joystick: VJoy2, control: Button West }
+    enabled: true
+    transformation:
+      - invert: {}
+  ####################################################################
+  - name: "`Pressed unless pressed` #2"
+    source: { device: default_mouse, control: Right Button }
+    destination: { joystick: VJoy2, control: Button West }
+    enabled: true
+    transformation:
+      - invert: {}
+  ####################################################################
+  - name: "Gear down."
+    source: { device: default_midi, control: Any E }
+    destination: { joystick: VJoy2, control: Button South }
+  ####################################################################
+  - name: "Gear up."
+    source: { device: default_midi, control: Any F }
+    destination: { joystick: VJoy2, control: Button East }
+  ####################################################################
+  - name: "Neutral gear."
+    source: { device: default_midi, control: Any D }
+    destination: { joystick: VJoy2, control: Button North }
+  ####################################################################
+  - name: "Foot-brake pedal."
+    source: { device: default_midi, control: Any G# }
+    destination: { joystick: VJoy2, control: Footbreak Pedal }
+    transformation:
+      - clamp: { to: 70 }
+      - pedal_smoother: 
+          rise_rate: 130
+          fall_rate: 200
+          smoothing_alpha: 0.9
+      - invert: {}
+  ####################################################################
+  - name: "Throttle pedal."
+    source: { device: default_midi, control: Any A# }
+    destination: { joystick: VJoy2, control: Throttle Pedal }
+    transformation:
+      - clamp: { to: 90 }
+      - power: { power: 1.35 }
+      - pedal_smoother: 
+          rise_rate: 140
+          fall_rate: 100
+          fall_delay: 0.15
+      # - ema_filter:
+      #     on_idle: true
+      #     tau: 0.5
+      - invert: {}
+  ####################################################################
+  - name: "Clutch"
+    source: { device: default_midi, control: Any F# }
+    destination: { joystick: VJoy1, control: Clutch Pedal }
+    transformation:
+      - clamp:
+          to: 15
+      - pedal_smoother: 
+          rise_rate: 105
+          fall_rate: 8
+          fall_delay: 0.01
+          smoothing_alpha: 0.5
+          fall_gentling_factor: { device: VJoy2, control: Throttle Pedal }
+      - power: { power: 0.85 }
+      - ema_filter:
+          on_idle: true
+          tau: 1.0
+      - invert: {}
+  ####################################################################
+  - name: "Handbreak"
+    source: { device: default_midi, control: Any C }
+    destination: { joystick: VJoy1, control: Handbreak }
+    transformation:
+      - clamp: { to: 1 }
+      - pedal_smoother: 
+          rise_rate: 1.9
+          fall_rate: 4
+          fall_delay: 0.085
+          smoothing_alpha: 0.9
+      - invert: {} 
+  ####################################################################
+  - name: "Additional handbrake with a MIDI modulation wheel."
+    source: { device: default_midi, control: Modulation }
+    destination: { joystick: VJoy1, control: Handbreak }
+    transformation:
+      - clamp: { from: 70, to: 127, override_range: true }
+      - s_curve: { steepness: 4 }
+      - invert: {}

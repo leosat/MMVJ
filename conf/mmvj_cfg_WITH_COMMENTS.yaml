@@ -1,0 +1,337 @@
+####################################################################
+global: 
+  idle_tick_update_rate: 250 # Hz. Frequency of the idle-tick loop that applies autocentering / force feedback.
+                   # NB: this does not affect the force-feedback *event reader* loop 
+                   # NB: FFB events are consumed as soon as the client submits them.
+ 
+  # The application automatically reloads the configuration whenever the config file changes.
+  # If the new config is valid, the mapping engine restarts using the updated settings.
+  #
+  # This setting controls what happens to virtual joysticks during such reloads:
+  # - keep existing devices (persistent), or
+  # - destroy and recreate them.
+  #
+  # In practice, most reloads are for iterating on mapping settings; the joystick definitions
+  # themselves change rarely. Also, client applications (games, etc.) generally behave better
+  # when joystick devices are preserved.
+  #
+  # You can override this behavior per joystick (see below).
+  #
+  # If you need a particular joystick to be recreated, you can either restart the client app,
+  # or do it in two reloads:
+  #   1. Set that joystick’s "persistent: false", save the config (the engine will destroy it).
+  #   2. Set that joystick’s "persistent: true", save the config again (the engine will recreate it).
+  persistent_joysticks: true 
+
+####################################################################
+midi_devices:
+  ####################################################################
+  default_midi:
+    enabled: true
+    match_name_regex: "."
+    controls: { _include: mmvj_cfg_SHARED.yaml/Shared user-defined MIDI controls example/.+ }
+
+####################################################################
+virtual_joysticks:
+  ####################################################################
+  VJoy1:
+    enabled: true
+    persistent: true
+    name: "Steering wheel joystick."
+    properties:
+      vendor_id: 0x6
+      product_id: 0x6
+      version: 0x6
+    force_feedback:
+        enabled: true 
+        effects: [ constant ]
+        # TODO: only 1 is supported for now and is default.# max_effects: 1
+    controls:
+      Steering Wheel: ABS_X
+      Handbreak: { merge_from: ABS_Y, range: [0, 32767], initial_value: 32767 }
+      Clutch Pedal: { merge_from: ABS_Z, initial_value: 32767 }
+      Wheel 2: ABS_RX
+      Steering Hold Factor: ABS_RY
+      3-polar Switch: ABS_RZ
+      Button South:  BTN_SOUTH
+      Button East:  BTN_EAST
+      Button North:  BTN_NORTH
+      Button West:  BTN_WEST
+
+  ####################################################################
+  VJoy2:
+    enabled: true
+    persistent: true
+    name: "Auxiliary joystick."
+    properties:
+      vendor_id: 0x7
+      product_id: 0x7
+      version: 0x7
+    controls:
+      Footbreak Pedal: { merge_from: ABS_X, range: [0, 32767], initial_value: 32767 }
+      Throttle Pedal: { merge_from: ABS_Y, range: [-32768, 32767], initial_value: 32767 }
+      Handbreak: { merge_from: ABS_RX, range: [0, 32767], initial_value: 32767 }
+      Axis RZ: { merge_from: ABS_RZ, initial_value: -32768 }
+      Button South:  BTN_SOUTH
+      Button East:  BTN_EAST
+      Button North:  BTN_NORTH
+      Button West:  BTN_WEST
+
+####################################################################
+mouse_devices:
+  default_mouse:
+    enabled: true
+    match_name_regex: "."
+    controls:
+      Left to Right Movement: REL_X
+      Front to Back Movement: REL_Y
+      Scrolling Hi-Res: REL_WHEEL_HI_RES
+      Scrolling Lo-Res: REL_WHEEL
+      Left Button: BTN_LEFT
+      Right Button: BTN_RIGHT
+
+####################################################################
+mappings:
+  - name: "Mouse-controlled steering wheel."
+    source: { device: default_mouse, control: Left to Right Movement }
+    destination: { joystick: VJoy1, control: Steering Wheel }
+    enabled: true
+    transformation:
+      ####################################################################
+      # This mapping uses a *relative* input device (mouse).
+      # The `steering` (or `integrate`) step is what turns relative deltas into an *absolute* wheel position.
+      #
+      # Important:
+      # Any steps placed *before* `steering` will operate on raw relative deltas. Unless you know exactly
+      # what you’re doing, this often produces strong/unintuitive effects (e.g., losing fine control,
+      # “eating” precise input, or failing to reach the intended position).
+      #
+      # In most cases you should not add transforms before `steering` here.
+
+      # The `steering` step accumulates relative input, optionally applies curve / averaging,
+      # then applies autocentering + force feedback. Output is an absolute value in the destination
+      # joystick control range.
+      - steering:      
+          # Total movement range expressed in relative input counts (deltas) from lock to lock.
+          # This depends on your mouse/controller resolution and personal preference.
+          # Tip: use the app's monitor-mouse mode to observe typical delta values.
+          counts_to_lock: 900
+
+          # Output smoothing factor in [0, 1]:
+          # 0.0 -> no movement (keeps previous value)
+          # 1.0 -> no smoothing (most responsive)
+          deadzone_counts: 0
+
+          # Output smoothing factor in range of [0, 1]:
+          # 0.0 -> no movement (keeps previous value)
+          # 1.0 -> no smoothing (most responsive)
+          smoothing_alpha: 0.3
+
+          # Optional shaping / smoothing of the accumulated absolute input *before*
+          # autocentering and force feedback. Try only if needed.
+          user_input_ema_filter: { tau: 0.1 }
+          user_input_power_curve: { power: 1.005 }
+
+          # Autocenter uses an exponential decay model.
+          # This is the half-life in seconds: the wheel moves halfway back to center in this time.
+          auto_center_halflife: 0.2
+
+          # Hold factor affects autocentering and force feedback application and is in range [0.0, 1.0].
+          # The referenced control is mapped to [0.0, 1.0] automatically.
+          # Higher values reduce autocentering / force feedback (simulates "holding the wheel").
+          #
+          # Note: currently only *joystick* controls can be referenced here (not direct mouse/MIDI).
+          # If you want to drive it from mouse/MIDI, map that input to some joystick axis/button first.
+          hold_factor: { device: VJoy1, control: Steering Hold Factor }
+          # Or use a constant:
+          # hold_factor: 0.5
+
+          # Force feedback configuration (constant force only for now).
+          force_feedback:
+            enabled: true
+            constant_force_influence: 0.6
+            constant_force_scale: 1.0
+            constant_force_invert: true #!# Warning: test with a particular game.
+                                        #!#          set auto_center_halflife above to something big like 100
+                                        #!#          to disable autocentering. Then check if steering wheel comes to 
+                                        #!#          the center when accelerating. If it moves in some other direction,
+                                        #!#          you may need to set this to false (or inverse in game)
+
+      # With step we control that smoothing is applied to resultant value, 
+      - ema_filter:
+          # Set true if you prefer overall smoothing at all times (including idle tick).
+          on_idle: false
+          tau: 0.5
+
+      #TBD - lowpass:
+      #TBD     on_idle: false
+      #TBD     time_constant: 0.005
+  - name: "Steering wheel hold factor (how firmly your hands hold it)"
+    source: { device: default_mouse, control: Front to Back Movement }
+    destination: { joystick: VJoy1, control: Steering Hold Factor }
+    enabled: true
+    transformation:
+      # Integrate relative inputs into the specified range.
+      # Subjective: increase or decrease the max value in range to suit your best feel.
+      - integrate:
+          range: [0, 600]
+          deadzone_norm: 0
+          smoothing_alpha: 0.5
+
+      # These curves will make hold factor working "quicker".
+      # Subjective: comment out if doesn't feel right for you.
+      - s_curve: { steepness: 15 }
+      #?# - power: { power: 2.5 }
+
+      # `clamp` limits (saturates) the current value to a given range.
+      #
+      # At every step in the pipeline, a value carries an associated “current range”.
+      # `clamp` can either:
+      # - keep the current range and only clamp the value (`override_range: false`), or
+      # - replace the current range with the clamp range (`override_range: true`).
+      #
+      # If `from:` / `to:` are omitted, they default to the current associated range
+      # (as established by earlier steps, starting from the input control range).
+      #
+      # Here we are clamping with the following aim:
+      # Limit hold factor not to accidentally lock the wheel too much... 
+      # Subjective comment out or modify to suit your needs.
+      - clamp: { from: 0, to: 400, override_range: false }
+      - ema_filter:
+          on_idle: true
+          tau: 0.4
+  ####################################################################
+  #
+  # We can control the same joystick with different inputs 
+  # using separate mappings with unique transformation pipelines.
+  # E.g., this control is already mapped from mouse REL_X, see above, 
+  # and we also control it with a PITCH_WHEEL of a MIDI keyboard,
+  # applying interpolation curve.
+  #
+  - name: "Steering wheel control with MIDI pitch wheel #1: curved mapping." 
+    source: { device: default_midi, control: Pitch }
+    destination: { joystick: VJoy1, control: Steering Wheel }
+    transformation:
+      - symmetric_power: { power: 1.8  }
+      - clamp: {}
+
+  ####################################################################
+  - name: "3-polar switch using input MIDI pitch wheel." 
+    enabled: false
+    source: { device: default_midi, control: Pitch 3-polar }
+    destination: { joystick: VJoy1, control: 3-polar Switch }
+
+  ####################################################################
+  - name: "`Pressed unless pressed` #1"
+    source: { device: default_mouse, control: Left Button }
+    destination: { joystick: VJoy2, control: Button West }
+    enabled: true
+    transformation:
+      - invert: {}
+
+  ####################################################################
+  - name: "`Pressed unless pressed` #2"
+    source: { device: default_mouse, control: Right Button }
+    destination: { joystick: VJoy2, control: Button West }
+    enabled: true
+    transformation:
+      - invert: {}
+
+  ####################################################################
+  - name: "Gear down."
+    source: { device: default_midi, control: Any E }
+    destination: { joystick: VJoy2, control: Button South }
+
+  ####################################################################
+  - name: "Gear up."
+    source: { device: default_midi, control: Any F }
+    destination: { joystick: VJoy2, control: Button East }
+
+  ####################################################################
+  - name: "Neutral gear."
+    source: { device: default_midi, control: Any D }
+    destination: { joystick: VJoy2, control: Button North }
+
+  ####################################################################
+  - name: "Foot-brake pedal."
+    source: { device: default_midi, control: Any G# }
+    destination: { joystick: VJoy2, control: Footbreak Pedal }
+    transformation:
+      - clamp: { to: 70 }
+      - pedal_smoother: 
+          rise_rate: 130
+          fall_rate: 200
+          smoothing_alpha: 0.9
+      - invert: {}
+
+  ####################################################################
+  - name: "Throttle pedal."
+    source: { device: default_midi, control: Any A# }
+    destination: { joystick: VJoy2, control: Throttle Pedal }
+    transformation:
+      - clamp: { to: 70 }
+      - power: { power: 1.35 }
+      - pedal_smoother: 
+          rise_rate: 500
+          fall_rate: 600
+          fall_delay: 0.15 # Key pressed fast (< fall_delay in seconds) with new velocity, 
+                           # will result in gradually changing throttle pedal press amount.
+      - ema_filter:
+          on_idle: true
+          tau: 0.5
+      - invert: {}
+
+  ####################################################################
+  - name: "Clutch"
+    source: { device: default_midi, control: Any F# }
+    destination: { joystick: VJoy1, control: Clutch Pedal }
+    transformation:
+      - clamp:
+          to: 15
+      #   from: <from current active range>
+      #   override_range: true # this is the default.
+      - pedal_smoother: 
+          rise_rate: 105
+          fall_rate: 8
+          fall_delay: 0.01
+          smoothing_alpha: 0.5
+          fall_gentling_factor: { device: VJoy2, control: Throttle Pedal }
+      # - power: { power: 0.85 }
+      - power: { power: 0.85 }
+      - ema_filter:
+          on_idle: true
+          tau: 1.0
+      - invert: {}
+
+  ####################################################################
+  - name: "Handbreak"
+    source: { device: default_midi, control: Any C }
+    destination: { joystick: VJoy1, control: Handbreak }
+    transformation:
+      - clamp: { to: 1 }
+      - pedal_smoother: 
+          rise_rate: 1.9
+          fall_rate: 4
+          fall_delay: 0.085
+          smoothing_alpha: 0.9
+      - invert: {} 
+
+  ####################################################################
+  - name: "Additional handbrake with a MIDI modulation wheel."
+    source: { device: default_midi, control: Modulation }
+    destination: { joystick: VJoy1, control: Handbreak }
+    transformation:
+      #
+      # The input range of MODULATION_WHEEL is [0, 127]
+      # We are clamping it at the lowest bound of 79 and overriding the value range,
+      # this way making any value below mapping to minimal value of the output 
+      # joystick control.
+      #
+      - clamp: { from: 70, to: 127, override_range: true }
+      #
+      # This S-curve further makes reaction to input above 70 more interesting:
+      # More sensitive in the middle of the remaining input control movement range.
+      #
+      - s_curve: { steepness: 4 }
+      - invert: {}
+
