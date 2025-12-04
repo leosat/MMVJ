@@ -1,0 +1,235 @@
+global:
+  update_rate: 1000
+
+my_templates:
+  note_C4: &note_C4
+    midi_message: { type: note, channel: any, number: 60 }
+    range: [0, 127]
+    description: Middle C (velocity used as value) user-defined
+  note_any: &note_any
+    midi_message: { type: note, channel: any }
+    range: [0, 127]
+    description: Any note.
+
+midi_devices:
+  default_midi:
+    match_criteria:
+      name_regex: "."
+    metadata:
+      friendly_name: "Default MIDI Device"
+    controls:
+      pitch_wheel: { predefined_type: pitch_wheel }
+      mod_wheel: { predefined_type: mod_wheel }
+      expr: { predefined_type: expression_pedal }
+      any_c_note: { predefined_type: note_C }
+      c4_note: { <<: *note_C4 }
+      any_c#_note: { predefined_type: note_C# }
+      any_d_note: { predefined_type: note_D }
+      any_d#_note: { predefined_type: note_D# }
+      any_e_note: { predefined_type: note_E }
+      any_f_note: { predefined_type: note_F }
+      any_f#_note: {  predefined_type: note_F# }
+      any_g_note: { predefined_type: note_G }
+      any_g#_note: { predefined_type: note_G# }
+      any_a_note: { predefined_type: note_A }
+      any_a#_note: { predefined_type: note_A# }
+      any_b_note: { predefined_type: note_B }
+
+  # korg_nano_midi:
+  #   match_criteria:
+  #     name_regex: "nano.*"
+  #   metadata:
+  #     friendly_name: "Korg Nano Pad 1"
+  #   controls:
+  #     pitch_wheel:
+  #       <<: *pitch_wheel
+  #       range: [-7934, 8191]
+  #     mod_wheel: { <<: *mod_wheel }
+  #     any_c_note: { predefined_type: note_C }
+  #     any_c#_note: { predefined_type: note_C# }
+  #     any_d_note: { predefined_type: note_D }
+  #     any_d#_note: { predefined_type: note_D# }
+  #     any_e_note: { predefined_type: note_E }
+  #     any_f_note: { predefined_type: note_F }
+  #     any_f#_note: {  predefined_type: note_F# }
+  #     any_g_note: { predefined_type: note_A }
+  #     any_g#_note: { predefined_type: note_G# }
+  #     any_a_note: { predefined_type: note_A }
+  #     any_a#_note: { predefined_type: note_A# }
+  #     any_b_note: { predefined_type: note_B }
+
+virtual_joysticks:
+  VJoy1:
+    properties:
+      name: "VJ1Wheel"
+      vendor_id: 0x6
+      product_id: 0x6
+      version: 0x6
+    capabilities:
+      ff:
+        enabled: true
+        effects: [ constant ]
+        #TODO: only 1 is supported for now and is default.# max_effects: 1
+    controls:
+      wheel1: { type: axis, code: ABS_X, range: [-32768, 32767], properties: { resolution: 1, fuzz: 0, flat: 0 }, initial_value: 0 }
+      handbreak: { type: axis, code: ABS_Y, range: [-32768, 32767], properties: { resolution: 1, fuzz: 0, flat: 0 }, initial_value: 0 }
+      clutch: { type: axis, code: ABS_Z, range: [-32768, 32767], properties: { resolution: 1, fuzz: 0, flat: 0 }, initial_value: 32767 }
+      wheel2: { type: axis, code: ABS_RX, range: [-32768, 32767], properties: { resolution: 1, fuzz: 0, flat: 0 }, initial_value: 0 }
+      wheel_hold_factor: { type: axis, code: ABS_RY, range: [-32768, 32767], properties: { resolution: 1, fuzz: 0, flat: 0 }, initial_value: 0 }
+      button_1: { type: button, code: BTN_A, range: [0, 1], initial_value: 0 }
+      button_2: { type: button, code: BTN_B, range: [0, 1], initial_value: 0 }
+      button_3: { type: button, code: BTN_X, range: [0, 1], initial_value: 0 }
+
+  VJoy2:
+    properties:
+      name: "VJ2Aux"
+      vendor_id: 0x7
+      product_id: 0x7
+      version: 0x7
+    controls:
+      footbrake: { type: axis, code: ABS_X, range: [0, 32767], properties: { resolution: 1, fuzz: 0, flat: 0 }, initial_value: 32767 }
+      throttle: { type: axis, code: ABS_Y, range: [-32768, 32767], properties: { resolution: 1, fuzz: 0, flat: 0 }, initial_value: 32767 }
+      #clutch: { type: axis, code: ABS_Z, range: [0, 32767], properties: { resolution: 1, fuzz: 0, flat: 0 }, initial_value: 32767 }
+      handbreak: { type: axis, code: ABS_RX, range: [0, 32767], properties: { resolution: 1, fuzz: 0, flat: 0 }, initial_value: 32767 }
+      #clutch_gentling_factor: { type: axis, code: ABS_RY, range: [0, 32767], properties: { resolution: 1, fuzz: 0, flat: 0 }, initial_value: -32768 }
+      axis_rz: { type: axis, code: ABS_RZ, range: [-32768, 32767], properties: { resolution: 1, fuzz: 0, flat: 0 }, initial_value: -32768 }
+      button_1: { type: button, code: BTN_A, range: [0, 1], initial_value: 0 }
+      button_2: { type: button, code: BTN_B, range: [0, 1], initial_value: 0 }
+      button_3: { type: button, code: BTN_X, range: [0, 1], initial_value: 0 }
+      button_4: { type: button, code: BTN_Y , range: [0, 1], initial_value: 0 }
+
+mouse_devices:
+  default_mouse:
+    enabled: true
+    match_criteria:
+      name_regex: "."
+    controls:
+      rel_x: { type: rel, code: REL_X, range: [-100, 100], description: Relative X }
+      rel_y: { type: rel, code: REL_Y, range: [-100, 100], description: Relative Y }
+      wheel: { type: wheel, code: REL_WHEEL, range: [-10, 10], description: Wheel }
+      btn_left: { type: button, code: BTN_LEFT, range: [0,1], description: Left button }
+      btn_right: { type: button, code: BTN_RIGHT, range: [0,1], description: Right button }
+
+mappings:
+
+  - name: "Mouse-controlled steering wheel."
+    source: { device: default_mouse, control: rel_x }
+    destination: { joystick: VJoy1, control: wheel1 }
+    enabled: true
+    transformation:
+      - steering:
+          counts_to_lock: 750.0
+          deadzone_norm: 0.0
+          smoothing_alpha: 0.3
+          auto_center_halflife: 100000000.3
+          wheel_hold_factor: { device: VJoy1, control: wheel_hold_factor }
+          # wheel_hold_factor: 0.5
+          # wheel_hold_factor: { device: VJoy2, control: button_4 }
+          force_feedback:
+            enabled: true
+            constant_force_influence: 1.0
+            constant_force_scale: 1.0
+            constant_force_invert: false
+      - curve: { type: symmetric_power, parameters: { power: 0.85 }}
+
+  - name: "Steering wheel hold factor (how firmly your hands hold it)"
+    source: { device: default_mouse, control: rel_y }
+    destination: { joystick: VJoy1, control: wheel_hold_factor }
+    enabled: true
+    transformation:
+      # - invert: { is_relative: true }
+      - integrate:
+          range: [0, 600]
+          deadzone_norm: 0
+          smoothing_alpha: 0.5
+      # - invert: {}
+      - curve: { type: s_curve, parameters: { steepness: 15 }}
+      - curve: { type: power, parameters: { power: 2.5 }}
+      # Limit not to accidentally lock the wheel too much... Subjective! 
+      - clamp: { from: 0, to: 540, override_range: false }
+
+  - name: "Pressed unless pressed..."
+    source: { device: default_mouse, control: btn_left }
+    destination: { joystick: VJoy2, control: button_4 }
+    enabled: true
+    transformation:
+      - invert: {}
+
+  - name: "Steering wheel control with MIDI pitch wheel #1: curved mapping." 
+    source: { device: default_midi, control: pitch_wheel }
+    destination: { joystick: VJoy1, control: wheel1 }
+    transformation:
+      - curve: { type: symmetric_power, parameters: { power: 1.8  }}
+      - clamp: {}
+
+  - name: "Additional handbrake with a MIDI modulation wheel."
+    source: { device: default_midi, control: mod_wheel }
+    destination: { joystick: VJoy1, control: handbreak }
+    transformation:
+      - invert: {}
+
+  - name: "Gear down."
+    source: { device: default_midi, control: any_f_note }
+    destination: { joystick: VJoy2, control: button_1 }
+
+  - name: "Gear up."
+    source: { device: default_midi, control: any_g_note }
+    destination: { joystick: VJoy2, control: button_2 }
+
+  - name: "Neutral gear."
+    source: { device: default_midi, control: any_a_note }
+    destination: { joystick: VJoy2, control: button_3 }
+
+  - name: "Foot-brake pedal."
+    source: { device: default_midi, control: any_g#_note }
+    destination: { joystick: VJoy2, control: footbrake }
+    transformation:
+      - clamp: { to: 90 }
+      - pedal_smoother: 
+          rise_rate: 700.0
+          fall_rate: 500.0
+          smoothing_alpha: 0.9
+      - invert: {}
+
+  - name: "Throttle pedal."
+    source: { device: default_midi, control: any_a#_note }
+    destination: { joystick: VJoy2, control: throttle }
+    transformation:
+      - clamp: { to: 90 }
+      - curve: { type: power, parameters: { power: 1.2  }}
+      - pedal_smoother: 
+          rise_rate: 1000.0
+          fall_rate: 600.0
+          fall_delay: 0.085 # Key pressed fast (< fall_delay in seconds) with new velocity, 
+                            # will result in gradually changing throttle pedal press amount.
+      - invert: {}
+
+  - name: "Clutch"
+    source: { device: default_midi, control: any_f#_note }
+    destination: { joystick: VJoy1, control: clutch }
+    transformation:
+      - clamp:
+          to: 20
+      #   from: <from current active range>
+      #   override_range: true # this is the default.
+      - pedal_smoother: 
+          rise_rate: 70
+          fall_rate: 25
+          fall_delay: 0.1
+          smoothing_alpha: 0.5
+          fall_gentling_factor: { device: VJoy2, control: throttle }
+      - curve: { type: power, parameters: { power: 0.45 }}
+      - invert: {}
+
+  - name: "Handbreak"
+    source: { device: default_midi, control: any_c_note }
+    destination: { joystick: VJoy1, control: handbreak }
+    transformation:
+      - clamp: { to: 1 }
+      - pedal_smoother: 
+          rise_rate: 1.9
+          fall_rate: 4
+          fall_delay: 0.085
+          smoothing_alpha: 0.9
+      - invert: {}
+

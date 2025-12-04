@@ -1,0 +1,260 @@
+# MMVJ Predefined Controls
+# Internal control definitions
+
+midi_controls:
+  pitch_wheel:
+    midi_message:
+      type: pitch_wheel
+      channel: any
+    range: [-8192, 8191]
+    description: "Pitch bend wheel"
+  
+  modulation_wheel:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 1
+    range: [0, 127]
+    description: "Modulation wheel (CC1)"
+  
+  expression_pedal:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 11
+    range: [0, 127]
+    description: "Expression pedal (CC11)"
+  
+  sustain_pedal:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 64
+    range: [0, 127]
+    description: "Sustain pedal (CC64)"
+  
+  volume:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 7
+    range: [0, 127]
+    description: "Main volume (CC7)"
+  
+  pan:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 10
+    range: [0, 127]
+    description: "Pan position (CC10)"
+  
+  aftertouch_channel:
+    midi_message:
+      type: aftertouch
+      channel: any
+    range: [0, 127]
+    description: "Channel aftertouch"
+  
+  # Note definitions - all chromatic notes
+  note_C:
+    midi_message:
+      type: note
+      channel: any
+      number: [0, 12, 24, 36, 48, 60, 72, 84, 96, 108, 120]
+    range: [0, 127]
+    description: "Note C (all octaves)"
+  
+  note_C#:
+    midi_message:
+      type: note
+      channel: any
+      number: [1, 13, 25, 37, 49, 61, 73, 85, 97, 109, 121]
+    range: [0, 127]
+    description: "Note C# (all octaves)"
+  
+  note_D:
+    midi_message:
+      type: note
+      channel: any
+      number: [2, 14, 26, 38, 50, 62, 74, 86, 98, 110, 122]
+    range: [0, 127]
+    description: "Note D (all octaves)"
+  
+  note_D#:
+    midi_message:
+      type: note
+      channel: any
+      number: [3, 15, 27, 39, 51, 63, 75, 87, 99, 111, 123]
+    range: [0, 127]
+    description: "Note D# (all octaves)"
+  
+  note_E:
+    midi_message:
+      type: note
+      channel: any
+      number: [4, 16, 28, 40, 52, 64, 76, 88, 100, 112, 124]
+    range: [0, 127]
+    description: "Note E (all octaves)"
+  
+  note_F:
+    midi_message:
+      type: note
+      channel: any
+      number: [5, 17, 29, 41, 53, 65, 77, 89, 101, 113, 125]
+    range: [0, 127]
+    description: "Note F (all octaves)"
+  
+  note_F#:
+    midi_message:
+      type: note
+      channel: any
+      number: [6, 18, 30, 42, 54, 66, 78, 90, 102, 114, 126]
+    range: [0, 127]
+    description: "Note F# (all octaves)"
+  
+  note_G:
+    midi_message:
+      type: note
+      channel: any
+      number: [7, 19, 31, 43, 55, 67, 79, 91, 103, 115, 127]
+    range: [0, 127]
+    description: "Note G (all octaves)"
+  
+  note_G#:
+    midi_message:
+      type: note
+      channel: any
+      number: [8, 20, 32, 44, 56, 68, 80, 92, 104, 116]
+    range: [0, 127]
+    description: "Note G# (all octaves)"
+  
+  note_A:
+    midi_message:
+      type: note
+      channel: any
+      number: [9, 21, 33, 45, 57, 69, 81, 93, 105, 117]
+    range: [0, 127]
+    description: "Note A (all octaves)"
+  
+  note_A#:
+    midi_message:
+      type: note
+      channel: any
+      number: [10, 22, 34, 46, 58, 70, 82, 94, 106, 118]
+    range: [0, 127]
+    description: "Note A# (all octaves)"
+  
+  note_B:
+    midi_message:
+      type: note
+      channel: any
+      number: [11, 23, 35, 47, 59, 71, 83, 95, 107, 119]
+    range: [0, 127]
+    description: "Note B (all octaves)"
+
+joystick_controls:
+  ABS_X:
+    type: axis
+    description: "Primary X-axis (left stick horizontal)"
+  
+  ABS_Y:
+    type: axis
+    description: "Primary Y-axis (left stick vertical)"
+  
+  ABS_Z:
+    type: axis
+    description: "Z-axis (left trigger analog)"
+  
+  ABS_RX:
+    type: axis
+    description: "Right X-axis (right stick horizontal)"
+  
+  ABS_RY:
+    type: axis
+    description: "Right Y-axis (right stick vertical)"
+  
+  ABS_RZ:
+    type: axis
+    description: "Right Z-axis (right trigger analog)"
+  
+  ABS_WHEEL:
+    type: axis
+    description: "Steering wheel axis"
+  
+  ABS_HAT0X:
+    type: hat
+    description: "D-pad horizontal"
+  
+  ABS_HAT0Y:
+    type: hat
+    description: "D-pad vertical"
+  
+  BTN_A:
+    type: button
+    description: "A button (Xbox) / Cross (PlayStation)"
+  
+  BTN_B:
+    type: button
+    description: "B button (Xbox) / Circle (PlayStation)"
+  
+  BTN_X:
+    type: button
+    description: "X button (Xbox) / Square (PlayStation)"
+  
+  BTN_Y:
+    type: button
+    description: "Y button (Xbox) / Triangle (PlayStation)"
+  
+  BTN_TL:
+    type: button
+    description: "Left shoulder button (L1)"
+  
+  BTN_TR:
+    type: button
+    description: "Right shoulder button (R1)"
+  
+  BTN_SELECT:
+    type: button
+    description: "Select/Back button"
+  
+  BTN_START:
+    type: button
+    description: "Start/Menu button"
+
+mouse_controls:
+  rel_x:
+    type: rel
+    code: REL_X
+    range: [-100, 100]
+    description: "Relative X movement (counts)"
+  
+  rel_y:
+    type: rel
+    code: REL_Y
+    range: [-100, 100]
+    description: "Relative Y movement (counts)"
+  
+  wheel:
+    type: wheel
+    code: REL_WHEEL
+    range: [-10, 10]
+    description: "Vertical wheel steps"
+  
+  btn_left:
+    type: button
+    code: BTN_LEFT
+    range: [0, 1]
+    description: "Left button"
+  
+  btn_right:
+    type: button
+    code: BTN_RIGHT
+    range: [0, 1]
+    description: "Right button"
+  
+  btn_middle:
+    type: button
+    code: BTN_MIDDLE
+    range: [0, 1]
+    description: "Middle button"
