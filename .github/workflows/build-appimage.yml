@@ -1,0 +1,216 @@
+name: Build and Auto-Release AppImage
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  APP_NAME: mmvj
+  DISPLAY_NAME: MMVJ
+
+jobs:
+  check-release:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check if release already exists
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(grep -m 1 '^version =' Cargo.toml | cut -d '"' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+
+          # Always build for non-main branches
+          #if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+          #  echo "Not on main branch, proceeding with build."
+          #  echo "should_build=true" >> $GITHUB_OUTPUT
+          #  exit 0
+          #fi
+
+          if gh release view "v$VERSION" &> /dev/null; then
+            echo "Release v$VERSION already exists. Skipping build."
+            echo "should_build=false" >> $GITHUB_OUTPUT
+          else
+            echo "Release v$VERSION does not exist. Proceeding with build."
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          fi
+
+  build-appimage:
+    needs: check-release
+    if: needs.check-release.outputs.should_build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            arch: x86_64
+          - os: ubuntu-22.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          shared-key: "rust-cache-shared-release-${{ matrix.arch }}"
+
+      - name: Set VERSION environment variable
+        run: echo "VERSION=${{ needs.check-release.outputs.version }}" >> $GITHUB_ENV
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libasound2-dev \
+            libudev-dev \
+            libfontconfig1-dev \
+            libxcb1-dev \
+            libx11-dev \
+            libwayland-dev \
+            libssl-dev \
+            zip
+
+      - name: Build release build
+        run: cargo build --release
+
+      - name: Test release build
+        run: cargo test --release
+
+      - name: Prepare AppDir
+        run: |
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/mmvj
+          cp -a target/release/${{ env.APP_NAME }} AppDir/usr/bin/
+          cp -r conf AppDir/usr/share/mmvj/conf
+          ln -s AppDir/usr/share/mmvj/conf AppDir/conf
+
+          cat <<EOF > AppDir/${{ env.APP_NAME }}.desktop
+          [Desktop Entry]
+          Name=${{ env.DISPLAY_NAME }}
+          Exec=${{ env.APP_NAME }}
+          Icon=${{ env.APP_NAME }}
+          Type=Application
+          Categories=Utility;Game;
+          Comment=HID and MIDI transforming I/O mapper and virtual HID manager
+          EOF
+
+          cat <<EOF > AppDir/${{ env.APP_NAME }}.svg
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+            <rect width="100" height="100" fill="#2d3748" rx="15"/>
+            <text x="50" y="68" font-size="55" text-anchor="middle" fill="#63b3ed" font-family="monospace" font-weight="bold">M</text>
+          </svg>
+          EOF
+
+          cat <<'EOF' > AppDir/custom_apprun.sh
+          #!/bin/bash
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          PACKAGED_CONF="$HERE/usr/share/mmvj/conf"
+          BINARY="$HERE/usr/bin/mmvj"
+
+          if [ ! -d "./conf" ]; then
+            cp -r "$PACKAGED_CONF" ./conf
+          fi
+
+          if [ ! -t 0 ]; then
+            echo "Running in a non-interactive environment (or input is piped/redirected)... automatically adding --gui option to avoid silent run in background."
+            exec "$BINARY" --gui "$@"
+          else
+            exec "$BINARY" "$@"
+          fi
+          EOF
+          chmod +x AppDir/custom_apprun.sh
+
+      - name: Download linuxdeploy
+        run: |
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${{ matrix.arch }}.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-${{ matrix.arch }}.AppImage
+          chmod +x linuxdeploy*.AppImage
+
+      - name: Build AppImage
+        env:
+          OUTPUT: ${{ env.APP_NAME }}-v${{ env.VERSION }}-${{ matrix.arch }}.appimage
+        run: |
+          echo "APPIMAGE_FILE=$OUTPUT" >> $GITHUB_ENV
+          ./linuxdeploy-${{ matrix.arch }}.AppImage --appimage-extract-and-run \
+            --appdir AppDir \
+            --desktop-file AppDir/${{ env.APP_NAME }}.desktop \
+            --icon-file AppDir/${{ env.APP_NAME }}.svg \
+            --custom-apprun AppDir/custom_apprun.sh \
+            --output appimage
+
+      - name: Prepare Release Archives
+        run: |
+          STAGING_DIR="${{ env.APP_NAME }}-v${{ env.VERSION }}-${{ matrix.arch }}"
+          mkdir -p "$STAGING_DIR"
+
+          chmod +x "${{ env.APPIMAGE_FILE }}"
+          cp -a "${{ env.APPIMAGE_FILE }}" "$STAGING_DIR/"
+
+          if [ -d "conf" ]; then
+            cp -r conf "$STAGING_DIR/"
+          else
+            echo "::error::The 'conf' directory was not found in the repository root!"
+            exit 1
+          fi
+
+          TAR_ARCHIVE="${{ env.APP_NAME }}-v${{ env.VERSION }}-${{ matrix.arch }}.tar.gz"
+          tar -czvf "$TAR_ARCHIVE" "$STAGING_DIR"
+
+          ZIP_ARCHIVE="${{ env.APP_NAME }}-v${{ env.VERSION }}-${{ matrix.arch }}.zip"
+          zip -r "$ZIP_ARCHIVE" "$STAGING_DIR"
+
+          echo "TAR_ARCHIVE=$TAR_ARCHIVE" >> $GITHUB_ENV
+          echo "ZIP_ARCHIVE=$ZIP_ARCHIVE" >> $GITHUB_ENV
+          echo "Created release archives: $TAR_ARCHIVE and $ZIP_ARCHIVE"
+
+      - name: Upload Artifacts (for PRs and main branch)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-bundle-${{ matrix.arch }}
+          path: |
+            ${{ env.APPIMAGE_FILE }}
+            ${{ env.TAR_ARCHIVE }}
+            ${{ env.ZIP_ARCHIVE }}
+          retention-days: 1
+
+  release:
+    needs: [check-release, build-appimage]
+    if: needs.check-release.outputs.should_build == 'true'
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ${{ env.APP_NAME }}-bundle-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.check-release.outputs.version }}
+          name: MMVJ v${{ needs.check-release.outputs.version }}
+          files: dist/*
+          generate_release_notes: true
+          draft: false
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
