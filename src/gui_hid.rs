@@ -248,7 +248,10 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                         ui.separator();
                         draw_collapsing_ui(ui, None::<()>, Some(cn), |ui| {
                             ui.separator();
-                            ui.label(format!("{:+08.2}", c.get_last_known_io()));
+                            let mut val = c.get_last_known_io();
+                            ui.label(egui::RichText::new(format!("{:+09.2}", val)).monospace());
+                            ui.separator();
+                            ui.add(egui::Slider::new(&mut val, c.range.into()).show_value(false));
                             ui.separator();
                             if ui
                                 .small_button(format!("{}", egui_phosphor::fill::TRASH))
