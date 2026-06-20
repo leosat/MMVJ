@@ -177,6 +177,9 @@ pub async fn run_mapping_engine(
 ) -> Result<()> {
     sanitize_cfg_file_path(cfg_file_path)?;
 
+    #[cfg(feature = "gui")] 
+    let any_gui = gui_monitors || gui_full;
+
     let mut restart_complete_report_done_tx: Option<std::sync::mpsc::Sender<()>> = None;
 
     #[cfg(feature = "gui")]
@@ -202,7 +205,7 @@ pub async fn run_mapping_engine(
     cfg_mgr.load()?;
 
     #[cfg(feature = "gui")]
-    let mut gui_thread_handle = if gui_monitors || gui_full {
+    let mut gui_thread_handle = if any_gui {
         let command_channel_tx = cmd_channel_tx.clone();
         let cancellation_token = gui_thread_cancellation_token.clone();
         // TODO: perf: maybe use shared memory and left-right pattern
@@ -312,6 +315,15 @@ pub async fn run_mapping_engine(
         }
 
         info!("Starting...");
+
+        #[cfg(feature = "gui")] 
+        if !any_gui {
+            info!(
+                "\n{}. \n  (Use --log-to-console for log output to console even in Gui mode \
+                \n    Use --gui-monitor to run monitoring overlays only).",
+                "Running in command line mode. To run with Gui, use --gui option.".cyan().bold(),
+            );
+        }
 
         if !no_hot_reload {
             info!(

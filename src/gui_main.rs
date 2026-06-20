@@ -1160,7 +1160,10 @@ impl GuiMain {
 
     fn reset_available_devices_caches(&mut self) {
         self.available_hid = None;
-        self.available_midi = None;
+        #[cfg(feature = "midi")]
+        {
+            self.available_midi = None;
+        }
     }
 
     fn draw_variables(&mut self, ui: &mut egui::Ui) {
