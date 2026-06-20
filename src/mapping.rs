@@ -273,13 +273,13 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
 
         // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         info!(
-            "Mapping Router built. Active Source Devices: {}",
+            "Mapping Router built. Mapped source devices: {}",
             self.info_sysdev_to_enabled_mappings.len()
         );
 
         if self.debug.is_on() {
             let _ = fs::write(
-                "MMVJ.mapping_router_debug.txt",
+                format!("{}.mapping_router_debug.txt", crate::config::APP_NAME),
                 format!("{:#?}", self.router_index_sysdev_and_ctl_type_to_cms_and_mappings),
             );
         }
