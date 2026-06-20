@@ -279,7 +279,7 @@ impl<'s> DrawEgui<'s> for MidiMatcherCfg {
                 if gui_out.is_some() {
                     return gui_out;
                 } else if changed {
-                    return Some(GuiCmd::ConfigChangeSimple);
+                    return Some(GuiCmd::ConfigChangeGeneral);
                 }
                 None
             }
