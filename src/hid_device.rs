@@ -575,7 +575,9 @@ impl HidDevice {
         debug: DebugLevel,
     ) {
         let mut external_notification_tx = None;
-        let mut platform_device = platform_device.into_event_stream().unwrap();
+
+        // NB: acquiring here so that AsyncFd would associate with current runtime.
+        let mut platform_device_stream = platform_device.into_event_stream().unwrap();
 
         while !cancellation_token.is_cancelled() {
             tokio::select! {
@@ -585,11 +587,11 @@ impl HidDevice {
                             external_notification_tx = Some(unbounded_sender)
                         }
                         DeviceThreadCmd::SetControlValue(control_type, control_value) => {
-                            set_hid_control_unowned_device(platform_device.device_mut(), control_type, control_value);
+                            set_hid_control_unowned_device(platform_device_stream.device_mut(), control_type, control_value);
                         }
                     }
                 },
-                Some(Ok(evdev_event)) = platform_device.next_event().with_cancellation_token(&cancellation_token) => {
+                Some(Ok(evdev_event)) = platform_device_stream.next_event().with_cancellation_token(&cancellation_token) => {
                     let event =
                         Self::evdev_event_to_hid_device_event(device_name, opened_device_id, evdev_event, debug);
                     if let Some(MappedDeviceEvent {
@@ -611,8 +613,8 @@ impl HidDevice {
         }
 
         log::info!(
-            "Stopping thread for HID device {:?} {}",
-            platform_device.device().input_id(),
+            "Stopping thread for HID {:?} {}",
+            platform_device_stream.device().input_id(),
             device_name
         );
     }

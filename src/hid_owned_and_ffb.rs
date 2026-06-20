@@ -442,16 +442,17 @@ fn condition_force_symm_norm(
 pub(crate) async fn owned_hid_device_thread(
     platform_device: evdev::uinput::VirtualDevice,
     stop_token: CancellationToken,
-    virtual_joystick_name: String,
+    virtual_hid_name: String,
     max_effects: usize,
     fake_accepting_unsupported_effects: bool,
     owned_virtual_device_thread_io: Arc<OwnedVirtualHIDDeviceThreadIO>,
-    mut app_comm: tokio::sync::mpsc::UnboundedReceiver<DeviceThreadCmd>,
+    mut app_comm: tokio::sync::mpsc::UnboundedReceiver<DeviceThreadCmd>, // TODO: move to owned_virtual_device_thread_io
     virtual_device_id: ObjId,
-    ctl_states: Arc<DeviceControlStates>,
+    ctl_states: Arc<DeviceControlStates>, // TODO: move to owned_virtual_device_thread_io
     debug_ff: bool,
 ) {
-    let mut platform_device = platform_device.into_event_stream().unwrap();
+    // NB: acquiring here so that AsyncFd would associate with current runtime.
+    let mut platform_device_stream = platform_device.into_event_stream().unwrap();
 
     let mut external_notification_tx: Option<tokio::sync::mpsc::UnboundedSender<MappedDeviceEvent>> = None;
     let mut uploaded_effects_buffer: Vec<Option<FfEffect>> = Vec::new();
@@ -537,11 +538,11 @@ pub(crate) async fn owned_hid_device_thread(
                 match cmd {
                     DeviceThreadCmd::SetExternalNotification(tx) => external_notification_tx = Some(tx),
                     DeviceThreadCmd::SetControlValue(control_type, control_value) => {
-                        set_hid_control_virtual_owned_device(platform_device.device_mut(), control_type, control_value);
+                        set_hid_control_virtual_owned_device(platform_device_stream.device_mut(), control_type, control_value);
                     }
                 }
             },
-            Some(Ok(event)) =  platform_device.next_event().with_cancellation_token(&stop_token) => {
+            Some(Ok(event)) =  platform_device_stream.next_event().with_cancellation_token(&stop_token) => {
                 // dbg!("C");
                 match event.destructure() {
                     evdev::EventSummary::ForceFeedbackStatus(ffevent, ffeffect_status_code, i32val) => {
@@ -616,7 +617,7 @@ pub(crate) async fn owned_hid_device_thread(
                     evdev::EventSummary::UInput(uinput_event, uinput_code, _i32val) => {
                         match uinput_code {
                             evdev::UInputCode::UI_FF_UPLOAD => {
-                                let mut eff = platform_device
+                                let mut eff = platform_device_stream
                                     .device_mut()
                                     .process_ff_upload(uinput_event)
                                     .unwrap();
@@ -751,7 +752,7 @@ pub(crate) async fn owned_hid_device_thread(
                                 }
                             }
                             evdev::UInputCode::UI_FF_ERASE => {
-                                let eff = platform_device.device_mut().process_ff_erase(uinput_event).unwrap();
+                                let eff = platform_device_stream.device_mut().process_ff_erase(uinput_event).unwrap();
 
                                 let effect_index_to_erase = eff.effect_id() as FfIndexT;
 
@@ -777,7 +778,7 @@ pub(crate) async fn owned_hid_device_thread(
                     }
                     event => {
                         if debug_ff {
-                            log::error!("[w] UNHANDLED Virtual Joystick event: {:?}", event);
+                            log::error!("[w] UNHANDLED Virtual HID event: {:?}", event);
                         }
                     }
                 }
@@ -786,8 +787,5 @@ pub(crate) async fn owned_hid_device_thread(
         }
     }
 
-    log::info!(
-        "Joystick {virtual_joystick_name} FFB consumer thread \
-            received request to stop. Thread run finished."
-    );
+    log::info!("Stopping thread for owned virtual HID {virtual_hid_name} (this thread handles FF effects)");
 }
