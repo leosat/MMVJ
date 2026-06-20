@@ -344,29 +344,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
 
     pub(crate) fn stop(&mut self) -> Result<()> {
         self.running = false;
-
-        // NB: joysticks are stopped/started/restarted externally to mapping engine
-        // NB: to support persistence.
-        #[cfg(feature = "midi")]
-        let midi_stop_result = self.midi_mgr.stop().context("Failed to stop Midi Manager.");
-
-        let mouse_stop_result = self.hid_mgr.stop(false).context("Failed to stop HID Manager.");
-
-        let errors: Vec<String> = [
-            #[cfg(feature = "midi")]
-            midi_stop_result,
-            mouse_stop_result,
-        ]
-        .into_iter()
-        .filter_map(|res| res.err().map(|e| format!("- {}", e)))
-        .collect();
-
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            let error_message = format!("One or more managers failed to stop:\n{}", errors.join("\n"));
-            bail!(error_message)
-        }
+        Ok(())
     }
 
     fn set_idle_tick_enabled_on_device_control_for_mapping(&self, mapping: &Mapping) {
