@@ -1,3 +1,4 @@
+use crate::config::DebugLevel;
 use crate::hid_device::HidDeviceKind;
 use crate::mapped_device::MappedDeviceEvent;
 use crate::schemas_common::ObjId;
@@ -26,6 +27,21 @@ cfg_if::cfg_if! {
         pub(crate) use std::f32::consts as BaseNumConsts;
     }
     // NB: supporting e.g. fixed-point will require more changes than just switching types.
+}
+
+// ================================================
+
+static mut DEBUG_LEVEL__: DebugLevel = DebugLevel::Off;
+
+#[allow(unused)]
+pub(crate) fn get_debug_level() -> DebugLevel {
+    // SAFETY: ensure to run set_debug_level__ only once at initialization.
+    unsafe { DEBUG_LEVEL__ }
+}
+
+pub(crate) fn set_debug_level__(debug: DebugLevel) {
+    // SAFETY: ensure to run set_debug_level__ only once at initialization.
+    unsafe { DEBUG_LEVEL__ = debug }
 }
 
 // ================================================
