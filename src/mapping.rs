@@ -7,7 +7,7 @@ use crate::filters::OneEuroFilter;
 #[cfg(feature = "gui")]
 use crate::gui_transform_step::{self, TfmStepTraceStage};
 use crate::hid_device::HidDeviceKind;
-use crate::hid_manager::HidManager;
+use crate::hid_manager::{HidManager, WithDeviceClassification};
 use crate::mapped_controls::MappedCtls;
 use crate::mapped_device::{MappedDeviceEvent, MappedEvents, MappedHidEvent};
 #[cfg(feature = "midi")]
@@ -219,6 +219,8 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                 .hid
                 .iter()
                 .filter(|(_, v)| {
+                    // TODO: logic for matching available devices with device matchers
+                    // TODO: will go to a reusable routine for reuse in other parts, e.g. in Gui.
                     v.is_enabled()
                         && v.matcher_name_regex_ref()
                             .and_then(|r| Some(r.is_match(&available_hid_device_info.name)))
@@ -226,6 +228,8 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                                 .virtual_device_name_ref()
                                 .and_then(|n| Some(n == available_hid_device_info.name)))
                             .unwrap_or_default()
+                        && v.get_classification()
+                            .intersects(available_hid_device_info.classification)
                 })
                 .collect::<Vec<(_, _)>>()
             {
