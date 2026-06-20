@@ -1,6 +1,4 @@
-use crate::common::{
-    BaseNumT, DeviceManager, Relativity, SYMM_UNIT_INTERVAL, SharedAtomicState, UNIT_INTERVAL, get_interned_str,
-};
+use crate::common::{BaseNumT, DeviceManager, Relativity, SYMM_UNIT_INTERVAL, UNIT_INTERVAL, get_interned_str};
 use crate::config::DebugLevel;
 use crate::curves::Curves;
 use crate::filters::OneEuroFilter;
@@ -28,7 +26,7 @@ use crate::schemas_value::{MappedValue, WithNumericValue};
 use crate::schemas_value::{WithLastKnownIO, WithRelativity};
 #[cfg(feature = "gui")]
 use crate::tracing::GraphDisplayStyle;
-use anyhow::{Context, Result, bail};
+use anyhow::Result;
 #[cfg(feature = "gui")]
 use eframe::egui::Color32;
 use log::{debug, info, warn};
@@ -81,8 +79,6 @@ pub(crate) struct MappingEngine<'driver_loop> {
     #[cfg(feature = "midi")]
     midi_mgr: MidiManager,
     // ---
-    _shared_atomic_state: &'driver_loop SharedAtomicState,
-    // ---
     //  Mapping router algorithm index and runtime buffer.
     // ---
     router_index_sysdev_and_ctl_type_to_cms_and_mappings:
@@ -109,7 +105,6 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         cfg: Config,
         hid_mgr: &'driver_loop HidManager,
         #[cfg(feature = "midi")] midi_mgr: MidiManager,
-        shared_atomic_state: &'driver_loop SharedAtomicState,
     ) -> Result<Self> {
         Ok(Self {
             // ---
@@ -135,7 +130,6 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             raise_fall_state: Default::default(),
             one_euro_filter_state: Default::default(),
             ema_state: Default::default(),
-            _shared_atomic_state: shared_atomic_state,
             script_state: Default::default(),
         })
     }
@@ -344,6 +338,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
 
     pub(crate) fn stop(&mut self) -> Result<()> {
         self.running = false;
+        self.midi_mgr.stop()?;
         Ok(())
     }
 
@@ -490,7 +485,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
     fn apply_transformation_for_mapping(
         &self,
         runtime_input_device_id: ObjId,
-        mapping: &'driver_loop Mapping,
+        mapping: &Mapping,
         value: BaseNumT,
         is_idle_tick: bool,
     ) -> BaseNumT {
@@ -518,7 +513,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
     #[allow(clippy::too_many_arguments)]
     fn apply_transformation(
         &self,
-        mapping: &'driver_loop Mapping,
+        mapping: &Mapping,
         transfomation: &TfmSeqCfg,
         runtime_input_device_id: ObjId,
         src_interval: NumInterval<BaseNumT>,
@@ -719,7 +714,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
 
     fn apply_transformation_step(
         &self,
-        mapping: &'driver_loop Mapping,
+        mapping: &Mapping,
         step: &TfmStepCfg,
         mut vd: MappedValue<BaseNumT>,
         is_idle_tick: bool,
@@ -1025,7 +1020,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
 
     fn apply_steering(
         &self,
-        mapping: &'driver_loop Mapping,
+        mapping: &Mapping,
         step: &TfmStepCfg,
         steering: &SteeringCfg,
         vd: MappedValue<BaseNumT>,

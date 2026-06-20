@@ -1,4 +1,4 @@
-use crate::common::{DeviceManager, SharedAtomicState};
+use crate::common::{DeviceManager};
 use crate::config::DebugLevel;
 use crate::config::MORE_DEBUG;
 use crate::hid_manager::{HidManager, WithDeviceClassification};
@@ -12,7 +12,6 @@ use colored::Colorize;
 use log::{error, info, warn};
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 #[cfg(feature = "gui")]
 use tokio_util::sync::CancellationToken;
@@ -192,8 +191,6 @@ pub async fn run_mapping_engine(
     let hid_mgr = HidManager::new(debug, debug_ff)?;
     let mut is_first_run = true;
 
-    let shared_atomic_state = Arc::new(SharedAtomicState::new());
-
     //----------------------------- COMMAND BUFFERS ----------------------------------
     let mut cmd_rx_buf: Vec<DriverCmd> = Vec::with_capacity(COMMAND_RECV_CAPACITY);
     let (cmd_channel_tx, mut cmd_channel_rx) = tokio::sync::mpsc::unbounded_channel::<DriverCmd>();
@@ -208,21 +205,13 @@ pub async fn run_mapping_engine(
     let mut gui_thread_handle = if any_gui {
         let command_channel_tx = cmd_channel_tx.clone();
         let cancellation_token = gui_thread_cancellation_token.clone();
-        // TODO: perf: maybe use shared memory and left-right pattern
         let cfg = cfg_mgr.cfg_ref().clone();
-        let io_state_map = shared_atomic_state.clone();
         Some(std::thread::spawn(move || {
             crate::gui_main::run(
                 gui_monitor_only,
-                // --------------------------
                 command_channel_tx,
-                // --------------------------
-                io_state_map,
-                // --------------------------
                 cancellation_token,
-                // --------------------------
                 cfg,
-                // --------------------------
             )
         }))
     } else {
@@ -271,7 +260,6 @@ pub async fn run_mapping_engine(
             &hid_mgr,
             #[cfg(feature = "midi")]
             MidiManager::new(debug)?,
-            &shared_atomic_state,
         )?;
 
         if debug.is_on() {

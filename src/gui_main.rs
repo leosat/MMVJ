@@ -1,4 +1,4 @@
-use crate::common::{DeviceManager, DriverCmd, SharedAtomicState};
+use crate::common::{DeviceManager, DriverCmd};
 use crate::config::DebugLevel;
 use crate::config::MORE_DEBUG;
 use crate::gui_common::{
@@ -25,7 +25,6 @@ use egui_file_dialog::FileDialog;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f32;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::CancellationToken;
@@ -61,14 +60,8 @@ fn get_visuals_high_contrast_light1() -> egui::Visuals {
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn run(
     monitors_only: bool,
-    //-------------------------------
     cmd_tx: UnboundedSender<DriverCmd>,
-    //-------------------------------
-    //-------------------------------
-    io_state_map: Arc<SharedAtomicState>,
-    //-------------------------------
     cancellation_token: CancellationToken,
-    //-------------------------------
     cfg: Config,
 ) -> anyhow::Result<()> {
     let eframe_result = {
@@ -136,7 +129,6 @@ pub(crate) fn run(
                     cfg_yaml: String::default(),
                     // ----------------------------------------------
                     cancellation_token,
-                    shared_atomic_state: io_state_map,
                     // ----------------------------------------------
                     #[cfg(feature = "midi")]
                     midi_mgr: MidiManager::new(DebugLevel::Off).expect("Can't create midi manager"),
@@ -236,8 +228,6 @@ pub(crate) struct GuiMain {
     // -----------------------------------------
     monitors_only: bool,
     show_monitors: bool,
-    // -----------------------------------------
-    pub(crate) shared_atomic_state: Arc<SharedAtomicState>,
     // -----------------------------------------
     pub(crate) cfg: Config,
     // -----------------------------------------

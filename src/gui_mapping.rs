@@ -1,4 +1,4 @@
-use crate::common::{MappingEngineCmd, SharedAtomicState};
+use crate::common::MappingEngineCmd;
 use crate::config::MORE_DEBUG;
 use crate::gui_common::{
     DrawEgui, GuiCmd, GuiDndJob, GuiDndJobMoveTfmStep, ScriptAuxKind, bool_to_simple_change_gui_cmd, draw_collapsing_ui,
@@ -33,7 +33,6 @@ pub(crate) enum GuiInMapping<'s> {
         cfg_devices: &'s DevicesCfgNew,
         cfg_variables: &'s VariablesCfg,
         transient_script_aux_edits: &'s UncheckedRefCell<HashMap<(ObjId, ScriptAuxKind), (String, String)>>,
-        _shared_atomic_state: &'s SharedAtomicState,
     },
 }
 
@@ -395,7 +394,6 @@ impl crate::gui_main::GuiMain {
                                 graph_states: &self.telemetry_graphs,
                                 cfg_devices: &self.cfg.devices,
                                 cfg_variables: &self.cfg.variables,
-                                _shared_atomic_state: &self.shared_atomic_state,
                                 transient_script_aux_edits: &self.transient_states_script_aux_edit,
                             },
                         ),

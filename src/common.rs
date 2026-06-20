@@ -126,18 +126,18 @@ pub(crate) struct Stats {
     mean: SharedAtomicStateStats,
 }
 
-#[derive(Debug, Default)]
-pub(crate) struct SharedAtomicState {
-    pub(crate) _stats: Stats,
-    pub(crate) _vars: [SharedStats; 32],
-    // pub(crate) map: papaya::HashMap<usize, AtomicF32>, // Just an experiment. Shall use standalong atomics whenever possible.
-}
+// #[derive(Debug, Default)]
+// pub(crate) struct SharedAtomicState {
+//     pub(crate) _stats: Stats,
+//     pub(crate) _vars: [SharedStats; 32],
+//     pub(crate) map: papaya::HashMap<usize, AtomicF32>,
+// }
 
-impl SharedAtomicState {
-    pub(crate) fn new() -> Self {
-        Self::default()
-    }
-}
+// impl SharedAtomicState {
+//     pub(crate) fn new() -> Self {
+//         Self::default()
+//     }
+// }
 
 //====================================================================================
 
