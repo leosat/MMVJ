@@ -163,7 +163,7 @@ fn check_and_load_new_cfg(cfg_mgr: &mut ConfigManager, new_cfg_file: &Path, debu
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn run_mapping_engine(
+pub async fn run(
     cfg_file_path: &Path,
     no_hot_reload: bool,
     debug: DebugLevel,
@@ -174,6 +174,9 @@ pub async fn run_mapping_engine(
     #[cfg(feature = "gui")] gui_monitors: bool,
     #[cfg(feature = "gui")] gui_full: bool,
 ) -> Result<()> {
+
+    crate::common::set_debug_level__(debug);
+
     sanitize_cfg_file_path(cfg_file_path)?;
 
     #[cfg(feature = "gui")] 

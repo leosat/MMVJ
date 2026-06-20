@@ -146,7 +146,7 @@ async fn main() -> Result<()> {
         return mmvj_lib::driver::run_aux_task(aux_task, &cli.cfg_file_path, cli.debug).await;
     }
 
-    mmvj_lib::driver::run_mapping_engine(
+    mmvj_lib::driver::run(
         &cli.cfg_file_path,
         cli.no_hot_reload,
         cli.debug,
