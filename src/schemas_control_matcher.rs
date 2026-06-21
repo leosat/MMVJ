@@ -10,7 +10,7 @@ use crate::{
     num_interval::NumInterval,
     schemas_common::WithRuntimeId,
     schemas_hid::HidControlMatcherCfg,
-    schemas_value::WithLastKnownIO,
+    schemas_value::{WithLastKnownIO, WithLastKnownIOSettable},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TraversableMut, Traversable)]
@@ -29,7 +29,9 @@ impl WithLastKnownIO<BaseNumT> for ControlMatchers {
             ControlMatchers::Hid(m) => m.get_last_known_io(),
         }
     }
+}
 
+impl WithLastKnownIOSettable<BaseNumT> for ControlMatchers {
     fn set_last_known_io(&self, val: BaseNumT) {
         match self {
             #[cfg(feature = "midi")]

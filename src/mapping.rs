@@ -21,7 +21,7 @@ use crate::schemas_transform::{
     OneEuroFilterCfg, RaiseFallCfg, SCurveCfg, ScriptCfg, SignedPowerCfg, SteeringCfg, TfmSeqCfg, TfmStepCfg,
     collect_dynamic_value_matchers,
 };
-use crate::schemas_value::{DynValueRefs, ValueDsts, ValueSrcs, WithNumInterval};
+use crate::schemas_value::{DynValueRefs, ValueDsts, ValueSrcs, WithLastKnownIOSettable, WithNumInterval};
 use crate::schemas_value::{MappedValue, WithNumericValue};
 use crate::schemas_value::{WithLastKnownIO, WithRelativity};
 #[cfg(feature = "gui")]
@@ -447,12 +447,12 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
 
             let idle_in_value = self.get_value_src(mapping.src.get_interval(), &mapping.src, true);
 
-            mapping.last_in.store(idle_in_value as BaseNumT, Relaxed);
+            mapping.set_last_known_io((Some(idle_in_value), None));
 
             let final_value =
                 self.apply_transformation_for_mapping(ObjId::from(usize::MAX), mapping, idle_in_value, true);
 
-            mapping.last_out.store(final_value as BaseNumT, Relaxed);
+            mapping.set_last_known_io((None, Some(final_value)));
 
             match &mapping.dst {
                 ValueDsts::Void => {}
