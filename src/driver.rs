@@ -5,6 +5,7 @@ use crate::hid_manager::{HidManager, WithDeviceClassification};
 use crate::mapping::MappingEngine;
 #[cfg(feature = "midi")]
 use crate::midi::{MidiLearnMode, MidiManager};
+use crate::schemas_cfg::Config;
 use crate::{common::DriverCmd, config::ConfigManager};
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
@@ -12,11 +13,15 @@ use colored::Colorize;
 use log::{error, info, warn};
 use std::fs;
 use std::path::Path;
-use tokio::sync::mpsc::Sender;
 #[cfg(feature = "gui")]
 use tokio_util::sync::CancellationToken;
 
 const COMMAND_RECV_CAPACITY: usize = 100;
+
+enum DriverResponseOneShotChannels {
+    Empty(std::sync::mpsc::Sender<()>),
+    Config(std::sync::mpsc::Sender<Result<Config, String>>),
+}
 
 #[derive(Subcommand, Clone)]
 pub enum AuxDriverTask {
@@ -115,7 +120,7 @@ pub async fn run_aux_task(aux_task: &AuxDriverTask, cfg_file_path: &Path, debug:
     Ok(())
 }
 
-fn watch_config_file(cfg_file_path: &std::path::Path, tx: Sender<()>) -> Result<()> {
+fn watch_config_file(cfg_file_path: &std::path::Path, tx: tokio::sync::mpsc::Sender<()>) -> Result<()> {
     use notify_debouncer_full::{DebounceEventResult, new_debouncer};
 
     let mut debouncer = new_debouncer(
@@ -182,7 +187,7 @@ pub async fn run(
     #[cfg(feature = "gui")] 
     let any_gui = gui_monitors || gui_full;
 
-    let mut restart_complete_report_done_tx: Option<std::sync::mpsc::Sender<()>> = None;
+    let mut post_restart_response_channel: Option<DriverResponseOneShotChannels> = None;
 
     #[cfg(feature = "gui")]
     let gui_monitor_only = gui_monitors && !gui_full;
@@ -280,9 +285,16 @@ pub async fn run(
             let _ = fs::write("cfg_tree.debug_dump.1.txt", format!("{:#?}", cfg_mgr.cfg_ref()));
         }
 
-        if let Some(tx) = restart_complete_report_done_tx {
-            let _ = tx.send(());
-            restart_complete_report_done_tx = None
+        if let Some(tx) = post_restart_response_channel {
+            match tx {
+                DriverResponseOneShotChannels::Empty(tx) => {
+                    let _ = tx.send(()).inspect_err(|e| log::error!("{e}"));
+                },
+                DriverResponseOneShotChannels::Config(tx) => {
+                    let _ = tx.send(Ok(cfg_mgr.cfg_ref().clone())).inspect_err(|e| log::error!("{e}"));
+                },
+            }
+            post_restart_response_channel = None;
         }
 
         mapping_engine.init_mapping_router()?;
@@ -366,7 +378,7 @@ pub async fn run(
                             std::process::exit(0);
                         }
                         (DriverMainLoopAction::GoToStartWithCurrentCfg, report_done_tx) => {
-                            restart_complete_report_done_tx = report_done_tx;
+                            post_restart_response_channel = report_done_tx;
                             continue 'restart_mapping_engine;
                         }
                         (DriverMainLoopAction::GoToStartWithInitialCfg,_) => {
@@ -431,9 +443,9 @@ fn handle_cmd(
     cmd_rx_count: usize,
     cmd_rx_buf: &mut Vec<DriverCmd>,
     debug: DebugLevel,
-) -> (DriverMainLoopAction, Option<std::sync::mpsc::Sender<()>>) {
+) -> (DriverMainLoopAction, Option<DriverResponseOneShotChannels>) {
     let mut main_loop_action = DriverMainLoopAction::Continue;
-    let mut ret_report_done_tx = None;
+    let mut post_reload_report_back_tx = None;
     if cmd_rx_count > 0 {
         cmd_rx_buf.dedup_by(|next, prev| {
             if let (DriverCmd::ChangeVirtualHids { .. }, DriverCmd::ChangeVirtualHids { .. }) = (&*next, &*prev) {
@@ -483,8 +495,8 @@ fn handle_cmd(
                     let loading_new_cfg_file = cfg_mgr.get_cfg_file() != *cfg_file;
                     match check_and_load_new_cfg(cfg_mgr, cfg_file, debug) {
                         Ok(_) => {
-                            log::info!("Sending new config to Gui"); // TODO: send Result with error if any.
-                            let _ = resp_tx.send(Ok(cfg_mgr.cfg_ref().clone()));
+                            log::info!("Sending new config to Gui");
+                            post_reload_report_back_tx = Some(DriverResponseOneShotChannels::Config(resp_tx));
 
                             if loading_new_cfg_file {
                                 log::warn!("Loading new configuration file will make persistent joysticks stopped.");
@@ -495,7 +507,7 @@ fn handle_cmd(
                             main_loop_action = DriverMainLoopAction::GoToStartWithCurrentCfg;
                         }
                         Err(e) => {
-                            let _ = resp_tx.send(Err(e.to_string()));
+                            let _ = resp_tx.send(Err(e.to_string())).inspect_err(|e| log::error!("{e}"));
                         }
                     }
                 }
@@ -526,7 +538,7 @@ fn handle_cmd(
                         log::warn!("Virtual device persistence settings will be ignored due to changes requested.");
                         hid_mgr.stop(true).expect("Stopping HID devices failed.");
                     }
-                    ret_report_done_tx = Some(report_done_tx);
+                    post_reload_report_back_tx = Some(DriverResponseOneShotChannels::Empty(report_done_tx));
                     main_loop_action = DriverMainLoopAction::GoToStartWithCurrentCfg;
                 }
                 DriverCmd::ChangeConfigSimple { cfg } => {
@@ -549,7 +561,7 @@ fn handle_cmd(
         dbg!(&main_loop_action);
     }
 
-    (main_loop_action, ret_report_done_tx)
+    (main_loop_action, post_reload_report_back_tx)
 }
 
 pub fn check_linux_system_requirements() -> Result<()> {
