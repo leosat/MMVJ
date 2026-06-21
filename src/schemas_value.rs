@@ -113,6 +113,11 @@ impl<ValueT: NumIntervalValue> _WithNumIntervalRef for MappedValue<ValueT> {
     }
 }
 
+/// The point of this trait vs WithNumericValue trait is to give access to memorized
+/// last input/output value(s) which is different from giving access to the current one.
+/// The difference takes place for relative values, where current (in-the-moment) value may be 0,
+/// whereas last memorized input or output may be != 0. In other cases both traits if implemented
+/// may return the same value.
 pub(crate) trait WithLastKnownIO<T> {
     fn get_last_known_io(&self) -> T;
 }
