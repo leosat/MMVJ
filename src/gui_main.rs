@@ -1079,7 +1079,12 @@ impl GuiMain {
                                 },
                                 ui,
                             ) {
-                                self.submit_pending_cmd(cmd.clone());
+                                if vd.is_a_virtual() {
+                                    self.submit_pending_cmd(GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
+                                        restart_persistent: true,
+                                    }));
+                                }
+                                self.submit_post_draw_cmd(cmd.clone());
                             }
                         });
                     }
@@ -1250,20 +1255,20 @@ impl GuiMain {
             {
                 self.process_pending_commands();
             }
-            ui.separator();
-            if ui
-                .button(format!("{} cancel pending", egui_phosphor::bold::X_SQUARE))
-                .highlight()
-                .clicked()
-            {
-                if MORE_DEBUG {
-                    for pending_change in self.pending_cmds.drain(..) {
-                        log::info!("Dropping pending change {pending_change:?}");
-                    }
-                } else {
-                    self.pending_cmds.clear();
-                }
-            }
+            // ui.separator();
+            // if ui
+            //     .button(format!("{} cancel pending", egui_phosphor::bold::X_SQUARE))
+            //     .highlight()
+            //     .clicked()
+            // {
+            //     if MORE_DEBUG {
+            //         for pending_change in self.pending_cmds.drain(..) {
+            //             log::info!("Dropping pending change {pending_change:?}");
+            //         }
+            //     } else {
+            //         self.pending_cmds.clear();
+            //     }
+            // }
         });
     }
 
