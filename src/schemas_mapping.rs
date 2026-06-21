@@ -1,6 +1,7 @@
 use std::sync::Arc;
 #[cfg(feature = "gui")]
 use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::Relaxed;
 
 use crate::common::BaseAtomicT;
 use crate::schemas_common::ObjId;
@@ -11,6 +12,8 @@ use crate::schemas_transform::DynValFilter;
 use crate::schemas_transform::TfmSeqCfg;
 use crate::schemas_transform::TfmStepCfg;
 use crate::schemas_transform::collect_dynamic_value_matchers;
+use crate::schemas_value::WithLastKnownIO;
+use crate::schemas_value::WithLastKnownIOSettable;
 use crate::schemas_value::WithNumInterval;
 use crate::schemas_value::WithRelativity;
 use crate::schemas_value::{ValueDsts, ValueSrcs};
@@ -82,6 +85,19 @@ pub(crate) struct Mapping {
     #[serde(skip)]
     #[garde(skip)]
     pub(crate) requires_idle_tick: bool,
+}
+
+impl WithLastKnownIO<(f32, f32)> for Mapping {
+    fn get_last_known_io(&self) -> (f32, f32) {
+        (self.last_in.load(Relaxed), self.last_out.load(Relaxed))
+    }
+}
+
+impl WithLastKnownIOSettable<(Option<f32>, Option<f32>)> for Mapping {
+    fn set_last_known_io(&self, v: (Option<f32>, Option<f32>)) {
+        v.0.inspect(|v| self.last_in.store(*v, Relaxed));
+        v.1.inspect(|v| self.last_out.store(*v, Relaxed));
+    }
 }
 
 impl Default for Mapping {

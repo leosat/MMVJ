@@ -113,9 +113,12 @@ impl<ValueT: NumIntervalValue> _WithNumIntervalRef for MappedValue<ValueT> {
     }
 }
 
-pub(crate) trait WithLastKnownIO<LastKnownIoValueT> {
-    fn get_last_known_io(&self) -> LastKnownIoValueT;
-    fn set_last_known_io(&self, _val: LastKnownIoValueT) {}
+pub(crate) trait WithLastKnownIO<T> {
+    fn get_last_known_io(&self) -> T;
+}
+
+pub(crate) trait WithLastKnownIOSettable<T> {
+    fn set_last_known_io(&self, v: T);
 }
 
 pub(crate) trait WithRelativity {
