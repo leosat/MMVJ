@@ -240,7 +240,7 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                     }
                 }
 
-                let mut gui_out_override = None;
+                let mut gui_out = None;
                 ui.separator();
                 ui.collapsing("Controls", |ui| {
                     let mut update_classification = false;
@@ -259,14 +259,10 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                                 .clicked()
                             {
                                 update_classification = true;
-                                if is_virtual {
-                                    changed = true
-                                } else {
-                                    gui_out_override = Some(GuiCmd::ControlMatcherRemove(GuiCmdControlMatcherRemove {
-                                        device_key: device_key.to_string(),
-                                        control_key: cn.clone(),
-                                    }));
-                                }
+                                gui_out = Some(GuiCmd::ControlMatcherRemove(GuiCmdControlMatcherRemove {
+                                    device_key: device_key.to_string(),
+                                    control_key: cn.clone(),
+                                }));
                             }
                         })
                         .body(|ui| {
@@ -274,14 +270,9 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                                 ui.separator();
                                 if c.egui((), ui) {
                                     update_classification = true;
-                                    if is_virtual {
-                                        changed = true
-                                    } else {
-                                        gui_out_override =
-                                            Some(GuiCmd::ControlMatcherChange(GuiCmdControlMatcherChange {
-                                                new_cm: ControlMatchers::Hid(c.clone()),
-                                            }));
-                                    }
+                                    gui_out = Some(GuiCmd::ControlMatcherChange(GuiCmdControlMatcherChange {
+                                        new_cm: ControlMatchers::Hid(c.clone()),
+                                    }));
                                 }
                             });
                         });
@@ -304,16 +295,10 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
 
                 ui.separator();
 
-                if gui_out_override.is_some() {
-                    gui_out_override
+                if gui_out.is_some() {
+                    gui_out
                 } else if changed {
-                    if is_virtual {
-                        Some(GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
-                            restart_persistent: true,
-                        }))
-                    } else {
-                        Some(GuiCmd::ConfigChangeGeneral)
-                    }
+                    Some(GuiCmd::ConfigChangeGeneral)
                 } else {
                     None
                 }
