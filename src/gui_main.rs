@@ -833,7 +833,7 @@ impl GuiMain {
                     cfg_file: path.clone(),
                     resp_tx,
                 });
-                match resp_rx.recv_timeout(Duration::from_millis(2000)) {
+                match resp_rx.recv_timeout(Duration::from_millis(5000)) {
                     Ok(Ok(new_cfg)) => {
                         self.cfg = new_cfg;
                         self.update_cfg_yaml();

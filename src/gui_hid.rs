@@ -1,7 +1,4 @@
-use crate::gui_common::{
-    DrawEgui, GuiCmd, GuiCmdControlMatcherChange, GuiCmdControlMatcherRemove, GuiCmdVirtualDeviceChange,
-    draw_collapsing_ui,
-};
+use crate::gui_common::{DrawEgui, GuiCmd, GuiCmdControlMatcherChange, GuiCmdControlMatcherRemove, draw_collapsing_ui};
 use crate::gui_device::{GuiInDeviceCfg, draw_create_control_matcher_gui};
 use crate::gui_value::GuiInInterval;
 use crate::hid_device::HID_AXIS_MAX_RANGE;
