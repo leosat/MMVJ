@@ -84,6 +84,7 @@ impl Default for HidMatcherParamsCfg {
 pub(crate) struct HidVirtualParamsCfg {
     #[serde(default)]
     // #[serde(skip_serializing_if = "String::is_empty")]
+    // TODO: sanitize_hid_name !!! (e.g. it gets truncated before spawhing a device, but need to sanitize it here)
     pub(crate) name: String,
     #[serde(default)]
     pub(crate) persistent: bool,

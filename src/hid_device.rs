@@ -180,7 +180,7 @@ impl WithDeviceClassification for HidDevice {
     }
 }
 
-pub(crate) fn truncate_uinput_name(name: &str) -> &str {
+pub(crate) fn sanitize_hid_name(name: &str) -> &str {
     let max_bytes = UINPUT_MAX_NAME_SIZE - 2;
 
     if name.len() <= max_bytes {
@@ -258,16 +258,18 @@ impl HidDevice {
             })
             .unwrap();
 
-        let device_name = if let Some(name) = creation_spec.cfg_spec.virtual_device_name_ref()
-            && !name.is_empty()
-        {
-            name
-        } else {
-            log::warn!("Virtual HID name is empty for config key {cfg_key}, using config key for it");
-            cfg_key
-        };
+        let device_name = sanitize_hid_name(
+            if let Some(name) = creation_spec.cfg_spec.virtual_device_name_ref()
+                && !name.is_empty()
+            {
+                name
+            } else {
+                log::warn!("Virtual HID name is empty for config key {cfg_key}, using config key for it");
+                cfg_key
+            },
+        );
 
-        evdev_builder = evdev_builder.name(truncate_uinput_name(&device_name));
+        evdev_builder = evdev_builder.name(&device_name);
 
         let mut keys = AttributeSet::<KeyCode>::new();
         let mut relative_axis = AttributeSet::<RelativeAxisCode>::new();
@@ -941,26 +943,26 @@ mod tests {
 
     #[test]
     fn test_empty_string() {
-        assert_eq!(truncate_uinput_name(""), "");
+        assert_eq!(sanitize_hid_name(""), "");
     }
 
     #[test]
     fn test_short_ascii() {
         let input = "Virtual Joystick";
-        assert_eq!(truncate_uinput_name(input), input);
+        assert_eq!(sanitize_hid_name(input), input);
     }
 
     #[test]
     fn test_exact_safe_len_ascii() {
         let input = "a".repeat(SAFE_LEN);
-        assert_eq!(truncate_uinput_name(&input), input);
-        assert_eq!(truncate_uinput_name(&input).len(), SAFE_LEN);
+        assert_eq!(sanitize_hid_name(&input), input);
+        assert_eq!(sanitize_hid_name(&input).len(), SAFE_LEN);
     }
 
     #[test]
     fn test_one_over_safe_len_ascii() {
         let input = "a".repeat(SAFE_LEN + 1);
-        let truncated = truncate_uinput_name(&input);
+        let truncated = sanitize_hid_name(&input);
         assert_eq!(truncated.len(), SAFE_LEN);
         assert_eq!(*truncated, input[..SAFE_LEN]);
     }
@@ -968,7 +970,7 @@ mod tests {
     #[test]
     fn test_long_ascii() {
         let input = "x".repeat(200);
-        let truncated = truncate_uinput_name(&input);
+        let truncated = sanitize_hid_name(&input);
         assert_eq!(truncated.len(), SAFE_LEN);
         assert!(truncated.chars().all(|c| c == 'x'));
     }
@@ -978,7 +980,7 @@ mod tests {
         // '€' is 3 bytes. 78 / 3 = 26 exactly.
         let input = "€".repeat(26);
         assert_eq!(input.len(), SAFE_LEN);
-        let truncated = truncate_uinput_name(&input);
+        let truncated = sanitize_hid_name(&input);
         assert_eq!(truncated, input);
         assert_eq!(truncated.len(), SAFE_LEN);
     }
@@ -989,7 +991,7 @@ mod tests {
         // Place it so the first byte lands at index SAFE_LEN-1
         let prefix = "a".repeat(SAFE_LEN - 1);
         let input = format!("{}é", prefix); // total len: 79
-        let truncated = truncate_uinput_name(&input);
+        let truncated = sanitize_hid_name(&input);
 
         // Should backtrack to exclude the incomplete 2-byte sequence
         assert_eq!(truncated.len(), SAFE_LEN - 1);
@@ -1002,7 +1004,7 @@ mod tests {
         // Place it so first byte is at SAFE_LEN-2
         let prefix = "a".repeat(SAFE_LEN - 2);
         let input = format!("{}€", prefix); // total len: 79
-        let truncated = truncate_uinput_name(&input);
+        let truncated = sanitize_hid_name(&input);
 
         assert_eq!(truncated.len(), SAFE_LEN - 2);
         assert_eq!(truncated, prefix);
@@ -1014,7 +1016,7 @@ mod tests {
         // Place it so first byte is at SAFE_LEN-3
         let prefix = "a".repeat(SAFE_LEN - 3);
         let input = format!("{}🎮", prefix); // total len: 79
-        let truncated = truncate_uinput_name(&input);
+        let truncated = sanitize_hid_name(&input);
 
         assert_eq!(truncated.len(), SAFE_LEN - 3);
         assert_eq!(truncated, prefix);
@@ -1023,7 +1025,7 @@ mod tests {
     #[test]
     fn test_mixed_unicode_long_string() {
         let input = "Player1 🎮 Joystick 🕹️ UTF-8 Test 🌍 ".repeat(10);
-        let truncated = truncate_uinput_name(&input);
+        let truncated = sanitize_hid_name(&input);
 
         // Core guarantees:
         assert!(truncated.len() <= SAFE_LEN);
@@ -1043,7 +1045,7 @@ mod tests {
     fn test_all_multi_byte_just_over_limit() {
         // String of 26 '€' (78 bytes) + 1 more '€' (3 bytes) = 81 bytes
         let input = "€".repeat(27);
-        let truncated = truncate_uinput_name(&input);
+        let truncated = sanitize_hid_name(&input);
 
         // Should drop the 27th '€' entirely, leaving exactly 26
         assert_eq!(truncated.len(), SAFE_LEN);

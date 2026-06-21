@@ -218,9 +218,12 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     v.is_enabled()
                         && v.matcher_name_regex_ref()
                             .and_then(|r| Some(r.is_match(&available_hid_device_info.name)))
-                            .or(v
-                                .virtual_device_name_ref()
-                                .and_then(|n| Some(n == available_hid_device_info.name)))
+                            .or(v.virtual_device_name_ref().and_then(|n| {
+                                Some(
+                                    /*TODO: configuration sanitization and validation with garde*/
+                                    crate::hid_device::sanitize_hid_name(n) == available_hid_device_info.name,
+                                )
+                            }))
                             .unwrap_or_default()
                         && v.get_classification()
                             .intersects(available_hid_device_info.classification)
@@ -372,8 +375,10 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     msg.matches_control_matcher(cm)
                 })
                 .for_each(|cm| cm.set_last_known_io(msg.get_value()));
-            self.router_buff_mappings_to_execute.extend(mappings);
-            self.run_mappings__(msg.device_id);
+            if mappings.len() > 0 {
+                self.router_buff_mappings_to_execute.extend(mappings);
+                self.run_mappings__(msg.device_id);
+            }
         }
     }
 
@@ -390,8 +395,10 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                 .get(&(device_id, control_type))
         {
             cms.iter().for_each(|cm| cm.set_last_known_io(value));
-            self.router_buff_mappings_to_execute.extend(mappings);
-            self.run_mappings__(device_id);
+            if mappings.len() > 0 {
+                self.router_buff_mappings_to_execute.extend(mappings);
+                self.run_mappings__(device_id);
+            }
         }
     }
 
