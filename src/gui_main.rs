@@ -687,18 +687,23 @@ impl GuiMain {
         tx.send(cmd).map_err(|e| Box::new(e) as _)
     }
 
-    fn apply_gui_command(&mut self, mut gui_cmd: GuiCmd) {
+    fn apply_gui_command(&mut self, mut gui_cmd: GuiCmd) -> Result<(), String> {
         match &mut gui_cmd {
             GuiCmd::ScriptAuxRename(cmd) => {
                 if self.cfg.traverse_mut(cmd).is_break() {
-                    log::warn!("Script aux data rename failed: name {} is already used.", cmd.new_key);
-                    return;
+                    return Err(format!(
+                        "Script aux data rename failed: name {} is already used.",
+                        cmd.new_key
+                    ));
                 };
                 self.send_driver_cmd(DriverCmd::ChangeConfigSimple { cfg: self.cfg.clone() });
             }
             GuiCmd::DeviceMatcherRename(cmd) => {
                 if cmd.old_key == cmd.new_key || cmd.new_key.is_empty() {
-                    return;
+                    return Err(format!(
+                        "Can't rename device matcher {} to {} due to names conflict",
+                        cmd.old_key, cmd.new_key
+                    ));
                 }
                 let mut conflict = self.cfg.devices.hid.contains_key(&cmd.new_key);
                 #[cfg(feature = "midi")]
@@ -706,8 +711,7 @@ impl GuiMain {
                     conflict |= self.cfg.devices.midi.contains_key(&cmd.new_key);
                 }
                 if conflict {
-                    log::warn!("Device key '{}' already exists. Rename aborted.", cmd.new_key);
-                    return;
+                    return Err(format!("Device key '{}' already exists. Rename aborted.", cmd.new_key));
                 }
                 if cmd.is_hid
                     && let Some(device_cfg) = self.cfg.devices.hid.remove(&cmd.old_key)
@@ -720,30 +724,37 @@ impl GuiMain {
                     }
                 }
                 let _ = self.cfg.traverse_mut(cmd);
-                self.apply_gui_command(GuiCmd::ConfigChangeSimple);
+                if let Err(e) = self.apply_gui_command(GuiCmd::ConfigChangeSimple) {
+                    return Err(e);
+                }
                 if cmd.is_virtual {
-                    self.apply_gui_command(GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
+                    if let Err(e) = self.apply_gui_command(GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
                         restart_persistent: true,
-                    }));
+                    })) {
+                        return Err(e);
+                    };
                 }
             }
             GuiCmd::DeviceMatcherRemove(cmd) => {
                 if self.cfg.traverse_mut(cmd).is_break() {
-                    log::warn!(
+                    return Err(format!(
                         "Device '{}' is referenced in mappings. Removal skipped.",
                         cmd.device_key
-                    );
-                    return;
+                    ));
                 }
                 self.cfg.devices.hid.remove(&cmd.device_key);
                 #[cfg(feature = "midi")]
                 self.cfg.devices.midi.remove(&cmd.device_key);
                 self.cfg.recompute_mappings_metadata();
-                self.apply_gui_command(GuiCmd::ConfigChangeSimple);
+                if let Err(e) = self.apply_gui_command(GuiCmd::ConfigChangeSimple) {
+                    return Err(e);
+                };
                 if cmd.is_virtual {
-                    self.apply_gui_command(GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
+                    if let Err(e) = self.apply_gui_command(GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
                         restart_persistent: true,
-                    }));
+                    })) {
+                        return Err(e);
+                    };
                 }
             }
             GuiCmd::ControlMatcherChange(cmd) => {
@@ -753,8 +764,7 @@ impl GuiMain {
             }
             GuiCmd::VariableChange(cmd) => {
                 if cmd.old_key != cmd.new_key && self.cfg.variables.contains_key(&cmd.new_key) {
-                    log::warn!("Variable name {} is already used.", cmd.new_key);
-                    return;
+                    return Err(format!("Variable name {} is already used.", cmd.new_key));
                 }
                 self.cfg
                     .variables
@@ -767,12 +777,10 @@ impl GuiMain {
             }
             GuiCmd::ControlMatcherRemove(cmd) => {
                 if self.cfg.traverse_mut(cmd).is_break() {
-                    log::warn!(
+                    return Err(format!(
                         "Control '{}' in device '{}' is referenced in mappings. Removal skipped.",
-                        cmd.control_key,
-                        cmd.device_key
-                    );
-                    return;
+                        cmd.control_key, cmd.device_key
+                    ));
                 }
                 if let Some(dev) = self.cfg.devices.hid.get_mut(&cmd.device_key) {
                     dev.controls.remove(&cmd.control_key);
@@ -788,11 +796,10 @@ impl GuiMain {
 
             GuiCmd::VariableRemove(cmd) => {
                 if self.cfg.traverse_mut(cmd).is_break() {
-                    log::warn!(
+                    return Err(format!(
                         "Variable '{}' is referenced in mappings. Removal skipped.",
                         cmd.variable_key
-                    );
-                    return;
+                    ));
                 }
                 self.cfg.variables.remove(&cmd.variable_key);
                 self.cfg.recompute_mappings_metadata();
@@ -804,7 +811,9 @@ impl GuiMain {
             }),
             GuiCmd::ConfigChangeSimple => self.send_driver_cmd(DriverCmd::ChangeConfigSimple { cfg: self.cfg.clone() }),
             GuiCmd::ConfigChangeGeneral => {
-                self.apply_gui_command(GuiCmd::ConfigChangeSimple);
+                if let Err(e) = self.apply_gui_command(GuiCmd::ConfigChangeSimple) {
+                    return Err(e);
+                };
                 self.send_driver_cmd(DriverCmd::Reload);
             }
             GuiCmd::DragAndDrop(_) | GuiCmd::LocalItemRemove(_) => {
@@ -839,10 +848,10 @@ impl GuiMain {
                         self.update_cfg_yaml();
                     }
                     Ok(Err(e)) => {
-                        log::error!("Failed to load new config: {}", dbg!(e));
+                        return Err(format!("Failed to load new config: {e:?}"));
                     }
                     Err(e) => {
-                        log::error!("Failed to receive new config from driver: {}", dbg!(e));
+                        return Err(format!("Failed to receive new config from driver: {e:?}"));
                     }
                 }
             }
@@ -856,6 +865,7 @@ impl GuiMain {
                 rate: self.cfg.global.idle_tick_rate,
             }),
         }
+        Ok(())
     }
 
     fn process_post_draw_commands(&mut self) {
@@ -870,7 +880,9 @@ impl GuiMain {
         }
 
         for cmd in self.post_draw_cmds.clone().drain(..) {
-            self.apply_gui_command(cmd.cmd);
+            if let Err(e) = self.apply_gui_command(cmd.cmd) {
+                log::warn!("{e:?}");
+            };
         }
 
         self.post_draw_cmds.clear();
@@ -892,7 +904,9 @@ impl GuiMain {
             .dedup_by(|next, prev| if &*next == &*prev { true } else { false });
 
         for cmd in self.pending_cmds.clone().drain(..) {
-            self.apply_gui_command(cmd.cmd);
+            if let Err(e) = self.apply_gui_command(cmd.cmd) {
+                log::warn!("{e:?}");
+            };
         }
 
         self.pending_cmds.clear();
@@ -1071,21 +1085,30 @@ impl GuiMain {
                             self.draw_device_remove_button(ui, &dmk, true);
                         })
                         .body(|ui| {
-                            let vd = self.cfg.devices.hid.get_mut(&dmk).unwrap();
-                            if let Some(cmd) = vd.egui(
-                                GuiInDeviceCfg::Edit {
-                                    cfg_predef_controls: &self.cfg.predef_controls,
-                                    device_key: &dmk,
-                                },
-                                ui,
-                            ) {
-                                if vd.is_a_virtual() {
-                                    self.submit_pending_cmd(GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
-                                        restart_persistent: true,
-                                    }));
-                                }
-                                self.submit_post_draw_cmd(cmd.clone());
-                            }
+                            self.cfg
+                                .devices
+                                .hid
+                                .get_mut(&dmk)
+                                .unwrap()
+                                .egui(
+                                    GuiInDeviceCfg::Edit {
+                                        cfg_predef_controls: &self.cfg.predef_controls,
+                                        device_key: &dmk,
+                                    },
+                                    ui,
+                                )
+                                .inspect(|cmd| {
+                                    let _ = self
+                                        .apply_gui_command(cmd.clone())
+                                        .inspect_err(|e| log::warn!("{e:?}"))
+                                        .inspect(|_| {
+                                            self.submit_pending_cmd(GuiCmd::VirtualDeviceChange(
+                                                GuiCmdVirtualDeviceChange {
+                                                    restart_persistent: true,
+                                                },
+                                            ));
+                                        });
+                                })
                         });
                     }
                 });
