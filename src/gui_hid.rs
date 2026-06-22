@@ -295,7 +295,7 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                 if gui_out.is_some() {
                     gui_out
                 } else if changed {
-                    Some(GuiCmd::ConfigChangeGeneral)
+                    Some(GuiCmd::ConfigChangeDriverRestart)
                 } else {
                     None
                 }

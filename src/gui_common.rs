@@ -238,6 +238,12 @@ pub(crate) struct GuiCmdVirtualDeviceChange {
 // --------------------------------
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum GuiCmd {
+    // -----------------------------
+    CmdSeqence(Vec<GuiCmd>),
+    BreakOnErr,
+    // -----------------------------
+    SubmitPending(Box<GuiCmd>),
+    // -----------------------------
     LoadCfg(PathBuf),
     SaveCfg(Option<PathBuf>, Option<String>),
     // -----------------------------
@@ -256,14 +262,13 @@ pub(crate) enum GuiCmd {
     // -----------------------------
     MappingChange(MappingEngineCmd),
     // -----------------------------
-    LocalItemRemove(usize),
-    // -----------------------------
-    DragAndDrop(GuiDndJob),
-    // -----------------------------
     ConfigChangeSimple,
-    ConfigChangeGeneral,
+    ConfigChangeDriverRestart,
     // -----------------------------
     IdleTickRateChange,
+    // -----------------------------
+    DragAndDrop(GuiDndJob),
+    LocalItemRemove(usize),
 }
 
 pub(crate) fn bool_to_simple_change_gui_cmd(changed: bool) -> Option<GuiCmd> {
