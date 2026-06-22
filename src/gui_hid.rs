@@ -258,6 +258,21 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                                     ui.label(egui::RichText::new(egui_phosphor::bold::TRAY_ARROW_UP).size(20.0))
                                         .on_hover_text("Not pressed (for any inputs values != 0)");
                                 }
+                            } else {
+                                if c.r#type.is_absolute() {
+                                    ui.label(egui::RichText::new(egui_phosphor::bold::ARROWS_OUT_CARDINAL).size(20.0))
+                                        .on_hover_text("Absolute axis");
+                                } else {
+                                    ui.label(
+                                        egui::RichText::new(if val <= 0.0 {
+                                            egui_phosphor::bold::ARROWS_COUNTER_CLOCKWISE
+                                        } else {
+                                            egui_phosphor::bold::ARROWS_CLOCKWISE
+                                        })
+                                        .size(20.0),
+                                    )
+                                    .on_hover_text("Relative movement");
+                                }
                             }
                             ui.separator();
                             if ui
