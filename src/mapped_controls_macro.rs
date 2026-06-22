@@ -50,11 +50,11 @@ macro_rules! app_ctl_types_to_platform_api {
             // -- Special controls to read force feedback as a general device control input --
             #[strum(
                 to_string = "FORCE_FEEDBACK_X",
-                serialize = "ABS_SPECIAL_FORCE_FEEDBACK_X", serialize = "FORCE_FEEDBACK_X")]
+                serialize = "ABS_SPECIAL_FORCE_FEEDBACK_X")]
             ForceFeedbackX,
             #[strum(
                 to_string = "FORCE_FEEDBACK_Y",
-                serialize = "ABS_SPECIAL_FORCE_FEEDBACK_Y", serialize = "FORCE_FEEDBACK_Y")]
+                serialize = "ABS_SPECIAL_FORCE_FEEDBACK_Y")]
             ForceFeedbackY,
             #[default]
             Unhandled,
