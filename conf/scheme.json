@@ -832,8 +832,8 @@
             "PROGRAM_CHANGE",
             "AFTERTOUCH",
             "POLY_AFTERTOUCH",
-            "ABS_SPECIAL_FORCE_FEEDBACK_X",
-            "ABS_SPECIAL_FORCE_FEEDBACK_Y",
+            "FORCE_FEEDBACK_X",
+            "FORCE_FEEDBACK_Y",
             "UNHANDLED"
           ]
         },

@@ -22,8 +22,8 @@ use crate::{schemas_control_matcher::ControlMatchers, schemas_hid::HidControlMat
 
 #[test]
 fn dbg_control_names() {
-    dbg!(MappedCtls::AbsSpecialForceFeedbackX.to_string());
-    dbg!(MappedCtls::AbsSpecialForceFeedbackY.to_string());
+    dbg!(MappedCtls::ForceFeedbackX.to_string());
+    dbg!(MappedCtls::ForceFeedbackY.to_string());
 }
 
 app_ctl_types_to_platform_api! {

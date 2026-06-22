@@ -661,15 +661,15 @@ static PREDEF_CONTROLS: LazyLock<String> = LazyLock::new(|| {
 #############################################################################
 #    
 hid_controls:
-  ABS_SPECIAL_FORCE_FEEDBACK_X:
-    type: ABS_SPECIAL_FORCE_FEEDBACK_X
+  FORCE_FEEDBACK_X:
+    type: FORCE_FEEDBACK_X
     range: [ -32768, 32767 ]
     properties: { resolution: 1, fuzz: 0, flat: 0 }
     initial_value: 0
     description: "Special, fake, control to expose force feedback X component coming from device. Currently R/O, write ignored (could reuse it to inject Constant force on unowned joystick devices though)."
 
-  ABS_SPECIAL_FORCE_FEEDBACK_Y:
-    type: ABS_SPECIAL_FORCE_FEEDBACK_Y
+  FORCE_FEEDBACK_Y:
+    type: FORCE_FEEDBACK_Y
     range: [ -32768, 32767 ]
     properties: { resolution: 1, fuzz: 0, flat: 0 }
     initial_value: 0

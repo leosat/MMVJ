@@ -310,10 +310,7 @@ impl HidDeviceCfg {
 
     pub(crate) fn add_special_force_feedback_controls(&mut self) {
         if self.is_a_virtual() && self.virtual_device_force_feedback_info_ref().is_some() {
-            for ctl_type in [
-                MappedCtls::AbsSpecialForceFeedbackX,
-                MappedCtls::AbsSpecialForceFeedbackY,
-            ] {
+            for ctl_type in [MappedCtls::ForceFeedbackX, MappedCtls::ForceFeedbackY] {
                 if !self.controls.iter().any(|v| v.1.r#type == ctl_type) {
                     self.controls.insert(
                         ctl_type.to_string(),

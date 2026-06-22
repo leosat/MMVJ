@@ -503,9 +503,9 @@ pub(crate) async fn owned_hid_device_thread(
                             device_id: virtual_device_id,
                             event: MappedEvents::Hid(MappedHidEvent {
                                 control_type: if axis_idx == X_AXIS_IDX {
-                                    crate::mapped_controls::MappedCtls::AbsSpecialForceFeedbackX
+                                    crate::mapped_controls::MappedCtls::ForceFeedbackX
                                 } else {
-                                    crate::mapped_controls::MappedCtls::AbsSpecialForceFeedbackY
+                                    crate::mapped_controls::MappedCtls::ForceFeedbackY
                                 },
                                 value: HID_AXIS_MAX_INTERVAL.map_from(
                                     play_sums[axis_idx],
@@ -519,9 +519,9 @@ pub(crate) async fn owned_hid_device_thread(
                     owned_virtual_device_thread_io.force_sum[axis_idx].store(play_sums[axis_idx] as BaseNumT, Ordering::Release);
                     // --------------------------
                     ctl_states[if axis_idx == X_AXIS_IDX {
-                        crate::mapped_controls::MappedCtls::AbsSpecialForceFeedbackX
+                        crate::mapped_controls::MappedCtls::ForceFeedbackX
                     } else {
-                        crate::mapped_controls::MappedCtls::AbsSpecialForceFeedbackY
+                        crate::mapped_controls::MappedCtls::ForceFeedbackY
                     } as usize]
                         .store(
                             HID_AXIS_MAX_INTERVAL.map_from(

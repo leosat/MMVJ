@@ -89,12 +89,12 @@ devices:
           - 0.0
           - 1.0
         "[Auto-created] Force Feedback X":
-          type: ABS_SPECIAL_FORCE_FEEDBACK_X
+          type: FORCE_FEEDBACK_X
           range:
           - -32768.0
           - 32767.0
         "[Auto-created] Force Feedback Y":
-          type: ABS_SPECIAL_FORCE_FEEDBACK_Y
+          type: FORCE_FEEDBACK_Y
           range:
           - -32768.0
           - 32767.0

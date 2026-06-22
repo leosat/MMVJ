@@ -451,34 +451,6 @@ hid_controls:
       flat: 0.0
     initial_value: 0.0
     description: Right Z-axis (right trigger analog)
-  ABS_SPECIAL_FORCE_FEEDBACK_X:
-    type: ABS_SPECIAL_FORCE_FEEDBACK_X
-    range:
-    - -32768.0
-    - 32767.0
-    properties:
-      resolution: 1.0
-      fuzz: 0.0
-      flat: 0.0
-    initial_value: 0.0
-    description: >-
-      Special, fake, control to expose force feedback X component coming from device.
-      Currently R/O, write ignored (could reuse it to inject Constant force on unowned
-      joystick devices though).
-  ABS_SPECIAL_FORCE_FEEDBACK_Y:
-    type: ABS_SPECIAL_FORCE_FEEDBACK_Y
-    range:
-    - -32768.0
-    - 32767.0
-    properties:
-      resolution: 1.0
-      fuzz: 0.0
-      flat: 0.0
-    initial_value: 0.0
-    description: >-
-      Special, fake, control to expose force feedback Y component coming from device.
-      Currently R/O, write ignored (could reuse it to inject Constant force on unowned
-      joystick devices though).
   ABS_WHEEL:
     type: ABS_WHEEL
     range:
@@ -651,6 +623,34 @@ hid_controls:
     properties: null
     initial_value: 0.0
     description: Y button (Xbox) / Triangle (PlayStation)
+  FORCE_FEEDBACK_X:
+    type: FORCE_FEEDBACK_X
+    range:
+    - -32768.0
+    - 32767.0
+    properties:
+      resolution: 1.0
+      fuzz: 0.0
+      flat: 0.0
+    initial_value: 0.0
+    description: >-
+      Special, fake, control to expose force feedback X component coming from device.
+      Currently R/O, write ignored (could reuse it to inject Constant force on unowned
+      joystick devices though).
+  FORCE_FEEDBACK_Y:
+    type: FORCE_FEEDBACK_Y
+    range:
+    - -32768.0
+    - 32767.0
+    properties:
+      resolution: 1.0
+      fuzz: 0.0
+      flat: 0.0
+    initial_value: 0.0
+    description: >-
+      Special, fake, control to expose force feedback Y component coming from device.
+      Currently R/O, write ignored (could reuse it to inject Constant force on unowned
+      joystick devices though).
   KEY_0:
     type: KEY_0
     range:
