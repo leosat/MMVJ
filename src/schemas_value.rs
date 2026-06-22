@@ -164,6 +164,11 @@ pub(crate) trait WithNumericValue {
     fn get_numeric_value(&self) -> Self::ValueT;
 }
 
+pub(crate) trait WithNumericValueSettable {
+    type ValueT;
+    fn set_numeric_value(&mut self, v: Self::ValueT);
+}
+
 pub(crate) trait WithNumInterval {
     type IntervalT;
     fn get_interval(&self) -> Self::IntervalT;
@@ -574,9 +579,17 @@ impl WithNumericValue for DynValueRefs {
 
     fn get_numeric_value(&self) -> Self::ValueT {
         match self {
-            DynValueRefs::DeviceControlMatcher(d) => d.get_last_known_io(),
+            DynValueRefs::DeviceControlMatcher(d) => d.get_numeric_value(),
             DynValueRefs::Variable(v) => v.variable.get_numeric_value(),
         }
+    }
+}
+
+impl WithNumericValue for DeviceControlMatcherRef {
+    type ValueT = BaseNumT;
+
+    fn get_numeric_value(&self) -> Self::ValueT {
+        self.control_matcher.get_numeric_value()
     }
 }
 

@@ -321,9 +321,10 @@ impl HidDeviceCfg {
                             initial_value: 0.0,
                             id: Default::default(),
                             idle_tick_enabled: Default::default(),
-                            last_known_value: Default::default(),
+                            last_known_io_value: Default::default(),
                             from_predefined: Default::default(),
                             _dst_refs_count: Default::default(),
+                            current_value: Default::default(),
                         },
                     );
                 }
@@ -599,7 +600,10 @@ pub(crate) struct HidControlMatcherCfg {
     pub(crate) idle_tick_enabled: IdleTickEnabledFlag,
     #[serde(skip)]
     #[traverse(skip)]
-    pub(crate) last_known_value: Arc<CachePadded<BaseAtomicT>>,
+    pub(crate) last_known_io_value: Arc<CachePadded<BaseAtomicT>>,
+    #[serde(skip)]
+    #[traverse(skip)]
+    pub(crate) current_value: Arc<CachePadded<BaseAtomicT>>,
     #[serde(skip)]
     #[traverse(skip)]
     _dst_refs_count: Arc<CachePadded<AtomicUsize>>,
@@ -615,8 +619,9 @@ impl From<HidControlPredefined> for HidControlMatcherCfg {
             initial_value: predef.initial_value,
             id: Default::default(),
             idle_tick_enabled: Default::default(),
-            last_known_value: Arc::new(CachePadded::new(BaseAtomicT::from(predef.initial_value))),
+            last_known_io_value: Arc::new(CachePadded::new(BaseAtomicT::from(predef.initial_value))),
             _dst_refs_count: Default::default(),
+            current_value: Default::default(),
         }
     }
 }

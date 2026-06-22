@@ -335,7 +335,7 @@ impl Config {
         }
 
         entry
-            .last_known_value
+            .last_known_io_value
             .store(entry.initial_value as BaseNumT, std::sync::atomic::Ordering::Relaxed);
 
         Ok(())
