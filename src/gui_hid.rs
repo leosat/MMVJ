@@ -250,6 +250,16 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                             ui.separator();
                             ui.add(egui::Slider::new(&mut val, c.range.into()).show_value(false));
                             ui.separator();
+                            if c.r#type.is_button() || c.r#type.is_key() {
+                                if val != 0.0 {
+                                    ui.label(egui::RichText::new(egui_phosphor::bold::TRAY_ARROW_DOWN).size(20.0))
+                                        .on_hover_text("Pressed (for any inputs values != 0)");
+                                } else {
+                                    ui.label(egui::RichText::new(egui_phosphor::bold::TRAY_ARROW_UP).size(20.0))
+                                        .on_hover_text("Not pressed (for any inputs values != 0)");
+                                }
+                            }
+                            ui.separator();
                             if ui
                                 .small_button(format!("{}", egui_phosphor::fill::TRASH))
                                 .on_hover_text("Remove control (will not be removed if referenced)")
