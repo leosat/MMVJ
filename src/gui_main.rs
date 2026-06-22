@@ -22,6 +22,7 @@ use crate::schemas_value::VariableState;
 use eframe::egui::{self};
 use egui::Color32;
 use egui_file_dialog::FileDialog;
+use log::warn;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f32;
@@ -869,13 +870,11 @@ impl GuiMain {
                 for cmd in gui_cmds.drain(..) {
                     if let GuiCmd::BreakOnErr = cmd {
                         if let Some(Err(_)) = res.as_ref() {
+                            log::info!("Gui command sequence execution break.");
                             return res.unwrap();
                         }
                     } else {
-                        res = Some(self.execute_gui_command(cmd));
-                        if let Err(e) = res.as_ref().unwrap() {
-                            log::warn!("{e:?}");
-                        };
+                        res = Some(self.execute_gui_command(cmd).inspect_err(|e| warn!("{e:?}")));
                     }
                 }
             }
@@ -903,7 +902,7 @@ impl GuiMain {
                     break;
                 }
             } else {
-                res = Some(self.execute_gui_command(cmd.cmd));
+                res = Some(self.execute_gui_command(cmd.cmd).inspect_err(|e| warn!("{e:?}")));
             }
         }
 
