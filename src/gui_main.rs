@@ -687,7 +687,7 @@ impl GuiMain {
         tx.send(cmd).map_err(|e| Box::new(e) as _)
     }
 
-    fn apply_gui_command(&mut self, mut gui_cmd: GuiCmd) -> Result<(), String> {
+    fn execute_gui_command(&mut self, mut gui_cmd: GuiCmd) -> Result<(), String> {
         match &mut gui_cmd {
             GuiCmd::ScriptAuxRename(cmd) => {
                 if self.cfg.traverse_mut(cmd).is_break() {
@@ -724,11 +724,11 @@ impl GuiMain {
                     }
                 }
                 let _ = self.cfg.traverse_mut(cmd);
-                if let Err(e) = self.apply_gui_command(GuiCmd::ConfigChangeSimple) {
+                if let Err(e) = self.execute_gui_command(GuiCmd::ConfigChangeSimple) {
                     return Err(e);
                 }
                 if cmd.is_virtual {
-                    if let Err(e) = self.apply_gui_command(GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
+                    if let Err(e) = self.execute_gui_command(GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
                         restart_persistent: true,
                     })) {
                         return Err(e);
@@ -746,11 +746,11 @@ impl GuiMain {
                 #[cfg(feature = "midi")]
                 self.cfg.devices.midi.remove(&cmd.device_key);
                 self.cfg.recompute_mappings_metadata();
-                if let Err(e) = self.apply_gui_command(GuiCmd::ConfigChangeSimple) {
+                if let Err(e) = self.execute_gui_command(GuiCmd::ConfigChangeSimple) {
                     return Err(e);
                 };
                 if cmd.is_virtual {
-                    if let Err(e) = self.apply_gui_command(GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
+                    if let Err(e) = self.execute_gui_command(GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
                         restart_persistent: true,
                     })) {
                         return Err(e);
@@ -810,8 +810,8 @@ impl GuiMain {
                 action: action.clone(),
             }),
             GuiCmd::ConfigChangeSimple => self.send_driver_cmd(DriverCmd::ChangeConfigSimple { cfg: self.cfg.clone() }),
-            GuiCmd::ConfigChangeGeneral => {
-                if let Err(e) = self.apply_gui_command(GuiCmd::ConfigChangeSimple) {
+            GuiCmd::ConfigChangeDriverRestart => {
+                if let Err(e) = self.execute_gui_command(GuiCmd::ConfigChangeSimple) {
                     return Err(e);
                 };
                 self.send_driver_cmd(DriverCmd::Reload);
@@ -864,6 +864,23 @@ impl GuiMain {
             GuiCmd::IdleTickRateChange => self.send_driver_cmd(DriverCmd::ChangeIdleTickRate {
                 rate: self.cfg.global.idle_tick_rate,
             }),
+            GuiCmd::CmdSeqence(gui_cmds) => {
+                let mut res = None;
+                for cmd in gui_cmds.drain(..) {
+                    if let GuiCmd::BreakOnErr = cmd {
+                        if let Some(Err(_)) = res.as_ref() {
+                            return res.unwrap();
+                        }
+                    } else {
+                        res = Some(self.execute_gui_command(cmd));
+                        if let Err(e) = res.as_ref().unwrap() {
+                            log::warn!("{e:?}");
+                        };
+                    }
+                }
+            }
+            GuiCmd::BreakOnErr => {}
+            GuiCmd::SubmitPending(gui_cmd) => self.submit_pending_cmd(*(*gui_cmd).clone()),
         }
         Ok(())
     }
@@ -879,10 +896,15 @@ impl GuiMain {
             }
         }
 
+        let mut res = None;
         for cmd in self.post_draw_cmds.clone().drain(..) {
-            if let Err(e) = self.apply_gui_command(cmd.cmd) {
-                log::warn!("{e:?}");
-            };
+            if let GuiCmd::BreakOnErr = cmd.cmd {
+                if let Some(Err(_)) = res.as_ref() {
+                    break;
+                }
+            } else {
+                res = Some(self.execute_gui_command(cmd.cmd));
+            }
         }
 
         self.post_draw_cmds.clear();
@@ -903,10 +925,15 @@ impl GuiMain {
         self.pending_cmds
             .dedup_by(|next, prev| if &*next == &*prev { true } else { false });
 
+        let mut res = None;
         for cmd in self.pending_cmds.clone().drain(..) {
-            if let Err(e) = self.apply_gui_command(cmd.cmd) {
-                log::warn!("{e:?}");
-            };
+            if let GuiCmd::BreakOnErr = cmd.cmd {
+                if let Some(Err(_)) = res.as_ref() {
+                    break;
+                }
+            } else {
+                res = Some(self.execute_gui_command(cmd.cmd));
+            }
         }
 
         self.pending_cmds.clear();
@@ -1085,30 +1112,24 @@ impl GuiMain {
                             self.draw_device_remove_button(ui, &dmk, true);
                         })
                         .body(|ui| {
-                            self.cfg
-                                .devices
-                                .hid
-                                .get_mut(&dmk)
-                                .unwrap()
-                                .egui(
-                                    GuiInDeviceCfg::Edit {
-                                        cfg_predef_controls: &self.cfg.predef_controls,
-                                        device_key: &dmk,
-                                    },
-                                    ui,
-                                )
-                                .inspect(|cmd| {
-                                    let _ = self
-                                        .apply_gui_command(cmd.clone())
-                                        .inspect_err(|e| log::warn!("{e:?}"))
-                                        .inspect(|_| {
-                                            self.submit_pending_cmd(GuiCmd::VirtualDeviceChange(
-                                                GuiCmdVirtualDeviceChange {
-                                                    restart_persistent: true,
-                                                },
-                                            ));
-                                        });
-                                })
+                            if let Some(cmd) = self.cfg.devices.hid.get_mut(&dmk).unwrap().egui(
+                                GuiInDeviceCfg::Edit {
+                                    cfg_predef_controls: &self.cfg.predef_controls,
+                                    device_key: &dmk,
+                                },
+                                ui,
+                            ) {
+                                self.submit_post_draw_cmd(GuiCmd::CmdSeqence(vec![
+                                    cmd,
+                                    GuiCmd::BreakOnErr,
+                                    GuiCmd::SubmitPending(
+                                        GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
+                                            restart_persistent: true,
+                                        })
+                                        .into(),
+                                    ),
+                                ]));
+                            };
                         });
                     }
                 });
