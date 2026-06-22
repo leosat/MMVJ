@@ -245,10 +245,7 @@ impl<'s> DrawEgui<'s> for MidiMatcherCfg {
                             ui.separator();
                             if ui
                                 .small_button(format!("{}", egui_phosphor::fill::TRASH))
-                                .on_hover_text(
-                                    "Add control matcher removal to the pending commands queue \
-                                    (will be removed if not referenced)",
-                                )
+                                .on_hover_text("Remove (will be removed if not referenced)")
                                 .clicked()
                             {
                                 gui_out = Some(GuiCmd::ControlMatcherRemove(GuiCmdControlMatcherRemove {

@@ -277,7 +277,7 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                             ui.separator();
                             if ui
                                 .small_button(format!("{}", egui_phosphor::fill::TRASH))
-                                .on_hover_text("Remove control (will not be removed if referenced)")
+                                .on_hover_text("Remove control (will be removed if not referenced)")
                                 .clicked()
                             {
                                 update_classification = true;
