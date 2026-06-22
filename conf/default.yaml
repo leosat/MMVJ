@@ -44,13 +44,13 @@ devices:
           range:
           - 0.0
           - 32767.0
-        ABS_SPECIAL_FORCE_FEEDBACK_X:
-          type: ABS_SPECIAL_FORCE_FEEDBACK_X
+        FORCE_FEEDBACK_X:
+          type: FORCE_FEEDBACK_X
           range:
           - -32768.0
           - 32767.0
-        ABS_SPECIAL_FORCE_FEEDBACK_Y:
-          type: ABS_SPECIAL_FORCE_FEEDBACK_Y
+        FORCE_FEEDBACK_Y:
+          type: FORCE_FEEDBACK_Y
           range:
           - -32768.0
           - 32767.0
