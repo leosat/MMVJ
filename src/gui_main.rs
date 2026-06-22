@@ -1243,7 +1243,7 @@ impl GuiMain {
                     ui.separator();
                     if ui
                         .button(format!("{}", egui_phosphor::bold::TRASH))
-                        .on_hover_text("Set pending removal of variable (will fail if referenced in mappings)")
+                        .on_hover_text("Remove (will not apply if referenced in mappings)")
                         .clicked()
                     {
                         variable_remove_to_submit = Some(GuiCmdVariableRemove {

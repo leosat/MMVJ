@@ -370,7 +370,9 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
                 {
                     self.steps.push(step);
                     self.recompute_metadata_with_known_inputs();
-                    *gui_out_mut = gui_out_mut.clone().or(Some(GuiCmd::ConfigChangeSimple));
+                    *gui_out_mut = gui_out_mut
+                        .clone()
+                        .or(Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter)));
                 }
                 ui.data_mut(|d| d.insert_temp(is_win_opened_egui_id, *is_win_opened));
             });
