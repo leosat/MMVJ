@@ -297,7 +297,7 @@ pub async fn run(
             post_restart_response_channel = None;
         }
 
-        mapping_engine.init_mapping_router()?;
+        mapping_engine.init()?;
 
         if debug.is_on() {
             let _ = fs::write("cfg_tree.debug_dump.2.txt", format!("{:#?}", cfg_mgr.cfg_ref()));
@@ -477,7 +477,7 @@ fn handle_cmd(
                         }
                         crate::common::MappingEngineCmd::UpdateMappingRouter => {
                             log::debug!("Mapping update: update router info");
-                            let _ = mapping_engine.init_mapping_router();
+                            let _ = mapping_engine.init();
                         }
                         crate::common::MappingEngineCmd::ResetScriptingCache => {
                             log::debug!("Mapping update: reset scripting cache");

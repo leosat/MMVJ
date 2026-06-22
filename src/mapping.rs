@@ -1,4 +1,6 @@
-use crate::common::{BaseNumT, DeviceManager, Relativity, SYMM_UNIT_INTERVAL, UNIT_INTERVAL, get_interned_str};
+use crate::common::{
+    BaseNumT, DeviceManager, Relativity, SYMM_UNIT_INTERVAL, UNIT_INTERVAL, get_interned_str, intern_str,
+};
 use crate::config::DebugLevel;
 use crate::curves::Curves;
 use crate::filters::OneEuroFilter;
@@ -31,6 +33,7 @@ use anyhow::Result;
 use eframe::egui::Color32;
 use log::{debug, info, warn};
 use mlua::Lua;
+use rand::seq::SliceRandom;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::ops::Add;
@@ -82,7 +85,7 @@ pub(crate) struct MappingEngine<'driver_loop> {
     //  Mapping router algorithm index and runtime buffer.
     // ---
     router_index_sysdev_and_ctl_type_to_cms_and_mappings:
-        HashMap<(ObjId, MappedCtls), (Vec<ControlMatchers>, Vec<usize>)>,
+        HashMap<(ObjId, MappedCtls), (Vec<ControlMatchers>, Vec<Vec<usize>>)>,
     router_buff_mappings_to_execute: Vec<usize>,
     // ---
     info_sysdev_to_enabled_mappings: HashMap<ObjId, Vec<usize>>, // NB: this is only used in mappings init routine, but leaving here for potential future use in other places.
@@ -163,7 +166,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
     // dm: Device matcher.
     // cmk: Control matcher key.
     // cm: Control matcher.
-    pub(crate) fn init_mapping_router(&mut self) -> Result<()> {
+    pub(crate) fn init(&mut self) -> Result<()> {
         info!("Initializing mapping engine router.");
 
         self.idle_tick_mappings_reset();
@@ -180,7 +183,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         ));
 
         let mut collect_enabled_mappings_for_dmk_and_cm =
-            |dmk: &str, cm_id: ObjId, mappings: &mut Vec<_>, opened_device_id: ObjId| {
+            |dmk: &str, cm_id: ObjId, cm_idx, mappings: &mut Vec<Vec<usize>>, opened_device_id: ObjId| {
                 for (mapping_idx, mapping) in self.cfg.mappings.iter().enumerate().filter(|(_, m)| m.enabled) {
                     for source in collect_dynamic_value_matchers(mapping, |ctx| {
                         ctx.contains(DynValFilter::Control | DynValFilter::Src)
@@ -193,9 +196,13 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     .collect::<Vec<_>>()
                     {
                         if source.device_matcher_key == *dmk && source.control_matcher.get_id() == cm_id {
-                            mappings.push(mapping_idx);
-                            mappings.sort();
-                            mappings.dedup();
+                            if mappings.get(cm_idx).is_none() {
+                                mappings.resize(cm_idx + 1, Vec::new());
+                            };
+                            let q: &mut Vec<usize> = mappings.get_mut(cm_idx).unwrap();
+                            q.push(mapping_idx);
+                            q.sort();
+                            q.dedup();
 
                             self.info_sysdev_to_enabled_mappings
                                 .entry(opened_device_id)
@@ -239,7 +246,13 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                         .entry((opened_device_id, cm.r#type))
                         .or_default();
                     cms.push(ControlMatchers::Hid(cm.clone()));
-                    collect_enabled_mappings_for_dmk_and_cm(dmk, cm.get_id(), mappings, opened_device_id);
+                    collect_enabled_mappings_for_dmk_and_cm(
+                        dmk,
+                        cm.get_id(),
+                        cms.len() - 1,
+                        mappings,
+                        opened_device_id,
+                    );
                 }
             }
         }
@@ -264,7 +277,13 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                         .entry((opened_device_id, cm.midi_message.r#type.into()))
                         .or_default();
                     cms.push(ControlMatchers::Midi(cm.clone()));
-                    collect_enabled_mappings_for_dmk_and_cm(dmk, cm.get_id(), mappings, opened_device_id);
+                    collect_enabled_mappings_for_dmk_and_cm(
+                        dmk,
+                        cm.get_id(),
+                        cms.len() - 1,
+                        mappings,
+                        opened_device_id,
+                    );
                 }
             }
         }
@@ -286,6 +305,11 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                 format!("{:#?}", self.router_index_sysdev_and_ctl_type_to_cms_and_mappings),
             );
         }
+
+        // Run all mappings once on init.
+        self.router_buff_mappings_to_execute
+            .extend(self.cfg.mappings.iter().enumerate().map(|(i, _)| i).collect::<Vec<_>>());
+        self.run_mappings__(ObjId::from(intern_str("Init")));
 
         Ok(())
     }
@@ -370,15 +394,19 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             .get(&(msg.device_id, msg.message_type.into()))
         {
             cms.iter()
-                .filter(|cm| {
+                .enumerate()
+                .filter(|(_, cm)| {
                     let ControlMatchers::Midi(cm) = cm else { unreachable!() };
                     msg.matches_control_matcher(cm)
                 })
-                .for_each(|cm| cm.set_last_known_io(msg.get_value()));
-            if mappings.len() > 0 {
-                self.router_buff_mappings_to_execute.extend(mappings);
-                self.run_mappings__(msg.device_id);
-            }
+                .for_each(|(cm_idx, cm)| {
+                    cm.set_last_known_io(msg.get_value());
+                    if mappings.len() > 0 {
+                        self.router_buff_mappings_to_execute.extend(&mappings[cm_idx]);
+                    }
+                });
+
+            self.run_mappings__(msg.device_id);
         }
     }
 
@@ -394,17 +422,21 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                 .router_index_sysdev_and_ctl_type_to_cms_and_mappings
                 .get(&(device_id, control_type))
         {
-            cms.iter().for_each(|cm| cm.set_last_known_io(value));
-            if mappings.len() > 0 {
-                self.router_buff_mappings_to_execute.extend(mappings);
-                self.run_mappings__(device_id);
-            }
+            cms.iter().enumerate().for_each(|(cm_idx, cm)| {
+                cm.set_last_known_io(value);
+                if mappings.len() > 0 {
+                    self.router_buff_mappings_to_execute.extend(&mappings[cm_idx]);
+                }
+            });
+
+            self.run_mappings__(device_id);
         }
     }
 
     fn run_mappings__(&mut self, triggering_device_id: ObjId) {
         self.router_buff_mappings_to_execute.sort();
         self.router_buff_mappings_to_execute.dedup();
+        self.router_buff_mappings_to_execute.shuffle(&mut rand::rng());
         for mapping_idx in &self.router_buff_mappings_to_execute {
             let mapping = &self.cfg.mappings[*mapping_idx];
             self.execute_mapping_on_active_input(triggering_device_id, mapping, mapping.src.get_last_known_io());
