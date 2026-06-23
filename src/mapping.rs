@@ -1092,7 +1092,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         let delta: BaseNumT = vd.interval.map_to_symm_unit(value, OutOfRangePolicy::Clamp);
 
         if let Some(acc) = &steering.accumulator {
-            state.pre_filter = self.get_dyn_value(SYMM_UNIT_INTERVAL, acc);
+            state.pre_filter = self.get_and_remap_dyn_value(SYMM_UNIT_INTERVAL, acc);
         }
 
         state.pre_filter = SYMM_UNIT_INTERVAL.clamp(state.pre_filter.add(delta));
@@ -1322,7 +1322,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         }
     }
 
-    fn get_dyn_value(&self, tgt_interval: NumInterval<BaseNumT>, val_ref: &DynValueRefs) -> BaseNumT {
+    fn get_and_remap_dyn_value(&self, tgt_interval: NumInterval<BaseNumT>, val_ref: &DynValueRefs) -> BaseNumT {
         tgt_interval.map_from(
             val_ref.get_numeric_value(),
             &val_ref.get_interval(),
