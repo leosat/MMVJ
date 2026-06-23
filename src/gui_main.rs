@@ -147,10 +147,12 @@ pub(crate) fn run(
                         // dbg!(&saved);
                         log::info!("Restoring Gui state ... ");
                         app.from_saved_state(&saved);
+                        log::info!("Done restoring Gui state ... ");
                     }
                 } else {
                     log::warn!("Persistent storage is not accessible, will not restore Gui state.");
                 }
+                app.show_monitors |= monitors_only;
                 Ok(Box::new(app))
             }),
         )
