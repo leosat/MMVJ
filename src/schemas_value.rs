@@ -91,25 +91,9 @@ impl<ValueT: NumIntervalValue> _WithRelativityMut for MappedValue<ValueT> {
 }
 
 impl<ValueT: NumIntervalValue> WithNumInterval for MappedValue<ValueT> {
-    type IntervalT = NumInterval<ValueT>;
-
-    fn get_interval(&self) -> Self::IntervalT {
+    type ValueT = ValueT;
+    fn get_interval(&self) -> NumInterval<Self::ValueT> {
         self.interval
-    }
-
-    fn _set_interval(&mut self, interval: Self::IntervalT) {
-        self.interval = interval
-    }
-}
-
-impl<ValueT: NumIntervalValue> _WithNumIntervalRef for MappedValue<ValueT> {
-    type IntervalT = NumInterval<ValueT>;
-    fn _interval_ref(&self) -> &Self::IntervalT {
-        &self.interval
-    }
-
-    fn interval_mut(&mut self) -> &mut Self::IntervalT {
-        &mut self.interval
     }
 }
 
@@ -170,15 +154,13 @@ pub(crate) trait WithNumericValueSettable {
 }
 
 pub(crate) trait WithNumInterval {
-    type IntervalT;
-    fn get_interval(&self) -> Self::IntervalT;
-    fn _set_interval(&mut self, interval: Self::IntervalT);
+    type ValueT: NumIntervalValue;
+    fn get_interval(&self) -> NumInterval<Self::ValueT>;
 }
 
-pub(crate) trait _WithNumIntervalRef {
-    type IntervalT;
-    fn _interval_ref(&self) -> &Self::IntervalT;
-    fn interval_mut(&mut self) -> &mut Self::IntervalT;
+pub(crate) trait WithNumIntervalMut {
+    type ValueT: NumIntervalValue;
+    fn interval_mut(&mut self) -> &mut NumInterval<Self::ValueT>;
 }
 
 pub mod variable_value_serde {
@@ -223,6 +205,13 @@ pub(crate) struct VariableState {
     #[serde(skip)]
     #[traverse(skip)]
     _dst_refs_count: Arc<CachePadded<AtomicUsize>>,
+}
+
+impl WithNumIntervalMut for VariableState {
+    type ValueT = BaseNumT;
+    fn interval_mut(&mut self) -> &mut NumInterval<Self::ValueT> {
+        &mut self.interval
+    }
 }
 
 impl PartialEq for VariableState {
@@ -273,28 +262,11 @@ impl WithRelativity for VariableState {
     }
 }
 
-impl _WithNumIntervalRef for VariableState {
-    fn _interval_ref(&self) -> &Self::IntervalT {
-        &self.interval
-    }
-
-    fn interval_mut(&mut self) -> &mut Self::IntervalT {
-        &mut self.interval
-    }
-
-    type IntervalT = NumInterval<BaseNumT>;
-}
-
 impl WithNumInterval for VariableState {
-    fn get_interval(&self) -> Self::IntervalT {
+    type ValueT = BaseNumT;
+    fn get_interval(&self) -> NumInterval<Self::ValueT> {
         self.interval
     }
-
-    fn _set_interval(&mut self, interval: Self::IntervalT) {
-        self.interval = interval
-    }
-
-    type IntervalT = NumInterval<BaseNumT>;
 }
 
 #[derive(JsonSchema, Debug, Clone, Deserialize, Serialize, PartialEq, TraversableMut, Traversable)]
@@ -425,20 +397,13 @@ impl ToString for &DynValueRefs {
 
 // -------
 impl WithNumInterval for DynValueRefs {
-    type IntervalT = NumInterval<BaseNumT>;
+    type ValueT = BaseNumT;
 
-    fn get_interval(&self) -> Self::IntervalT {
+    fn get_interval(&self) -> NumInterval<Self::ValueT> {
         match self {
             DynValueRefs::DeviceControlMatcher(d) => d.control_matcher.get_interval(),
             DynValueRefs::Variable(v) => v.variable.get_interval(),
         }
-    }
-
-    fn _set_interval(&mut self, _interval: Self::IntervalT) {
-        unreachable!(
-            "Setting interval on dyn value ref makes no sense,
-        separate this method into separate trate."
-        ) // TODO: move this method into separate trait.
     }
 }
 
@@ -455,7 +420,8 @@ impl WithRelativity for ValueSrcs {
 }
 
 impl WithNumInterval for ValueSrcs {
-    fn get_interval(&self) -> NumInterval<BaseNumT> {
+    type ValueT = BaseNumT;
+    fn get_interval(&self) -> NumInterval<Self::ValueT> {
         match self {
             Self::Static(s) => s.interval,
             Self::Dynamic(dvr) => match dvr {
@@ -464,15 +430,6 @@ impl WithNumInterval for ValueSrcs {
             },
         }
     }
-
-    fn _set_interval(&mut self, _interval: NumInterval<BaseNumT>) {
-        match self {
-            Self::Static(s) => s.interval = _interval,
-            Self::Dynamic(_) => {}
-        }
-    }
-
-    type IntervalT = NumInterval<BaseNumT>;
 }
 
 impl DynValueRefs {

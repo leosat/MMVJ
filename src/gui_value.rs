@@ -14,8 +14,8 @@ use crate::{
     schemas_hid::HidDeviceCfg,
     schemas_transform::AutoOrManual,
     schemas_value::{
-        _WithNumIntervalRef, DeviceControlMatcherRef, DynValueRefs, ValueDsts, ValueSrcs, ValuesRt, VariableState,
-        WithLastKnownIO, WithNumInterval, WithNumericValue, WithRelativity,
+        DeviceControlMatcherRef, DynValueRefs, ValueDsts, ValueSrcs, ValuesRt, VariableState, WithLastKnownIO,
+        WithNumInterval, WithNumIntervalMut, WithNumericValue, WithRelativity,
     },
 };
 

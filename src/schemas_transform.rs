@@ -59,10 +59,6 @@ const fn default_clamp_transform_override_interval() -> bool {
     true
 }
 
-const fn default_steering_transform_counts_to_lock() -> BaseNumT {
-    600.0
-}
-
 const fn default_steering_smoothing_alpha() -> BaseNumT {
     0.33
 }
@@ -1111,7 +1107,6 @@ impl TfmSeqCfg {
                             interval: SYMM_UNIT_INTERVAL,
                             relativity: Relativity::Abs,
                         }));
-                    steering.counts_to_lock._set_interval(STEERING_LOCK_TO_LOCK_INTERVAL);
                     if let Some(ff) = &mut steering.force_feedback {
                         ff.transformation
                             .recompute_metadata(AutoOrManual::Auto(InputValueMetadata {
@@ -1398,15 +1393,10 @@ impl<T: std::default::Default> DerefMut for AutoOrManual<T> {
 }
 
 impl WithNumInterval for TfmSeqCfg {
-    fn get_interval(&self) -> Self::IntervalT {
+    type ValueT = BaseNumT;
+    fn get_interval(&self) -> NumInterval<Self::ValueT> {
         self.in_meta.interval
     }
-
-    fn _set_interval(&mut self, interval: Self::IntervalT) {
-        self.in_meta.interval = interval;
-    }
-
-    type IntervalT = NumInterval<BaseNumT>;
 }
 
 impl WithRuntimeId for TfmSeqCfg {
@@ -1431,10 +1421,6 @@ pub(crate) struct SteeringCfg {
     #[serde(default = "default_step_enabled")]
     #[garde(skip)]
     pub(crate) enabled: bool,
-    // #[garde(range(min = 0.0))]
-    #[garde(skip)]
-    #[serde(skip)]
-    pub(crate) counts_to_lock: ValueSrcs,
     #[garde(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1467,19 +1453,10 @@ pub(crate) struct SteeringCfg {
     pub(crate) integrated_user_input_transform: TfmSeqCfg,
 }
 
-pub(crate) const STEERING_LOCK_TO_LOCK_INTERVAL: NumInterval<BaseNumT> = NumInterval::<BaseNumT> {
-    from: 0 as BaseNumT,
-    to: 5000 as BaseNumT,
-};
-
 impl Default for SteeringCfg {
     fn default() -> Self {
         Self {
             enabled: default_step_enabled(),
-            counts_to_lock: ValueSrcs::Static(StaticValueCfg {
-                value: default_steering_transform_counts_to_lock(),
-                interval: STEERING_LOCK_TO_LOCK_INTERVAL,
-            }),
             deadzone_counts: 0.0,
             input_gain: ValueSrcs::Static(StaticValueCfg {
                 value: default_steering_smoothing_alpha(),
