@@ -507,7 +507,7 @@ impl<T: NumIntervalValue> NumInterval<T> {
         out_of_range_policy: OutOfRangePolicy,
     ) -> T {
         self.map_from_unit(
-            input_interval.map_to_unit::<f64>(value, out_of_range_policy),
+            input_interval.map_to_unit::<BaseNumT>(value, out_of_range_policy),
             out_of_range_policy,
         )
     }

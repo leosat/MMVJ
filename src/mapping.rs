@@ -12,7 +12,7 @@ use crate::mapped_controls::MappedCtls;
 use crate::mapped_device::{MappedDeviceEvent, MappedEvents, MappedHidEvent};
 #[cfg(feature = "midi")]
 use crate::midi::{MappedMidiMessage, MidiManager};
-use crate::num_interval::{NumInterval, OutOfRangePolicy};
+use crate::num_interval::{NumInterval, NumIntervalValue, OutOfRangePolicy};
 use crate::schemas_cfg::Config;
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_control_matcher::ControlMatchers;
@@ -25,9 +25,10 @@ use crate::schemas_transform::{
 };
 use crate::schemas_value::WithRelativity;
 use crate::schemas_value::{
-    DynValueRefs, ValueDsts, ValueSrcs, WithLastKnownIOSettable, WithNumInterval, WithNumericValueSettable,
+    DynValueRefs, ValueDsts, WithLastKnownIOSettable, WithNumInterval, WithNumericValueSettable,
 };
 use crate::schemas_value::{MappedValue, WithNumericValue};
+
 #[cfg(feature = "gui")]
 use crate::tracing::GraphDisplayStyle;
 use anyhow::Result;
@@ -494,7 +495,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                 continue;
             }
 
-            let idle_in_value = self.get_and_remap_value(mapping.src.get_interval(), &mapping.src);
+            let idle_in_value = mapping.src.get_numeric_value();
 
             mapping.set_last_known_io((Some(idle_in_value), None));
 
@@ -713,8 +714,11 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                 let _ = inputs.set("is_idle_tick", is_idle_tick);
                 let _ = inputs.set(0, vd.value);
                 for (idx, (name, src)) in script_cfg.aux_srcs.iter().enumerate() {
-                    let input_val = self
-                        .get_and_remap_value(src.remap_to_interval.unwrap_or(src.source.get_interval()), &src.source);
+                    let mut input_val = src.source.get_numeric_value();
+                    src.remap_to_interval.inspect(|to_interval| {
+                        input_val =
+                            to_interval.map_from(input_val, &src.source.get_interval(), OutOfRangePolicy::WarnAndClamp)
+                    });
 
                     let _ = inputs.set(idx + 1, input_val).inspect_err(|e| log::error!("{e}"));
                     let _ = inputs.set(name.as_str(), input_val).inspect_err(|e| log::error!("{e}"));
@@ -1083,16 +1087,28 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                 post_filter: 0.0,
             });
 
-        let value = vd.value * self.get_and_remap_value(UNIT_INTERVAL, &steering.input_gain);
+        let value = vd.value
+            * UNIT_INTERVAL.map_from(
+                steering.input_gain.get_numeric_value(),
+                &steering.input_gain.get_interval(),
+                OutOfRangePolicy::WarnAndClamp,
+            );
 
-        let auto_center_along_force_feedback =
-            self.get_and_remap_value(UNIT_INTERVAL, &steering.auto_center_along_force_feedback);
+        let auto_center_along_force_feedback = UNIT_INTERVAL.map_from(
+            steering.auto_center_along_force_feedback.get_numeric_value(),
+            &steering.auto_center_along_force_feedback.get_interval(),
+            OutOfRangePolicy::WarnAndClamp,
+        );
 
         let dt = (now - state.last_time).as_secs_f32() as BaseNumT;
         let delta: BaseNumT = vd.interval.map_to_symm_unit(value, OutOfRangePolicy::Clamp);
 
         if let Some(acc) = &steering.accumulator {
-            state.pre_filter = self.get_and_remap_dyn_value(SYMM_UNIT_INTERVAL, acc);
+            state.pre_filter = SYMM_UNIT_INTERVAL.map_from(
+                acc.get_numeric_value(),
+                &acc.get_interval(),
+                OutOfRangePolicy::WarnAndClamp,
+            );
         }
 
         state.pre_filter = SYMM_UNIT_INTERVAL.clamp(state.pre_filter.add(delta));
@@ -1157,16 +1173,22 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             now,
         );
 
-        let hold_factor_unit = self
-            .get_and_remap_value(UNIT_INTERVAL, &steering.hold_factor)
-            .clamp(0.0, 1.0);
+        let hold_factor_unit = UNIT_INTERVAL.map_from(
+            steering.hold_factor.get_numeric_value(),
+            &steering.hold_factor.get_interval(),
+            OutOfRangePolicy::WarnAndClamp,
+        );
 
         '_FFB_and_autocentering: {
             // TODO: perf: profile.
             let ff_force_symm_norm = if let Some(ff_config) = &steering.force_feedback {
                 if ff_config.enabled {
                     let raw_force = if let Some(custom_src) = &ff_config.custom_source {
-                        self.get_and_remap_value(SYMM_UNIT_INTERVAL, custom_src)
+                        SYMM_UNIT_INTERVAL.map_from(
+                            custom_src.get_numeric_value(),
+                            &custom_src.get_interval(),
+                            OutOfRangePolicy::WarnAndClamp,
+                        )
                     } else {
                         match &mapping.dst {
                             ValueDsts::Void => 0.0,
@@ -1254,10 +1276,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                 );
             }
 
-            let autocentering_halflife = self.get_and_remap_value(
-                steering.auto_center_halflife.get_interval(),
-                &steering.auto_center_halflife,
-            );
+            let autocentering_halflife = steering.auto_center_halflife.get_numeric_value().abs();
 
             let ffb_is_small = ff_force_symm_norm.abs() < 1e-4;
 
@@ -1322,22 +1341,6 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         }
     }
 
-    fn get_and_remap_dyn_value(&self, tgt_interval: NumInterval<BaseNumT>, val_ref: &DynValueRefs) -> BaseNumT {
-        tgt_interval.map_from(
-            val_ref.get_numeric_value(),
-            &val_ref.get_interval(),
-            OutOfRangePolicy::WarnAndClamp,
-        )
-    }
-
-    fn get_and_remap_value(&self, tgt_interval: NumInterval<BaseNumT>, val_ref: &ValueSrcs) -> BaseNumT {
-        tgt_interval.map_from(
-            val_ref.get_numeric_value(),
-            &val_ref.get_interval(),
-            OutOfRangePolicy::WarnAndClamp,
-        )
-    }
-
     fn apply_raise_fall(
         &self,
         state_id: ObjId,
@@ -1382,7 +1385,11 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                 let rate_limit = if delta_v > 0.0 {
                     raise_fall.raise_rate
                 } else {
-                    let mut fall_hold_factor = self.get_and_remap_value(UNIT_INTERVAL, &raise_fall.fall_hold_factor);
+                    let mut fall_hold_factor = UNIT_INTERVAL.map_from(
+                        raise_fall.fall_hold_factor.get_numeric_value(),
+                        &raise_fall.fall_hold_factor.get_interval(),
+                        OutOfRangePolicy::WarnAndClamp,
+                    );
 
                     if raise_fall.invert_fall_hold_factor {
                         fall_hold_factor = UNIT_INTERVAL.clamp_and_invert(fall_hold_factor);
