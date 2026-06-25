@@ -1,11 +1,5 @@
-use crate::common::{
-    BaseNumT, DeviceManager, Relativity, SYMM_UNIT_INTERVAL, UNIT_INTERVAL, get_interned_str, intern_str,
-};
+use crate::common::{BaseNumT, DeviceManager, get_debug_level, get_interned_str, intern_str};
 use crate::config::DebugLevel;
-use crate::curves::Curves;
-use crate::filters::OneEuroFilter;
-#[cfg(feature = "gui")]
-use crate::gui_transform_step::{self, TfmStepTraceStage};
 use crate::hid_device::HidDeviceKind;
 use crate::hid_manager::{HidManager, WithDeviceClassification};
 use crate::mapped_controls::MappedCtls;
@@ -18,59 +12,22 @@ use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_control_matcher::ControlMatchers;
 
 use crate::schemas_mapping::Mapping;
-use crate::schemas_transform::{
-    DynValFilter, EmaFilterCfg, ForceFeedbackComponent, HighPassCfg, IntegrateCfg, LinearCfg, NormExpCfg,
-    OneEuroFilterCfg, RaiseFallCfg, SCurveCfg, ScriptCfg, SignedPowerCfg, SteeringCfg, TfmSeqCfg, TfmStepCfg,
-    collect_dynamic_value_matchers,
-};
-use crate::schemas_value::WithRelativity;
+use crate::schemas_transform::{DynValFilter, ScriptCfg, collect_dynamic_value_matchers};
 use crate::schemas_value::{
     DynValueRefs, ValueDsts, WithLastKnownIOSettable, WithNumInterval, WithNumericValueSettable,
 };
 use crate::schemas_value::{MappedValue, WithNumericValue};
+use crate::schemas_value::{ValueSrcs, WithRelativity};
 
-#[cfg(feature = "gui")]
-use crate::tracing::GraphDisplayStyle;
+use crate::tfm_exec::{TfmExeState, TfmExecCtx, WithTfmExec};
 use anyhow::Result;
-#[cfg(feature = "gui")]
-use eframe::egui::Color32;
 use log::{debug, info, warn};
-use mlua::Lua;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::fs;
-use std::ops::Add;
 use std::sync::atomic::Ordering::Relaxed;
-use std::time::Instant;
 use tokio::select;
 use tokio::time::{Duration, MissedTickBehavior, interval};
-use unchecked_refcell::{UncheckedRefCell, UncheckedRefMut};
-
-#[derive(Clone)]
-pub(crate) struct ScriptMappingState {
-    #[allow(unused)]
-    pub(crate) lua: Lua,
-    pub(crate) inputs: mlua::Table,
-    pub(crate) outputs: mlua::Table,
-    pub(crate) compiled: mlua::Function,
-}
-
-#[derive(Clone, Copy)]
-struct SteeringMappingState {
-    last_time: Instant,
-    pre_filter: BaseNumT,
-    post_filter: BaseNumT,
-}
-
-struct RaiseFallMappingState {
-    prev_out: BaseNumT,
-    last_target: BaseNumT,
-    prev_out_time: Option<Instant>,
-    prev_user_input_time: Option<Instant>,
-}
-
-struct IntegrateMappingState {
-    prev_val: BaseNumT,
-}
+use traversable::Traversable;
 
 pub(crate) struct MappingEngine<'driver_loop> {
     running: bool,
@@ -93,13 +50,6 @@ pub(crate) struct MappingEngine<'driver_loop> {
     info_sysdev_to_enabled_mappings: HashMap<ObjId, Vec<usize>>, // NB: this is only used in mappings init routine, but leaving here for potential future use in other places.
     // ---
     idle_tick_mappings: Vec<usize>,
-    // ---
-    one_euro_filter_state: UncheckedRefCell<HashMap<ObjId, crate::filters::OneEuroFilter>>,
-    raise_fall_state: UncheckedRefCell<HashMap<ObjId, RaiseFallMappingState>>,
-    integrate_state: UncheckedRefCell<HashMap<ObjId, IntegrateMappingState>>,
-    steering_state: UncheckedRefCell<HashMap<ObjId, SteeringMappingState>>,
-    ema_state: UncheckedRefCell<HashMap<ObjId, crate::filters::EmaFilter>>,
-    script_state: UncheckedRefCell<HashMap<ObjId, ScriptMappingState>>,
 }
 
 impl<'driver_loop> MappingEngine<'driver_loop> {
@@ -129,13 +79,6 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             info_sysdev_to_enabled_mappings: Default::default(),
             // ---
             idle_tick_mappings: Default::default(),
-            // ---
-            integrate_state: Default::default(),
-            steering_state: Default::default(),
-            raise_fall_state: Default::default(),
-            one_euro_filter_state: Default::default(),
-            ema_state: Default::default(),
-            script_state: Default::default(),
         })
     }
 
@@ -171,6 +114,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
     pub(crate) fn init(&mut self) -> Result<()> {
         info!("Initializing mapping engine router.");
 
+        self.scripting_cache_reset();
         self.idle_tick_mappings_reset();
 
         // ---
@@ -327,15 +271,17 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
     }
 
     pub(crate) fn scripting_cache_reset(&mut self) {
-        self.script_state.borrow_mut().clear();
-    }
-
-    pub(crate) fn _filters_state_reset(&mut self) {
-        self.one_euro_filter_state.borrow_mut().clear();
-        self.ema_state.borrow_mut().clear();
-        self.integrate_state.borrow_mut().clear();
-        self.raise_fall_state.borrow_mut().clear();
-        self.steering_state.borrow_mut().clear();
+        struct ScripCacheResetVisitor {}
+        impl traversable::Visitor for ScripCacheResetVisitor {
+            type Break = ();
+            fn enter(&mut self, this: &dyn core::any::Any) -> std::ops::ControlFlow<Self::Break> {
+                if let Some(s) = this.downcast_ref::<ScriptCfg>() {
+                    s.exe_state_reset(());
+                }
+                std::ops::ControlFlow::Continue(())
+            }
+        }
+        let _ = self.cfg.mappings.traverse(&mut ScripCacheResetVisitor {});
     }
 
     pub(crate) async fn run(&mut self) {
@@ -516,22 +462,6 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         }
     }
 
-    #[cfg(feature = "gui")]
-    fn gui_trace_transform_step(
-        &self,
-        stage: gui_transform_step::TfmStepTraceStage,
-        step_ref: &TfmStepCfg,
-        vd: &MappedValue<BaseNumT>,
-    ) {
-        match stage {
-            TfmStepTraceStage::In => step_ref.get_state().last_in.store(vd.value as f32, Relaxed),
-            TfmStepTraceStage::Out => step_ref.get_state().last_out.store(vd.value as f32, Relaxed),
-            _ => {}
-        }
-
-        step_ref.get_state().gui_trace(stage, vd, Instant::now());
-    }
-
     fn apply_transformation_for_mapping(
         &self,
         runtime_input_device_id: ObjId,
@@ -539,43 +469,10 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         value: BaseNumT,
         is_idle_tick: bool,
     ) -> BaseNumT {
-        let (src_interval, src_relativity) = (mapping.src.get_interval(), mapping.src.get_relativity());
-
-        let src_interval = src_interval.cast::<BaseNumT>().expect(
-            "Failed to cast source contol interval to BaseNumericT-based interval\
-                which should not happen unless error in implementation.",
-        );
-
-        let dst_interval = mapping.dst.get_interval();
-
-        self.apply_transformation(
-            mapping,
-            &mapping.transformation,
-            runtime_input_device_id,
-            src_interval,
-            Some(dst_interval),
-            value,
-            src_relativity,
-            is_idle_tick,
-        )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn apply_transformation(
-        &self,
-        mapping: &Mapping,
-        transfomation: &TfmSeqCfg,
-        runtime_input_device_id: ObjId,
-        src_interval: NumInterval<BaseNumT>,
-        dst_interval: Option<NumInterval<BaseNumT>>,
-        value: BaseNumT,
-        is_relative: Relativity,
-        is_idle_tick: bool,
-    ) -> BaseNumT {
         let mut vd = MappedValue::<BaseNumT> {
             value,
-            interval: src_interval,
-            relativity: is_relative,
+            interval: mapping.src.get_interval(),
+            relativity: mapping.src.get_relativity(),
         };
 
         if !vd.interval.contains_inclusive(vd.value) {
@@ -593,713 +490,22 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             vd.value = vd.interval.clamp(vd.value);
         }
 
-        for step in transfomation.steps.iter() {
-            vd = self.apply_transformation_step(mapping, step, vd, is_idle_tick);
-        }
+        vd = mapping.transformation.exec(
+            vd,
+            &mut MappingTfmExecCtx {
+                mapping_engine: self,
+                current_mapping_src: &mapping.src,
+                current_mapping_dst: &mapping.dst,
+                is_idle_tick,
+            },
+        );
 
-        if let Some(dst_interval) = dst_interval
-            && vd.interval != dst_interval
-        {
+        let dst_interval = mapping.dst.get_interval();
+        if vd.interval != dst_interval {
             vd.value = dst_interval.map_from(vd.value, &vd.interval, OutOfRangePolicy::WarnAndClamp);
         }
 
         vd.value
-    }
-
-    fn apply_script(
-        &self,
-        step_id: ObjId,
-        script_cfg: &ScriptCfg,
-        mapping: &Mapping,
-        is_idle_tick: bool,
-        mut vd: MappedValue<BaseNumT>,
-    ) -> MappedValue<BaseNumT> {
-        match script_cfg.lang {
-            crate::schemas_transform::ScriptLanguage::Luau => {
-                self.script_state.borrow_mut().entry(step_id).or_insert_with(|| {
-                    if self.debug.is_on() {
-                        log::debug!("Compiling Luau script referenced in mapping {}", &mapping.name);
-                    }
-                    let lua = Lua::new();
-                    let inputs = lua.create_table().unwrap();
-                    let outputs = lua.create_table().unwrap();
-                    let aux_tfm_idx = lua.create_table().unwrap();
-                    let compiled = lua
-                        .load(&script_cfg.script)
-                        .into_function()
-                        .inspect_err(|e| log::error!("{e}"))
-                        .unwrap_or(lua.load(" ").into_function().unwrap());
-                    let mapping_engine_ptr = self as *const Self as *const ();
-                    let mapping_ptr = mapping as *const _ as *const ();
-                    let tfms_ptr = &script_cfg.aux_transformations as *const _ as *const ();
-                    let run_tfm_func = lua
-                        .create_function(
-                            move |_, args: (usize, BaseNumT)| -> std::result::Result<BaseNumT, mlua::Error> {
-                                let tfm_idx = args.0;
-                                let input_value = args.1;
-                                // SAFETY: scripting cache MUST be reset (scripting_cache_reset())
-                                // whenever configuration is updated beyond trivial changes like parameter values changes.
-                                let mapping_engine: &Self = unsafe { &*(mapping_engine_ptr as *const Self) };
-                                let mapping: &Mapping = unsafe { &*(mapping_ptr as *const Mapping) };
-                                let tfms = unsafe { &*(tfms_ptr as *const BTreeMap<String, TfmSeqCfg>) };
-                                if tfm_idx < tfms.len() {
-                                    let tfm = tfms.values().nth(tfm_idx).unwrap();
-                                    Ok(mapping_engine.apply_transformation(
-                                        mapping,
-                                        tfm,
-                                        // ObjId::from(INTERNER.get_or_intern(&mapping.name).into_usize()), // TODO: perf?
-                                        ObjId::from(usize::MAX),
-                                        tfm.get_interval(),
-                                        None,
-                                        input_value,
-                                        tfm.get_relativity(),
-                                        is_idle_tick,
-                                    ))
-                                } else {
-                                    Err(mlua::Error::RuntimeError(format!(
-                                        "Referenced transformation {} is not found. \
-                                Total transformations available for the script: {}, indexing starting from 0 ",
-                                        tfm_idx,
-                                        tfms.len()
-                                    )))
-                                }
-                            },
-                        )
-                        .unwrap();
-                    let _ = lua
-                        .globals()
-                        .set("transform", run_tfm_func)
-                        .inspect_err(|e| log::error!("{e}"));
-                    let _ = lua
-                        .globals()
-                        .set("inputs", inputs.clone())
-                        .inspect_err(|e| log::error!("{e}"));
-                    let _ = lua
-                        .globals()
-                        .set("outputs", outputs.clone())
-                        .inspect_err(|e| log::error!("{e}"));
-
-                    let _ = inputs.set("idle_tick_rate", self.get_idle_tick_rate());
-
-                    for (idx, (name, _)) in script_cfg.aux_transformations.iter().enumerate() {
-                        // let _ = lua.globals().set(name.as_str(), idx);
-                        let _ = aux_tfm_idx.set(name.as_str(), idx);
-                    }
-                    let _ = lua
-                        .globals()
-                        .set("aux_tfm_idx", aux_tfm_idx)
-                        .inspect_err(|e| log::error!("{e}"));
-
-                    ScriptMappingState {
-                        lua,
-                        inputs,
-                        outputs,
-                        compiled,
-                    }
-                });
-
-                let (inputs, outputs, compiled) = {
-                    let data = self.script_state.borrow();
-                    let script_data = data.get(&step_id).unwrap();
-                    (
-                        script_data.inputs.clone(),
-                        script_data.outputs.clone(),
-                        script_data.compiled.clone(),
-                    )
-                };
-
-                // -----------------------------------
-                // Set runtime inputs.
-                // -----------------------------------
-                let _ = inputs.set("is_idle_tick", is_idle_tick);
-                let _ = inputs.set(0, vd.value);
-                for (idx, (name, src)) in script_cfg.aux_srcs.iter().enumerate() {
-                    let mut input_val = src.source.get_numeric_value();
-                    src.remap_to_interval.inspect(|to_interval| {
-                        input_val =
-                            to_interval.map_from(input_val, &src.source.get_interval(), OutOfRangePolicy::WarnAndClamp)
-                    });
-
-                    let _ = inputs.set(idx + 1, input_val).inspect_err(|e| log::error!("{e}"));
-                    let _ = inputs.set(name.as_str(), input_val).inspect_err(|e| log::error!("{e}"));
-                    //let _ = lua.globals().set(name.as_str(), input_val).inspect_err(|e| log::error!("{e}"));
-                }
-
-                if let Err(e) = compiled.call::<()>(()) {
-                    log::error!("{e} ");
-                } else {
-                    // -----------------------------------
-                    // Set outputs.
-                    // -----------------------------------
-                    vd.value = outputs.get(0).unwrap_or(vd.value);
-                    for (idx, (name, dst)) in script_cfg.aux_dsts.iter().enumerate() {
-                        match &dst.destination {
-                            ValueDsts::Void => {}
-                            ValueDsts::Dynamic(dynamic_value_refs_rt) => {
-                                if let Ok(mut out) = outputs.get(name.as_str()).or(outputs.get(idx + 1)) {
-                                    if let Some(from_interval) = dst.remap_from_interval {
-                                        out = dst.destination.get_interval().map_from(
-                                            out,
-                                            &from_interval,
-                                            OutOfRangePolicy::WarnAndClamp,
-                                        );
-                                    }
-                                    self.set_dyn_value(dynamic_value_refs_rt, out, self.debug);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // let _ = inputs.clear();
-                let _ = outputs.clear();
-
-                // -----------------------------------
-                vd.relativity = script_cfg.output_relativity.unwrap_or(vd.relativity);
-            }
-        }
-
-        vd
-    }
-
-    fn apply_transformation_step(
-        &self,
-        mapping: &Mapping,
-        step: &TfmStepCfg,
-        mut vd: MappedValue<BaseNumT>,
-        is_idle_tick: bool,
-    ) -> MappedValue<BaseNumT> {
-        #[cfg(feature = "gui")]
-        self.gui_trace_transform_step(gui_transform_step::TfmStepTraceStage::In, step, &vd);
-
-        match step {
-            TfmStepCfg::Nop(_) => {}
-            TfmStepCfg::Script(script) => {
-                if script.enabled {
-                    vd = self.apply_script(step.get_id(), script, mapping, is_idle_tick, vd);
-                    vd.interval = step.get_state().get_out_interval();
-                }
-            }
-            TfmStepCfg::Invert(invert) => {
-                if invert.enabled {
-                    vd.value = self.apply_invert(vd.to_owned());
-                }
-            }
-            TfmStepCfg::Integrate(integrate) => {
-                if integrate.enabled {
-                    // assert!(
-                    //     vd.is_relative == Relativity::Rel,
-                    //     "Integrate transform must only be applied to relative inputs."
-                    // );
-                    if !is_idle_tick || integrate.on_idle {
-                        vd = self.apply_integrate(step.get_id(), integrate, vd.value)
-                    }
-                }
-            }
-            TfmStepCfg::Clamp(clamp) => {
-                if clamp.enabled {
-                    let in_interval = vd.interval;
-                    vd.value = clamp.get_clamping_interval(in_interval).clamp(vd.value);
-                    vd.interval = clamp.get_out_interval(in_interval);
-                    // Clamping interval may not contain current value, for now this is not an error.
-                    // In such a case the above clamping is a nop.
-                    // If we override out interval with clamping interval the value will not fit,
-                    // so we need to clamp value to the out interval also.
-                    vd.value = vd.interval.clamp(vd.value);
-                }
-            }
-            TfmStepCfg::Steering(steering) => {
-                if steering.enabled {
-                    // if vd.relativity.into() {
-                    //     warn!("Steering transform should only be applied to relative inputs.");
-                    // }
-                    vd = self.apply_steering(mapping, step, steering, vd, Instant::now(), is_idle_tick);
-                }
-            }
-            TfmStepCfg::RaiseFall(raise_fall) => {
-                if raise_fall.enabled {
-                    if vd.relativity != Relativity::Abs {
-                        log::warn!("Raise-fall transform should only be applied to absolute inputs.");
-                    }
-                    vd = self.apply_raise_fall(step.get_id(), raise_fall, vd, is_idle_tick);
-                }
-            }
-            TfmStepCfg::Ema(ema_filter) => {
-                if ema_filter.enabled
-                    && (!is_idle_tick || vd.relativity == Relativity::Abs || ema_filter.on_relative_input_feed_on_idle)
-                {
-                    vd.value = self.apply_ema_filter(step.get_id(), ema_filter, vd.value)
-                } else if ema_filter.on_relative_input_reset_on_idle {
-                    self.reset_ema_filter(step.get_id(), vd.value);
-                }
-            }
-            TfmStepCfg::Linear(linear) => {
-                if linear.enabled && (!is_idle_tick || linear.on_idle) {
-                    vd.value = self.apply_linear(linear, vd.value, vd.interval);
-                }
-            }
-            TfmStepCfg::Smoothstep(smoothstep_curve) => {
-                if smoothstep_curve.enabled && (!is_idle_tick || smoothstep_curve.on_idle) {
-                    vd.value = self.apply_smoothstep(vd.value, vd.interval);
-                }
-            }
-            TfmStepCfg::SCurve(s_curve) => {
-                if s_curve.enabled && (!is_idle_tick || s_curve.on_idle) {
-                    vd.value = self.apply_s_curve(s_curve, vd.value, vd.interval);
-                }
-            }
-            TfmStepCfg::Exp(exp) => {
-                if exp.enabled && (!is_idle_tick || exp.on_idle) {
-                    vd.value = self.apply_norm_exp_curve(exp, vd.value, vd.interval);
-                }
-            }
-            TfmStepCfg::SignedPower(signed_power_curve) => {
-                if signed_power_curve.enabled && (!is_idle_tick || signed_power_curve.on_idle) {
-                    vd.value = self.apply_signed_power_curve(signed_power_curve, vd.value, vd.interval);
-                }
-            }
-            TfmStepCfg::OneEuro(one_euro) => {
-                if one_euro.enabled
-                    && (!is_idle_tick || vd.relativity == Relativity::Abs || one_euro.on_relative_input_feed_on_idle)
-                {
-                    vd.value = self.apply_one_euro_filter(step.get_id(), one_euro, vd.value);
-                } else if one_euro.on_relative_input_reset_on_idle {
-                    self.reset_one_euro_filter(step.get_id(), vd.value);
-                }
-            }
-            TfmStepCfg::_HighPass(highpass) => {
-                if highpass.enabled {
-                    let __v = // Update state.
-                        self.apply_high_pass_filter(step, highpass, vd.value);
-                    if !is_idle_tick || highpass.on_idle {
-                        vd.value = __v;
-                    }
-                }
-            }
-            TfmStepCfg::_ForceFeedback(_) => {
-                log::warn!(
-                    "Standalone force feedback transform is WIP   . Currently supported only within steering transform."
-                )
-            }
-        }
-
-        if !vd.interval.contains_inclusive(vd.value) {
-            log::warn!(
-                "Value {} must fit in interval {} after transformation step ``{}'' (ID: {}). 
-            Each step must ensure it, clamping!",
-                vd.value,
-                vd.interval,
-                step,
-                step.get_id()
-            );
-            vd.value = vd.interval.clamp(vd.value);
-        }
-
-        #[cfg(feature = "gui")]
-        self.gui_trace_transform_step(gui_transform_step::TfmStepTraceStage::Out, step, &vd);
-
-        vd
-    }
-
-    fn get_ema_filter(&self, state_id: ObjId, value: BaseNumT) -> UncheckedRefMut<'_, crate::filters::EmaFilter> {
-        UncheckedRefMut::map(self.ema_state.borrow_mut(), |map| {
-            map.entry(state_id)
-                .or_insert_with(|| crate::filters::EmaFilter::new(value, Instant::now()))
-        })
-    }
-
-    fn apply_ema_filter(&self, state_id: ObjId, ema: &EmaFilterCfg, value: BaseNumT) -> BaseNumT {
-        self.get_ema_filter(state_id, value)
-            .filter(value, Instant::now(), ema.tau)
-    }
-
-    fn reset_ema_filter(&self, state_id: ObjId, value: BaseNumT) {
-        self.get_ema_filter(state_id, value).reset(value)
-    }
-
-    fn get_one_euro_filter(&self, state_id: ObjId, value: BaseNumT) -> UncheckedRefMut<'_, OneEuroFilter> {
-        UncheckedRefMut::map(self.one_euro_filter_state.borrow_mut(), |map| {
-            map.entry(state_id)
-                .or_insert(crate::filters::OneEuroFilter::new(value, Instant::now()))
-        })
-    }
-
-    fn apply_one_euro_filter(&self, state_id: ObjId, one_euro: &OneEuroFilterCfg, value: BaseNumT) -> BaseNumT {
-        self.get_one_euro_filter(state_id, value).filter(
-            value,
-            Instant::now(),
-            one_euro.min_cutoff_hz,
-            one_euro.beta,
-            one_euro.d_cutoff_hz,
-        )
-    }
-
-    fn reset_one_euro_filter(&self, state_id: ObjId, value: BaseNumT) {
-        self.get_one_euro_filter(state_id, value).reset(value)
-    }
-
-    fn apply_invert(&self, vd: MappedValue<BaseNumT>) -> BaseNumT {
-        match vd.relativity {
-            Relativity::Rel => -vd.value,
-            Relativity::Abs => vd.interval.clamp_and_invert(vd.value), // TODO?: just invert, no clamp here needed.
-        }
-    }
-
-    fn apply_linear(&self, linear: &LinearCfg, value: BaseNumT, interval: NumInterval<BaseNumT>) -> BaseNumT {
-        if linear.center_symmetric {
-            Curves::apply_center_symmetric_with_abs_value(
-                value,
-                interval,
-                |abs_v| {
-                    Curves::linear(
-                        abs_v,
-                        linear.slope,
-                        interval.map_to_symm_unit(linear.shift_x, OutOfRangePolicy::Clamp),
-                        interval.map_to_symm_unit(linear.shift_y, OutOfRangePolicy::Clamp),
-                    )
-                },
-                OutOfRangePolicy::Clamp,
-            )
-        } else {
-            interval.clamp(Curves::linear(value, linear.slope, linear.shift_x, linear.shift_y))
-        }
-    }
-
-    fn apply_smoothstep(&self, value: BaseNumT, interval: NumInterval<BaseNumT>) -> BaseNumT {
-        interval.map_from_unit(
-            Curves::smoothstep(interval.map_to_unit(value, OutOfRangePolicy::WarnAndClamp)),
-            OutOfRangePolicy::WarnAndClamp,
-        )
-    }
-
-    fn apply_s_curve(&self, s_curve: &SCurveCfg, value: BaseNumT, interval: NumInterval<BaseNumT>) -> BaseNumT {
-        interval.map_from_unit(
-            Curves::s_curve(
-                interval.map_to_unit(value, OutOfRangePolicy::WarnAndClamp),
-                s_curve.steepness,
-            ),
-            OutOfRangePolicy::WarnAndClamp,
-        )
-    }
-
-    fn apply_norm_exp_curve(&self, exp: &NormExpCfg, value: BaseNumT, interval: NumInterval<BaseNumT>) -> BaseNumT {
-        if exp.center_symmetric {
-            Curves::apply_center_symmetric_with_abs_value(
-                value,
-                interval,
-                |v_abs| Curves::exp_curve(v_abs, exp.base),
-                OutOfRangePolicy::WarnAndClamp,
-            )
-        } else {
-            interval.map_from_unit(
-                Curves::exp_curve(interval.map_to_unit(value, OutOfRangePolicy::WarnAndClamp), exp.base),
-                OutOfRangePolicy::WarnAndClamp,
-            )
-        }
-    }
-
-    fn apply_signed_power_curve(
-        &self,
-        power: &SignedPowerCfg,
-        value: BaseNumT,
-        interval: NumInterval<BaseNumT>,
-    ) -> BaseNumT {
-        if power.center_symmetric {
-            Curves::apply_center_symmetric_with_abs_value(
-                value,
-                interval,
-                |v_abs| Curves::signed_power(v_abs, power.power),
-                OutOfRangePolicy::WarnAndClamp,
-            )
-        } else {
-            interval.map_from_unit(
-                Curves::signed_power(interval.map_to_unit(value, OutOfRangePolicy::WarnAndClamp), power.power),
-                OutOfRangePolicy::WarnAndClamp,
-            )
-        }
-    }
-
-    fn apply_high_pass_filter(&self, _step: &TfmStepCfg, _high_pass: &HighPassCfg, _value: BaseNumT) -> BaseNumT {
-        todo!("Highpass filter is WIP.")
-    }
-
-    fn apply_integrate(&self, state_id: ObjId, integrate: &IntegrateCfg, mut delta: BaseNumT) -> MappedValue<BaseNumT> {
-        // TODO?: if non-relative, consider automatically differentiate before application, maybe under an option:
-        //        Abs data can always be > 0 so it can just make outptu stick to max value.
-
-        let mut data = self.integrate_state.borrow_mut();
-
-        if delta.abs() < integrate.deadzone_norm * integrate.range.span() {
-            delta = 0.0;
-        }
-
-        let state = data.entry(state_id).or_insert(IntegrateMappingState {
-            prev_val: (integrate.range.from() + integrate.range.to()) * 0.5,
-        });
-
-        let new_val = state.prev_val + delta;
-        let new_val_smoothed = new_val * integrate.smoothing_alpha + state.prev_val * (1.0 - integrate.smoothing_alpha);
-
-        state.prev_val = integrate.range.clamp(new_val_smoothed);
-
-        MappedValue::<BaseNumT> {
-            value: state.prev_val,
-            interval: integrate.range,
-            relativity: Relativity::Abs,
-        }
-    }
-
-    fn apply_steering(
-        &self,
-        mapping: &Mapping,
-        step: &TfmStepCfg,
-        steering: &SteeringCfg,
-        vd: MappedValue<BaseNumT>,
-        now: Instant,
-        is_idle_tick: bool,
-    ) -> MappedValue<BaseNumT> {
-        let mut state = *self
-            .steering_state
-            .borrow_mut()
-            .entry(step.get_id())
-            .or_insert(SteeringMappingState {
-                last_time: now,
-                pre_filter: 0.0,
-                post_filter: 0.0,
-            });
-
-        let value = vd.value
-            * UNIT_INTERVAL.map_from(
-                steering.input_gain.get_numeric_value(),
-                &steering.input_gain.get_interval(),
-                OutOfRangePolicy::WarnAndClamp,
-            );
-
-        let auto_center_along_force_feedback = UNIT_INTERVAL.map_from(
-            steering.auto_center_along_force_feedback.get_numeric_value(),
-            &steering.auto_center_along_force_feedback.get_interval(),
-            OutOfRangePolicy::WarnAndClamp,
-        );
-
-        let dt = (now - state.last_time).as_secs_f32() as BaseNumT;
-        let delta: BaseNumT = vd.interval.map_to_symm_unit(value, OutOfRangePolicy::Clamp);
-
-        if let Some(acc) = &steering.accumulator {
-            state.pre_filter = SYMM_UNIT_INTERVAL.map_from(
-                acc.get_numeric_value(),
-                &acc.get_interval(),
-                OutOfRangePolicy::WarnAndClamp,
-            );
-        }
-
-        state.pre_filter = SYMM_UNIT_INTERVAL.clamp(state.pre_filter.add(delta));
-
-        #[cfg(feature = "gui")]
-        if delta != 0.0 {
-            step.get_state().gui_trace(
-                TfmStepTraceStage::Custom(
-                    GraphDisplayStyle::as_filled()
-                        .with_color(Color32::BROWN.gamma_multiply(0.7))
-                        .with_width(1.2),
-                ),
-                &MappedValue::<BaseNumT> {
-                    value: delta,
-                    interval: SYMM_UNIT_INTERVAL,
-                    relativity: Relativity::Rel,
-                },
-                now,
-            );
-        }
-
-        #[cfg(feature = "gui")]
-        step.get_state().gui_trace(
-            TfmStepTraceStage::Custom(GraphDisplayStyle::as_filled().with_color(Color32::BLUE).with_width(1.5)),
-            &MappedValue::<BaseNumT> {
-                value: state.pre_filter,
-                interval: SYMM_UNIT_INTERVAL,
-                relativity: Relativity::Abs,
-            },
-            now,
-        );
-
-        '_User_input_filtering_and_curving_pre_FFB_and_autocentering: {
-            if !steering.integrated_user_input_transform.steps.is_empty() {
-                state.post_filter = self.apply_transformation(
-                    mapping,
-                    &steering.integrated_user_input_transform,
-                    ObjId::from(usize::MAX), // "[steering transform user input transform]",
-                    SYMM_UNIT_INTERVAL,
-                    Some(SYMM_UNIT_INTERVAL),
-                    state.pre_filter,
-                    Relativity::Abs, // Not relative, we have integrated it already.
-                    is_idle_tick,
-                );
-            } else {
-                state.post_filter = state.pre_filter;
-            }
-        }
-
-        #[cfg(feature = "gui")]
-        step.get_state().gui_trace(
-            TfmStepTraceStage::Custom(
-                GraphDisplayStyle::default()
-                    .with_color(Color32::MAGENTA)
-                    .with_width(1.2),
-            ),
-            &MappedValue::<BaseNumT> {
-                value: state.post_filter,
-                interval: SYMM_UNIT_INTERVAL,
-                relativity: Relativity::Abs,
-            },
-            now,
-        );
-
-        let hold_factor_unit = UNIT_INTERVAL.map_from(
-            steering.hold_factor.get_numeric_value(),
-            &steering.hold_factor.get_interval(),
-            OutOfRangePolicy::WarnAndClamp,
-        );
-
-        '_FFB_and_autocentering: {
-            // TODO: perf: profile.
-            let ff_force_symm_norm = if let Some(ff_config) = &steering.force_feedback {
-                if ff_config.enabled {
-                    let raw_force = if let Some(custom_src) = &ff_config.custom_source {
-                        SYMM_UNIT_INTERVAL.map_from(
-                            custom_src.get_numeric_value(),
-                            &custom_src.get_interval(),
-                            OutOfRangePolicy::WarnAndClamp,
-                        )
-                    } else {
-                        match &mapping.dst {
-                            ValueDsts::Void => 0.0,
-                            ValueDsts::Dynamic(dynamic_value_ref_rt) => match dynamic_value_ref_rt {
-                                DynValueRefs::DeviceControlMatcher(d) => match ff_config.component {
-                                    ForceFeedbackComponent::X => {
-                                        self.hid_mgr.ff_set_x_axis_pos(
-                                            &d.device_matcher_key,
-                                            &d.control_key,
-                                            mapping.dst.get_interval(),
-                                        );
-                                        self.hid_mgr.ff_get_x_sum_symm_norm(&d.device_matcher_key)
-                                    }
-                                    ForceFeedbackComponent::Y => {
-                                        self.hid_mgr.ff_set_y_axis_pos(
-                                            &d.device_matcher_key,
-                                            &d.control_key,
-                                            mapping.dst.get_interval(),
-                                        );
-                                        self.hid_mgr.ff_get_y_sum_symm_norm(&d.device_matcher_key)
-                                    }
-                                },
-                                DynValueRefs::Variable(_) => 0.0,
-                            },
-                        }
-                    };
-
-                    let filtered_force = if !ff_config.transformation.steps.is_empty() {
-                        self.apply_transformation(
-                            mapping,
-                            &ff_config.transformation,
-                            ObjId::from(usize::MAX), /* TODO: ID NAMESPACES */
-                            // "[steering transform ffb transform]",
-                            SYMM_UNIT_INTERVAL,
-                            Some(SYMM_UNIT_INTERVAL),
-                            raw_force,
-                            Relativity::Abs, // FFB is absolute.
-                            is_idle_tick,
-                        )
-                    } else {
-                        raw_force
-                    };
-
-                    let filtered_and_scaled_force = SYMM_UNIT_INTERVAL.clamp(filtered_force * ff_config.gain);
-
-                    if ff_config.invert {
-                        -filtered_and_scaled_force
-                    } else {
-                        filtered_and_scaled_force
-                    }
-                } else {
-                    0.0
-                }
-            } else {
-                0.0
-            };
-
-            if ff_force_symm_norm.abs() > 1e-4 {
-                let ff_position_offset = ff_force_symm_norm * (1.0 - hold_factor_unit) * dt;
-                state.post_filter += ff_position_offset;
-                state.pre_filter += ff_position_offset;
-
-                if self.debug.is_on() && self.debug_idle_tick && ff_force_symm_norm.abs() > 0.1 {
-                    debug!(
-                        "FF active: force={:.3} offset={:.3}",
-                        ff_force_symm_norm, ff_position_offset
-                    );
-                }
-
-                #[cfg(feature = "gui")]
-                step.get_state().gui_trace(
-                    TfmStepTraceStage::Custom(
-                        GraphDisplayStyle::default()
-                            .with_color(
-                                Color32::GREEN.gamma_multiply((1.0 as BaseNumT - hold_factor_unit).max(0.4) as f32),
-                            )
-                            .with_width(1.7),
-                    ),
-                    &MappedValue::<BaseNumT> {
-                        value: ff_force_symm_norm,
-                        interval: SYMM_UNIT_INTERVAL,
-                        relativity: Relativity::Abs,
-                    },
-                    now,
-                );
-            }
-
-            let autocentering_halflife = steering.auto_center_halflife.get_numeric_value().abs();
-
-            let ffb_is_small = ff_force_symm_norm.abs() < 1e-4;
-
-            if autocentering_halflife > 0.0
-                && (auto_center_along_force_feedback > 0.0 || ffb_is_small)
-                && delta.abs() < 1e-4
-            {
-                let mut centerwize_decay_factor =
-                    (1.0 - (-dt / autocentering_halflife).exp2()) * (1.0 - hold_factor_unit);
-
-                if !ffb_is_small {
-                    centerwize_decay_factor *= auto_center_along_force_feedback;
-                }
-
-                state.post_filter -= state.post_filter * centerwize_decay_factor;
-                state.pre_filter -= state.pre_filter * centerwize_decay_factor;
-            }
-        };
-
-        state.pre_filter = SYMM_UNIT_INTERVAL.clamp(state.pre_filter);
-        state.post_filter = SYMM_UNIT_INTERVAL.clamp(state.post_filter);
-
-        let out = MappedValue::<BaseNumT> {
-            value: state.post_filter,
-            interval: SYMM_UNIT_INTERVAL,
-            relativity: Relativity::Abs,
-        };
-
-        state.last_time = now;
-
-        if let Some(acc) = &steering.accumulator {
-            self.set_dyn_value(
-                acc,
-                acc.get_interval()
-                    .map_from_symm_unit(state.pre_filter, OutOfRangePolicy::Clamp),
-                self.debug,
-            );
-        }
-
-        self.steering_state.borrow_mut().insert(step.get_id(), state);
-
-        out
     }
 
     fn set_dyn_value(&self, d: &DynValueRefs, val: BaseNumT, debug: DebugLevel) {
@@ -1324,86 +530,46 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             DynValueRefs::Variable(v) => v.variable.value.store(v.variable.interval.clamp(val) as f32, Relaxed),
         }
     }
+}
 
-    fn apply_raise_fall(
-        &self,
-        state_id: ObjId,
-        raise_fall: &RaiseFallCfg,
-        mut vd: MappedValue<BaseNumT>,
-        is_idle_tick: bool,
-    ) -> MappedValue<BaseNumT> {
-        let now = Instant::now();
-        let mut data = self.raise_fall_state.borrow_mut();
-        let filter_data = data.entry(state_id).or_insert(RaiseFallMappingState {
-            prev_out: vd.interval.from(),
-            last_target: vd.interval.from(),
-            prev_out_time: Some(now),
-            prev_user_input_time: Some(now),
-        });
+pub(crate) struct MappingTfmExecCtx<'m, 'driver_loop> {
+    mapping_engine: &'m MappingEngine<'driver_loop>,
+    #[allow(unused)]
+    current_mapping_src: &'m ValueSrcs,
+    current_mapping_dst: &'m ValueDsts,
+    is_idle_tick: bool,
+}
 
-        let dt = if let Some(prev) = filter_data.prev_out_time {
-            (now - prev).as_secs_f32()
-        } else {
-            0.0
-        } as BaseNumT;
+impl<'m, 'driver_loop> TfmExecCtx for MappingTfmExecCtx<'m, 'driver_loop> {
+    fn get_main_dst(&self) -> &ValueDsts {
+        self.current_mapping_dst
+    }
 
-        let dt_user_input = if let Some(prev) = filter_data.prev_user_input_time {
-            (now - prev).as_secs_f32()
-        } else {
-            0.0
-        } as BaseNumT;
+    fn get_ff_x(&self, dk: &str) -> BaseNumT {
+        self.mapping_engine.hid_mgr.ff_get_x_sum_symm_norm(dk)
+    }
 
-        filter_data.prev_out_time = Some(now);
+    fn get_ff_y(&self, dk: &str) -> BaseNumT {
+        self.mapping_engine.hid_mgr.ff_get_y_sum_symm_norm(dk)
+    }
 
-        let target = if !is_idle_tick {
-            filter_data.last_target = vd.value;
-            vd.value
-        } else {
-            filter_data.last_target
-        };
+    fn set_dyn_value(&self, dst: &DynValueRefs, v: BaseNumT) {
+        self.mapping_engine.set_dyn_value(dst, v, get_debug_level());
+    }
 
-        let mut final_out = filter_data.prev_out;
-        if is_idle_tick {
-            if dt > 0.0 {
-                let delta_v = target - filter_data.prev_out;
-                let rate_limit = if delta_v > 0.0 {
-                    raise_fall.raise_rate
-                } else {
-                    let mut fall_hold_factor = UNIT_INTERVAL.map_from(
-                        raise_fall.fall_hold_factor.get_numeric_value(),
-                        &raise_fall.fall_hold_factor.get_interval(),
-                        OutOfRangePolicy::WarnAndClamp,
-                    );
+    fn set_ff_x_axis_pos(&self, dk: &str, ck: &str, ivl: NumInterval<BaseNumT>) {
+        self.mapping_engine.hid_mgr.ff_set_x_axis_pos(dk, ck, ivl);
+    }
 
-                    if raise_fall.invert_fall_hold_factor {
-                        fall_hold_factor = UNIT_INTERVAL.clamp_and_invert(fall_hold_factor);
-                    }
+    fn set_ff_y_axis_pos(&self, dk: &str, ck: &str, ivl: NumInterval<BaseNumT>) {
+        self.mapping_engine.hid_mgr.ff_set_y_axis_pos(dk, ck, ivl);
+    }
 
-                    if raise_fall.fall_delay > 0.0 {
-                        if raise_fall.fall_delay < dt_user_input {
-                            raise_fall.fall_rate * (1.0 - fall_hold_factor)
-                        } else {
-                            0.0
-                        }
-                    } else {
-                        raise_fall.fall_rate * (1.0 - fall_hold_factor)
-                    }
-                };
-                let max_delta = rate_limit * dt;
-                let actual_delta = delta_v.clamp(-max_delta, max_delta);
-                final_out = filter_data.prev_out + actual_delta;
-            }
+    fn is_idle_tick(&self) -> bool {
+        self.is_idle_tick
+    }
 
-            let smoothing_alpha = raise_fall.smoothing_alpha;
-            final_out = (smoothing_alpha) * final_out + (1.0 - smoothing_alpha) * filter_data.prev_out;
-
-            final_out = vd.interval.clamp(final_out);
-            filter_data.prev_out = final_out;
-        } else {
-            filter_data.prev_user_input_time = Some(now);
-        }
-
-        vd.value = final_out;
-        vd
+    fn get_idle_tick_rate(&self) -> u32 {
+        self.mapping_engine.get_idle_tick_rate()
     }
 }

@@ -129,16 +129,16 @@ impl HidManager {
         self.ff_update_axis_pos(device_key, ctl_key, control_interval, Y_AXIS_IDX);
     }
 
-    pub(crate) fn ff_get_x_sum_symm_norm(&self, device_name: &str) -> BaseNumT {
-        if let Some(d) = self.device_key_to_devices.borrow().get(device_name) {
+    pub(crate) fn ff_get_x_sum_symm_norm(&self, device_key: &str) -> BaseNumT {
+        if let Some(d) = self.device_key_to_devices.borrow().get(device_key) {
             d[0].0.borrow().ff_get_x_sum_symm_norm()
         } else {
             0.0
         }
     }
 
-    pub(crate) fn ff_get_y_sum_symm_norm(&self, device_name: &str) -> BaseNumT {
-        if let Some(d) = self.device_key_to_devices.borrow().get(device_name) {
+    pub(crate) fn ff_get_y_sum_symm_norm(&self, device_key: &str) -> BaseNumT {
+        if let Some(d) = self.device_key_to_devices.borrow().get(device_key) {
             d[0].0.borrow().ff_get_y_sum_symm_norm()
         } else {
             0.0

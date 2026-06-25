@@ -1,9 +1,11 @@
-use crate::common::BaseNumT;
-use crate::schemas_value::{DescriptionCfg, InputValueMetadata, WithDescriptionMut};
+use crate::common::{BaseNumT, get_debug_level};
+use crate::mapping::MappingTfmExecCtx;
+use crate::schemas_value::{DescriptionCfg, InputValueMetadata, WithDescriptionMut, WithRelativity};
 use crate::schemas_value::{
     DeviceControlMatcherRef, DynValueRefs, ValueDsts, VariableRef, WithNumInterval, WithRelativityRef,
     serialize_value_src_rt_ignore_interval,
 };
+use crate::tfm_exec::{TfmExeState, WithTfmExec};
 use crate::{
     common::{Relativity, SYMM_UNIT_INTERVAL, UNIT_INTERVAL},
     num_interval::NumInterval,
@@ -16,13 +18,15 @@ use bitflags::bitflags;
 use crossbeam_utils::CachePadded;
 use doc_for::*;
 use garde::Validate;
-use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use mlua::Lua;
+use parking_lot::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use schemars::JsonSchema;
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
+use std::time::Instant;
 use strum_macros::{Display, EnumIter, EnumString};
 
 use traversable::Traversable;
@@ -113,7 +117,7 @@ where
 }
 
 // ============================================================
-pub(crate) struct TfmStepState {
+pub(crate) struct TfmStepMonState {
     id: ObjId,
     intervals: (NumInterval<BaseNumT>, NumInterval<BaseNumT>),
     relativity: (Relativity, Relativity),
@@ -126,13 +130,13 @@ pub(crate) struct TfmStepState {
 
 impl WithRuntimeState for TfmStepCfg {
     fn assign_new_state(&mut self) {
-        *self.get_state_arc_mut() = Default::default()
+        *self.get_mon_state_arc_mut() = Default::default()
     }
 
-    type StateT = TfmStepState;
+    type StateT = TfmStepMonState;
 }
 
-impl Default for TfmStepState {
+impl Default for TfmStepMonState {
     fn default() -> Self {
         Self {
             id: Default::default(),
@@ -147,7 +151,7 @@ impl Default for TfmStepState {
     }
 }
 
-impl WithRuntimeId for TfmStepState {
+impl WithRuntimeId for TfmStepMonState {
     fn get_id(&self) -> ObjId {
         self.id
     }
@@ -159,7 +163,7 @@ impl WithRuntimeId for TfmStepState {
 
 // ===========================================================
 
-impl TfmStepState {
+impl TfmStepMonState {
     #[allow(unused)]
     pub(crate) fn is_in_relative(&self) -> bool {
         self.relativity.0.into()
@@ -208,7 +212,7 @@ impl TfmStepState {
     }
 }
 
-impl std::fmt::Debug for TfmStepState {
+impl std::fmt::Debug for TfmStepMonState {
     #[cfg(feature = "gui")]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TfmStepState")
@@ -232,7 +236,7 @@ impl Default for TfmStepCfg {
 }
 
 #[derive(Debug, Clone, Default)]
-pub(crate) struct TfmStepStateShared(pub(crate) Arc<RwLock<TfmStepState>>);
+pub(crate) struct TfmStepStateShared(pub(crate) Arc<RwLock<TfmStepMonState>>);
 impl TfmStepStateShared {
     pub(crate) fn new() -> Self {
         Default::default()
@@ -318,59 +322,59 @@ impl TfmStepCfg {
         }
     }
 
-    pub(crate) fn get_state_arc(&self) -> &Arc<RwLock<TfmStepState>> {
+    pub(crate) fn get_mon_state_arc(&self) -> &Arc<RwLock<TfmStepMonState>> {
         match self {
-            TfmStepCfg::Nop(s) => &s.state.0,
-            TfmStepCfg::Invert(s) => &s.state.0,
-            TfmStepCfg::Integrate(s) => &s.state.0,
-            TfmStepCfg::Steering(s) => &s.state.0,
-            TfmStepCfg::Clamp(s) => &s.state.0,
-            TfmStepCfg::RaiseFall(s) => &s.state.0,
-            TfmStepCfg::Ema(s) => &s.state.0,
-            TfmStepCfg::Linear(s) => &s.state.0,
-            TfmStepCfg::Smoothstep(s) => &s.state.0,
-            TfmStepCfg::SCurve(s) => &s.state.0,
-            TfmStepCfg::Exp(s) => &s.state.0,
-            TfmStepCfg::SignedPower(s) => &s.state.0,
-            TfmStepCfg::OneEuro(s) => &s.state.0,
-            TfmStepCfg::Script(s) => &s.state.0,
-            TfmStepCfg::_HighPass(s) => &s.state.0,
-            TfmStepCfg::_ForceFeedback(s) => &s.state.0,
+            TfmStepCfg::Nop(s) => &s.mon_state.0,
+            TfmStepCfg::Invert(s) => &s.mon_state.0,
+            TfmStepCfg::Integrate(s) => &s.mon_state.0,
+            TfmStepCfg::Steering(s) => &s.mon_state.0,
+            TfmStepCfg::Clamp(s) => &s.mon_state.0,
+            TfmStepCfg::RaiseFall(s) => &s.mon_state.0,
+            TfmStepCfg::Ema(s) => &s.mon_state.0,
+            TfmStepCfg::Linear(s) => &s.mon_state.0,
+            TfmStepCfg::Smoothstep(s) => &s.mon_state.0,
+            TfmStepCfg::SCurve(s) => &s.mon_state.0,
+            TfmStepCfg::Exp(s) => &s.mon_state.0,
+            TfmStepCfg::SignedPower(s) => &s.mon_state.0,
+            TfmStepCfg::OneEuro(s) => &s.mon_state.0,
+            TfmStepCfg::Script(s) => &s.mon_state.0,
+            TfmStepCfg::_HighPass(s) => &s.mon_state.0,
+            TfmStepCfg::_ForceFeedback(s) => &s.mon_state.0,
         }
     }
 
-    pub(crate) fn get_state_arc_mut(&mut self) -> &mut Arc<RwLock<TfmStepState>> {
+    pub(crate) fn get_mon_state_arc_mut(&mut self) -> &mut Arc<RwLock<TfmStepMonState>> {
         match self {
-            TfmStepCfg::Nop(s) => &mut s.state.0,
-            TfmStepCfg::Invert(s) => &mut s.state.0,
-            TfmStepCfg::Integrate(s) => &mut s.state.0,
-            TfmStepCfg::Steering(s) => &mut s.state.0,
-            TfmStepCfg::Clamp(s) => &mut s.state.0,
-            TfmStepCfg::RaiseFall(s) => &mut s.state.0,
-            TfmStepCfg::Ema(s) => &mut s.state.0,
-            TfmStepCfg::Linear(s) => &mut s.state.0,
-            TfmStepCfg::Smoothstep(s) => &mut s.state.0,
-            TfmStepCfg::SCurve(s) => &mut s.state.0,
-            TfmStepCfg::Exp(s) => &mut s.state.0,
-            TfmStepCfg::SignedPower(s) => &mut s.state.0,
-            TfmStepCfg::OneEuro(s) => &mut s.state.0,
-            TfmStepCfg::Script(s) => &mut s.state.0,
-            TfmStepCfg::_HighPass(s) => &mut s.state.0,
-            TfmStepCfg::_ForceFeedback(s) => &mut s.state.0,
+            TfmStepCfg::Nop(s) => &mut s.mon_state.0,
+            TfmStepCfg::Invert(s) => &mut s.mon_state.0,
+            TfmStepCfg::Integrate(s) => &mut s.mon_state.0,
+            TfmStepCfg::Steering(s) => &mut s.mon_state.0,
+            TfmStepCfg::Clamp(s) => &mut s.mon_state.0,
+            TfmStepCfg::RaiseFall(s) => &mut s.mon_state.0,
+            TfmStepCfg::Ema(s) => &mut s.mon_state.0,
+            TfmStepCfg::Linear(s) => &mut s.mon_state.0,
+            TfmStepCfg::Smoothstep(s) => &mut s.mon_state.0,
+            TfmStepCfg::SCurve(s) => &mut s.mon_state.0,
+            TfmStepCfg::Exp(s) => &mut s.mon_state.0,
+            TfmStepCfg::SignedPower(s) => &mut s.mon_state.0,
+            TfmStepCfg::OneEuro(s) => &mut s.mon_state.0,
+            TfmStepCfg::Script(s) => &mut s.mon_state.0,
+            TfmStepCfg::_HighPass(s) => &mut s.mon_state.0,
+            TfmStepCfg::_ForceFeedback(s) => &mut s.mon_state.0,
         }
     }
 
-    pub(crate) fn get_state(&self) -> RwLockReadGuard<'_, TfmStepState> {
-        self.get_state_arc().read()
+    pub(crate) fn get_mon_state_read_guard(&self) -> RwLockReadGuard<'_, TfmStepMonState> {
+        self.get_mon_state_arc().read()
     }
 
-    pub(crate) fn get_state_as_mut(&self) -> RwLockWriteGuard<'_, TfmStepState> {
-        self.get_state_arc().write()
+    pub(crate) fn get_state_as_mut(&self) -> RwLockWriteGuard<'_, TfmStepMonState> {
+        self.get_mon_state_arc().write()
     }
 
     pub(crate) fn clone_with_new_state_no_recurse(&self) -> Self {
         let mut cloned = self.clone();
-        *cloned.get_state_arc_mut() = TfmStepStateShared::new().0.clone();
+        *cloned.get_mon_state_arc_mut() = TfmStepStateShared::new().0.clone();
         cloned
     }
 }
@@ -407,7 +411,7 @@ pub(crate) struct ForceFeedbackCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    state: TfmStepStateShared,
+    mon_state: TfmStepStateShared,
 
     #[traverse(skip)]
     #[serde(default)]
@@ -461,7 +465,7 @@ pub(crate) struct ForceFeedbackCfg {
 pub(crate) struct ClampCfg {
     #[serde(skip)]
     #[garde(skip)]
-    state: TfmStepStateShared,
+    mon_state: TfmStepStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) desc: DescriptionCfg,
@@ -481,7 +485,7 @@ impl Default for ClampCfg {
             from: Default::default(),
             to: Default::default(),
             override_range: Default::default(),
-            state: Default::default(),
+            mon_state: Default::default(),
         }
     }
 }
@@ -508,7 +512,7 @@ impl ClampCfg {
 pub(crate) struct NopCfg {
     #[serde(skip)]
     #[garde(skip)]
-    state: TfmStepStateShared,
+    mon_state: TfmStepStateShared,
     #[garde(skip)]
     #[serde(default = "default_step_enabled")]
     pub(crate) enabled: bool,
@@ -517,7 +521,7 @@ pub(crate) struct NopCfg {
 impl Default for NopCfg {
     fn default() -> Self {
         Self {
-            state: Default::default(),
+            mon_state: Default::default(),
             enabled: default_step_enabled(),
         }
     }
@@ -532,7 +536,7 @@ impl From<NopCfg> for bool {
 impl From<bool> for NopCfg {
     fn from(value: bool) -> Self {
         Self {
-            state: Default::default(),
+            mon_state: Default::default(),
             enabled: value,
         }
     }
@@ -543,7 +547,7 @@ impl From<bool> for NopCfg {
 pub(crate) struct InvertCfg {
     #[serde(skip)]
     #[garde(skip)]
-    state: TfmStepStateShared,
+    mon_state: TfmStepStateShared,
     #[garde(skip)]
     #[serde(default = "default_step_enabled")]
     pub(crate) enabled: bool,
@@ -552,18 +556,21 @@ pub(crate) struct InvertCfg {
 impl Default for InvertCfg {
     fn default() -> Self {
         Self {
-            state: Default::default(),
+            mon_state: Default::default(),
             enabled: default_step_enabled(),
         }
     }
 }
 
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Validate)]
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct EmaFilterCfg {
     #[serde(skip)]
     #[garde(skip)]
-    state: TfmStepStateShared,
+    mon_state: TfmStepStateShared,
+    #[serde(skip)]
+    #[garde(skip)]
+    exe_state: Arc<Mutex<crate::filters::EmaFilter>>,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -584,6 +591,29 @@ pub(crate) struct EmaFilterCfg {
     pub(crate) tau: BaseNumT,
 }
 
+impl TfmExeState for EmaFilterCfg {
+    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, crate::filters::EmaFilter>;
+    type ResetInput = BaseNumT;
+
+    fn exe_state_mut(&self) -> Self::StateMutT {
+        self.exe_state.lock_arc()
+    }
+
+    fn exe_state_reset(&self, reset_with: Self::ResetInput) {
+        self.exe_state_mut().reset(reset_with);
+    }
+}
+
+impl PartialEq for EmaFilterCfg {
+    fn eq(&self, other: &Self) -> bool {
+        self.desc == other.desc
+            && self.enabled == other.enabled
+            && self.on_relative_input_feed_on_idle == other.on_relative_input_feed_on_idle
+            && self.on_relative_input_reset_on_idle == other.on_relative_input_reset_on_idle
+            && self.tau == other.tau
+    }
+}
+
 impl Default for EmaFilterCfg {
     fn default() -> Self {
         Self {
@@ -592,18 +622,21 @@ impl Default for EmaFilterCfg {
             tau: 0.01,
             on_relative_input_reset_on_idle: default_false(),
             desc: Default::default(),
-            state: Default::default(),
+            mon_state: Default::default(),
+            exe_state: Default::default(),
         }
     }
 }
 
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Validate)]
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct OneEuroFilterCfg {
     #[serde(skip)]
     #[garde(skip)]
-    state: TfmStepStateShared,
-
+    mon_state: TfmStepStateShared,
+    #[serde(skip)]
+    #[garde(skip)]
+    exe_state: Arc<Mutex<crate::filters::OneEuroFilter>>,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -630,6 +663,31 @@ pub(crate) struct OneEuroFilterCfg {
     pub(crate) d_cutoff_hz: BaseNumT,
 }
 
+impl TfmExeState for OneEuroFilterCfg {
+    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, crate::filters::OneEuroFilter>;
+    type ResetInput = BaseNumT;
+
+    fn exe_state_mut(&self) -> Self::StateMutT {
+        self.exe_state.lock_arc()
+    }
+
+    fn exe_state_reset(&self, reset_with: Self::ResetInput) {
+        self.exe_state_mut().reset(reset_with);
+    }
+}
+
+impl PartialEq for OneEuroFilterCfg {
+    fn eq(&self, other: &Self) -> bool {
+        self.desc == other.desc
+            && self.enabled == other.enabled
+            && self.on_relative_input_feed_on_idle == other.on_relative_input_feed_on_idle
+            && self.on_relative_input_reset_on_idle == other.on_relative_input_reset_on_idle
+            && self.beta == other.beta
+            && self.min_cutoff_hz == other.min_cutoff_hz
+            && self.d_cutoff_hz == other.d_cutoff_hz
+    }
+}
+
 impl Default for OneEuroFilterCfg {
     fn default() -> Self {
         Self {
@@ -640,7 +698,8 @@ impl Default for OneEuroFilterCfg {
             d_cutoff_hz: default_1euro_d_cutoff_hz(),
             on_relative_input_reset_on_idle: default_false(),
             desc: Default::default(),
-            state: Default::default(),
+            mon_state: Default::default(),
+            exe_state: Default::default(),
         }
     }
 }
@@ -650,7 +709,7 @@ impl Default for OneEuroFilterCfg {
 pub(crate) struct LinearCfg {
     #[serde(skip)]
     #[garde(skip)]
-    state: TfmStepStateShared,
+    mon_state: TfmStepStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) desc: DescriptionCfg,
@@ -679,7 +738,7 @@ impl Default for LinearCfg {
             center_symmetric: Default::default(),
             on_idle: default_on_idle(),
             desc: Default::default(),
-            state: Default::default(),
+            mon_state: Default::default(),
         }
     }
 }
@@ -688,7 +747,7 @@ impl Default for LinearCfg {
 #[serde(deny_unknown_fields)]
 pub(crate) struct SmoothstepCfg {
     #[serde(skip)]
-    state: TfmStepStateShared,
+    mon_state: TfmStepStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) desc: DescriptionCfg,
@@ -705,7 +764,7 @@ impl Default for SmoothstepCfg {
             enabled: default_step_enabled(),
             on_idle: default_on_idle(),
             desc: Default::default(),
-            state: Default::default(),
+            mon_state: Default::default(),
         }
     }
 }
@@ -715,7 +774,7 @@ impl Default for SmoothstepCfg {
 pub(crate) struct SCurveCfg {
     #[serde(skip)]
     #[garde(skip)]
-    state: TfmStepStateShared,
+    mon_state: TfmStepStateShared,
 
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -740,7 +799,7 @@ impl Default for SCurveCfg {
             steepness: default_scurve_steepness(),
             on_idle: default_on_idle(),
             desc: Default::default(),
-            state: Default::default(),
+            mon_state: Default::default(),
         }
     }
 }
@@ -756,7 +815,7 @@ impl Default for SCurveCfg {
 pub(crate) struct NormExpCfg {
     #[serde(skip)]
     #[garde(skip)]
-    state: TfmStepStateShared,
+    mon_state: TfmStepStateShared,
 
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -786,7 +845,7 @@ impl Default for NormExpCfg {
             center_symmetric: Default::default(),
             on_idle: default_on_idle(),
             desc: Default::default(),
-            state: Default::default(),
+            mon_state: Default::default(),
         }
     }
 }
@@ -796,7 +855,7 @@ impl Default for NormExpCfg {
 pub(crate) struct SignedPowerCfg {
     #[serde(skip)]
     #[garde(skip)]
-    state: TfmStepStateShared,
+    mon_state: TfmStepStateShared,
 
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -826,7 +885,7 @@ impl Default for SignedPowerCfg {
             center_symmetric: Default::default(),
             on_idle: default_on_idle(),
             desc: Default::default(),
-            state: Default::default(),
+            mon_state: Default::default(),
         }
     }
 }
@@ -836,7 +895,7 @@ impl Default for SignedPowerCfg {
 pub(crate) struct HighPassCfg {
     #[serde(skip)]
     #[garde(skip)]
-    state: TfmStepStateShared,
+    mon_state: TfmStepStateShared,
 
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -853,12 +912,20 @@ pub(crate) struct HighPassCfg {
     pub(crate) on_idle: bool,
 }
 
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Validate)]
+#[derive(Default, Debug, Clone, Copy, PartialOrd, PartialEq)]
+pub(crate) struct IntegrateMappingState {
+    pub(crate) prev_val: BaseNumT, //  prev_val: (self.range.from() + self.range.to()) * 0.5,
+}
+
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct IntegrateCfg {
     #[serde(skip)]
     #[garde(skip)]
-    state: TfmStepStateShared,
+    mon_state: TfmStepStateShared,
+    #[serde(skip)]
+    #[garde(skip)]
+    exe_state: Arc<Mutex<IntegrateMappingState>>,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -880,6 +947,32 @@ pub(crate) struct IntegrateCfg {
     pub(crate) on_idle: bool,
 }
 
+impl TfmExeState for IntegrateCfg {
+    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, IntegrateMappingState>;
+
+    type ResetInput = ();
+
+    fn exe_state_mut(&self) -> Self::StateMutT {
+        self.exe_state.lock_arc()
+    }
+
+    fn exe_state_reset(&self, _: Self::ResetInput) {
+        *self.exe_state_mut() = Default::default()
+    }
+}
+
+impl PartialEq for IntegrateCfg {
+    fn eq(&self, other: &Self) -> bool {
+        self.mon_state == other.mon_state
+            && self.desc == other.desc
+            && self.enabled == other.enabled
+            && self.range == other.range
+            && self.deadzone_norm == other.deadzone_norm
+            && self.smoothing_alpha == other.smoothing_alpha
+            && self.on_idle == other.on_idle
+    }
+}
+
 impl Default for IntegrateCfg {
     fn default() -> Self {
         Self {
@@ -889,7 +982,8 @@ impl Default for IntegrateCfg {
             smoothing_alpha: default_smoothing_alpha(),
             on_idle: default_on_idle(),
             desc: Default::default(),
-            state: Default::default(),
+            mon_state: Default::default(),
+            exe_state: Default::default(),
         }
     }
 }
@@ -1245,13 +1339,59 @@ impl WithRuntimeId for TfmSeqCfg {
 }
 
 // ==================================================================
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct SteeringExeState {
+    pub(crate) last_time: Instant,
+    pub(crate) pre_filter: BaseNumT,
+    pub(crate) post_filter: BaseNumT,
+}
 
-#[derive(Debug, Clone, Serialize, Traversable, TraversableMut, Deserialize, JsonSchema, PartialEq, Validate)]
+impl Default for SteeringExeState {
+    fn default() -> Self {
+        Self {
+            last_time: Instant::now(),
+            pre_filter: Default::default(),
+            post_filter: Default::default(),
+        }
+    }
+}
+
+impl PartialEq for SteeringCfg {
+    fn eq(&self, other: &Self) -> bool {
+        self.mon_state == other.mon_state
+            && self.desc == other.desc
+            && self.enabled == other.enabled
+            && self.accumulator == other.accumulator
+            && self.deadzone_counts == other.deadzone_counts
+            && self.input_gain == other.input_gain
+            && self.auto_center_halflife == other.auto_center_halflife
+            && self.auto_center_along_force_feedback == other.auto_center_along_force_feedback
+            && self.hold_factor == other.hold_factor
+            && self.force_feedback == other.force_feedback
+            && self.integrated_user_input_transform == other.integrated_user_input_transform
+    }
+}
+
+pub(crate) trait WithMonState {
+    fn mon_state_ref(&self) -> parking_lot::ArcRwLockReadGuard<parking_lot::RawRwLock, TfmStepMonState>;
+}
+
+impl WithMonState for SteeringCfg {
+    fn mon_state_ref(&self) -> parking_lot::ArcRwLockReadGuard<parking_lot::RawRwLock, TfmStepMonState> {
+        self.mon_state.0.read_arc()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Traversable, TraversableMut, Deserialize, JsonSchema, Validate)]
 pub(crate) struct SteeringCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    state: TfmStepStateShared,
+    mon_state: TfmStepStateShared,
+    #[serde(skip)]
+    #[traverse(skip)]
+    #[garde(skip)]
+    exe_state: Arc<Mutex<SteeringExeState>>,
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -1292,6 +1432,19 @@ pub(crate) struct SteeringCfg {
     pub(crate) integrated_user_input_transform: TfmSeqCfg,
 }
 
+impl TfmExeState for SteeringCfg {
+    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, SteeringExeState>;
+    type ResetInput = Option<SteeringExeState>;
+
+    fn exe_state_mut(&self) -> Self::StateMutT {
+        self.exe_state.lock_arc()
+    }
+
+    fn exe_state_reset(&self, reset_with: Self::ResetInput) {
+        *self.exe_state_mut() = reset_with.unwrap_or_default()
+    }
+}
+
 impl Default for SteeringCfg {
     fn default() -> Self {
         Self {
@@ -1317,17 +1470,41 @@ impl Default for SteeringCfg {
             integrated_user_input_transform: TfmSeqCfg::default(),
             desc: Default::default(),
             accumulator: Default::default(),
-            state: Default::default(),
+            mon_state: Default::default(),
+            exe_state: Default::default(),
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Deserialize, JsonSchema, Traversable, TraversableMut, Validate)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct RaiseFallMappingState {
+    pub(crate) prev_out: BaseNumT,
+    pub(crate) last_target: BaseNumT,
+    pub(crate) prev_out_time: Option<Instant>,
+    pub(crate) prev_user_input_time: Option<Instant>,
+}
+
+impl Default for RaiseFallMappingState {
+    fn default() -> Self {
+        Self {
+            prev_out: Default::default(),
+            last_target: Default::default(),
+            prev_out_time: Default::default(),
+            prev_user_input_time: Default::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Traversable, TraversableMut, Validate)]
 pub(crate) struct RaiseFallCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    state: TfmStepStateShared,
+    mon_state: TfmStepStateShared,
+    #[serde(skip)]
+    #[traverse(skip)]
+    #[garde(skip)]
+    exe_state: Arc<Mutex<RaiseFallMappingState>>,
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -1356,6 +1533,33 @@ pub(crate) struct RaiseFallCfg {
     pub(crate) invert_fall_hold_factor: bool,
 }
 
+impl TfmExeState for RaiseFallCfg {
+    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, RaiseFallMappingState>;
+
+    type ResetInput = Option<RaiseFallMappingState>;
+
+    fn exe_state_mut(&self) -> Self::StateMutT {
+        self.exe_state.lock_arc()
+    }
+
+    fn exe_state_reset(&self, reset_with: Self::ResetInput) {
+        *self.exe_state_mut() = reset_with.unwrap_or_default();
+    }
+}
+
+impl PartialEq for RaiseFallCfg {
+    fn eq(&self, other: &Self) -> bool {
+        self.desc == other.desc
+            && self.enabled == other.enabled
+            && self.raise_rate == other.raise_rate
+            && self.fall_rate == other.fall_rate
+            && self.smoothing_alpha == other.smoothing_alpha
+            && self.fall_delay == other.fall_delay
+            && self.fall_hold_factor == other.fall_hold_factor
+            && self.invert_fall_hold_factor == other.invert_fall_hold_factor
+    }
+}
+
 impl Default for RaiseFallCfg {
     fn default() -> Self {
         Self {
@@ -1370,7 +1574,8 @@ impl Default for RaiseFallCfg {
             }),
             invert_fall_hold_factor: false,
             desc: Default::default(),
-            state: Default::default(),
+            mon_state: Default::default(),
+            exe_state: Default::default(),
         }
     }
 }
@@ -1410,13 +1615,41 @@ pub(crate) enum ScriptLanguage {
     Luau,
 }
 
-#[derive(Clone, Serialize, Deserialize, JsonSchema, Debug, TraversableMut, Traversable, PartialEq)]
+#[derive(Clone, Debug)]
+pub(crate) struct ScriptMappingState {
+    #[allow(unused)]
+    pub(crate) lua: Lua,
+    pub(crate) inputs: mlua::Table,
+    pub(crate) outputs: mlua::Table,
+    pub(crate) compiled: mlua::Function,
+}
+
+impl Default for ScriptMappingState {
+    fn default() -> Self {
+        let lua = Lua::new();
+        Self {
+            lua: lua.clone(),
+            inputs: lua.create_table().unwrap(),
+            outputs: lua.create_table().unwrap(),
+            compiled: lua
+                .load(" ")
+                .into_function()
+                .inspect_err(|e| log::error!("{e}"))
+                .unwrap_or(lua.load(" ").into_function().unwrap()),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, JsonSchema, Debug, TraversableMut, Traversable)]
 pub(crate) struct ScriptCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    state: TfmStepStateShared,
-
+    mon_state: TfmStepStateShared,
+    #[serde(skip)]
+    #[traverse(skip)]
+    #[garde(skip)]
+    exe_state: Arc<Mutex<ScriptMappingState>>,
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -1454,6 +1687,125 @@ pub(crate) struct ScriptCfg {
     pub(crate) aux_transformations: BTreeMap<String, TfmSeqCfg>,
 }
 
+impl TfmExeState for ScriptCfg {
+    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, ScriptMappingState>;
+    type ResetInput = ();
+
+    fn exe_state_mut(&self) -> Self::StateMutT {
+        self.exe_state.lock_arc()
+    }
+
+    fn exe_state_reset(&self, _: Self::ResetInput) {
+        let mut state = self.exe_state_mut();
+
+        log::debug!("Compiling Luau script!");
+        if get_debug_level().is_on() {
+            log::debug!("Compiling Luau script!");
+        }
+
+        // let lua = state.lua.clone();
+        state.inputs = state.lua.create_table().unwrap();
+        state.outputs = state.lua.create_table().unwrap();
+
+        let aux_tfm_idx = state.lua.create_table().unwrap();
+        state.compiled = state
+            .lua
+            .load(&self.script)
+            .into_function()
+            .inspect_err(|e| log::error!("{e}"))
+            .unwrap_or(state.lua.load(" ").into_function().unwrap());
+
+        let tfms_ptr = &self.aux_transformations as *const _ as *const () as usize;
+
+        let run_tfm_func = state
+            .lua
+            .create_function(
+                move |lua, args: (usize, BaseNumT)| -> std::result::Result<BaseNumT, mlua::Error> {
+                    let tfm_idx = args.0;
+                    let input_value = args.1;
+                    // SAFETY: scripting cache MUST be reset (scripting_cache_reset())
+                    // whenever configuration is updated beyond trivial changes like parameter values changes.
+                    let tfms = unsafe { &*(tfms_ptr as *const BTreeMap<String, TfmSeqCfg>) };
+                    if tfm_idx < tfms.len() {
+                        let tfm = tfms.values().nth(tfm_idx).unwrap();
+                        let ctx = unsafe {
+                            &mut *(lua.named_registry_value::<usize>(&"ctx").unwrap() as *mut MappingTfmExecCtx)
+                        };
+
+                        Ok(tfm
+                            .exec(
+                                crate::schemas_value::MappedValue {
+                                    value: input_value,
+                                    interval: tfm.get_interval(),
+                                    relativity: tfm.get_relativity(),
+                                },
+                                ctx,
+                            )
+                            .value)
+                    } else {
+                        Err(mlua::Error::RuntimeError(format!(
+                            "Referenced transformation {} is not found. \
+                                Total transformations available for the script: {}, indexing starting from 0 ",
+                            tfm_idx,
+                            tfms.len()
+                        )))
+                    }
+                },
+            )
+            .unwrap();
+
+        let _ = state
+            .lua
+            .globals()
+            .set("transform", run_tfm_func)
+            .inspect_err(|e| log::error!("{e}"));
+        let _ = state
+            .lua
+            .globals()
+            .set("inputs", state.inputs.clone())
+            .inspect_err(|e| log::error!("{e}"));
+        let _ = state
+            .lua
+            .globals()
+            .set("outputs", state.outputs.clone())
+            .inspect_err(|e| log::error!("{e}"));
+
+        // let _ = state.inputs.set("idle_tick_rate", idle_tick_rate);
+
+        for (idx, (name, _)) in self.aux_transformations.iter().enumerate() {
+            // let _ = lua.globals().set(name.as_str(), idx);
+            let _ = aux_tfm_idx.set(name.as_str(), idx);
+        }
+        let _ = state
+            .lua
+            .globals()
+            .set("aux_tfm_idx", aux_tfm_idx)
+            .inspect_err(|e| log::error!("{e}"));
+
+        // *state = ScriptMappingState {
+        //     state.lua,
+        //     inputs,
+        //     outputs,
+        //     compiled,
+        // }
+        //state
+    }
+}
+
+impl PartialEq for ScriptCfg {
+    fn eq(&self, other: &Self) -> bool {
+        self.desc == other.desc
+            && self.enabled == other.enabled
+            && self.lang == other.lang
+            && self.script == other.script
+            && self.output_interval == other.output_interval
+            && self.output_relativity == other.output_relativity
+            && self.aux_srcs == other.aux_srcs
+            && self.aux_dsts == other.aux_dsts
+            && self.aux_transformations == other.aux_transformations
+    }
+}
+
 impl Default for ScriptCfg {
     fn default() -> Self {
         Self {
@@ -1466,7 +1818,8 @@ impl Default for ScriptCfg {
             aux_srcs: Default::default(),
             aux_dsts: Default::default(),
             aux_transformations: Default::default(),
-            state: Default::default(),
+            mon_state: Default::default(),
+            exe_state: Default::default(),
         }
     }
 }
@@ -1541,7 +1894,7 @@ impl DuplicateTfmTree for TfmStepCfg {}
 
 impl WithRuntimeId for TfmStepCfg {
     fn get_id(&self) -> ObjId {
-        self.get_state().get_id()
+        self.get_mon_state_read_guard().get_id()
     }
 
     fn assign_new_id(&mut self) {

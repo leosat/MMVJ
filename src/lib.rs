@@ -20,6 +20,7 @@ pub(crate) mod mapped_device;
 pub(crate) mod mapped_controls_macro;
 pub(crate) mod mapped_controls;
 pub(crate) mod mapping;
+pub(crate) mod tfm_exec;
 //--------------------------------
 pub(crate) mod tracing;
 //--------------------------------

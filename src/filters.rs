@@ -40,9 +40,19 @@ impl MAWeighted {
 }
 
 //-----------------------------------------
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct EmaFilter {
     prev_time: Instant,
     prev_val: BaseNumT,
+}
+
+impl Default for EmaFilter {
+    fn default() -> Self {
+        Self {
+            prev_time: Instant::now(),
+            prev_val: Default::default(),
+        }
+    }
 }
 
 //-----------------------------------------
@@ -51,7 +61,7 @@ impl EmaFilter {
         self.prev_val = reset_val;
     }
 
-    pub(crate) fn new(val: BaseNumT, now: Instant) -> Self {
+    pub(crate) fn _new(val: BaseNumT, now: Instant) -> Self {
         Self {
             prev_time: now,
             prev_val: val,
@@ -71,10 +81,21 @@ impl EmaFilter {
 }
 
 //-----------------------------------------
+#[derive(Debug)]
 pub(crate) struct OneEuroFilter {
     prev_val: BaseNumT,
     prev_val_d: BaseNumT,
     prev_time: Instant,
+}
+
+impl Default for OneEuroFilter {
+    fn default() -> Self {
+        Self {
+            prev_val: Default::default(),
+            prev_val_d: Default::default(),
+            prev_time: Instant::now(),
+        }
+    }
 }
 
 impl OneEuroFilter {
