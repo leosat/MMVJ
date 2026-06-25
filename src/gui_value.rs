@@ -299,7 +299,11 @@ impl<'s> DrawEgui<'s> for VariableState {
                 );
 
                 ui.separator();
-                ui.label(format!(" Value: {}", self.get_numeric_value(),));
+                ui.label(
+                    egui::RichText::new(format!(" Value: {}", self.get_numeric_value(),))
+                        .monospace()
+                        .strong(),
+                );
                 // ui.group(|ui| {
                 // });
             }
@@ -337,7 +341,7 @@ impl<'s> DrawEgui<'s> for VariableState {
                             }
                         }
                         crate::schemas_transform::AutoOrManual::Auto(_) => {
-                            ui.label(format!("{value:08.4}"));
+                            ui.label(egui::RichText::new(format!("{value:+11.4}")).monospace().strong());
                             ui.separator();
                             if ui
                                 .button(format!("{}", egui_phosphor::bold::HAND_TAP))
