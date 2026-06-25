@@ -1258,7 +1258,7 @@ impl GuiMain {
                             );
                         }
                         ui.separator();
-                        ui.label(v.0);
+                        ui.label(egui::RichText::new(v.0).strong().monospace());
                         ui.separator();
                         variable_value_changed |= v.1.egui(GuiInKinds::Display, ui);
                     }
