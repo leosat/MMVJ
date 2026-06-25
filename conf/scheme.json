@@ -1351,17 +1351,18 @@
       ]
     },
     "TfmStepCfg": {
-      "anyOf": [
+      "oneOf": [
         {
           "type": "object",
           "properties": {
             "nop": {
-              "type": "boolean"
+              "$ref": "#/$defs/NopCfg"
             }
           },
           "required": [
             "nop"
-          ]
+          ],
+          "additionalProperties": false
         },
         {
           "type": "object",
@@ -1372,7 +1373,8 @@
           },
           "required": [
             "invert"
-          ]
+          ],
+          "additionalProperties": false
         },
         {
           "type": "object",
@@ -1383,7 +1385,8 @@
           },
           "required": [
             "integrate"
-          ]
+          ],
+          "additionalProperties": false
         },
         {
           "type": "object",
@@ -1394,7 +1397,8 @@
           },
           "required": [
             "steering"
-          ]
+          ],
+          "additionalProperties": false
         },
         {
           "type": "object",
@@ -1405,7 +1409,8 @@
           },
           "required": [
             "clamp"
-          ]
+          ],
+          "additionalProperties": false
         },
         {
           "type": "object",
@@ -1416,7 +1421,8 @@
           },
           "required": [
             "raise_fall"
-          ]
+          ],
+          "additionalProperties": false
         },
         {
           "type": "object",
@@ -1427,7 +1433,8 @@
           },
           "required": [
             "ema"
-          ]
+          ],
+          "additionalProperties": false
         },
         {
           "type": "object",
@@ -1438,7 +1445,8 @@
           },
           "required": [
             "linear"
-          ]
+          ],
+          "additionalProperties": false
         },
         {
           "type": "object",
@@ -1449,7 +1457,8 @@
           },
           "required": [
             "smoothstep"
-          ]
+          ],
+          "additionalProperties": false
         },
         {
           "type": "object",
@@ -1460,7 +1469,8 @@
           },
           "required": [
             "s_curve"
-          ]
+          ],
+          "additionalProperties": false
         },
         {
           "type": "object",
@@ -1471,7 +1481,8 @@
           },
           "required": [
             "exp"
-          ]
+          ],
+          "additionalProperties": false
         },
         {
           "type": "object",
@@ -1482,7 +1493,8 @@
           },
           "required": [
             "signed_power"
-          ]
+          ],
+          "additionalProperties": false
         },
         {
           "type": "object",
@@ -1493,7 +1505,8 @@
           },
           "required": [
             "one_euro"
-          ]
+          ],
+          "additionalProperties": false
         },
         {
           "type": "object",
@@ -1504,31 +1517,37 @@
           },
           "required": [
             "script"
-          ]
+          ],
+          "additionalProperties": false
         },
         {
           "type": "object",
           "properties": {
-            "highpass": {
+            "__high_pass": {
               "$ref": "#/$defs/HighPassCfg"
             }
           },
           "required": [
-            "highpass"
-          ]
+            "__high_pass"
+          ],
+          "additionalProperties": false
         },
         {
           "type": "object",
           "properties": {
-            "force_feedback": {
+            "__force_feedback": {
               "$ref": "#/$defs/ForceFeedbackCfg"
             }
           },
           "required": [
-            "force_feedback"
-          ]
+            "__force_feedback"
+          ],
+          "additionalProperties": false
         }
       ]
+    },
+    "NopCfg": {
+      "type": "boolean"
     },
     "InvertCfg": {
       "type": "object",

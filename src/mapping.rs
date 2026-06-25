@@ -12,7 +12,7 @@ use crate::mapped_controls::MappedCtls;
 use crate::mapped_device::{MappedDeviceEvent, MappedEvents, MappedHidEvent};
 #[cfg(feature = "midi")]
 use crate::midi::{MappedMidiMessage, MidiManager};
-use crate::num_interval::{NumInterval, NumIntervalValue, OutOfRangePolicy};
+use crate::num_interval::{NumInterval, OutOfRangePolicy};
 use crate::schemas_cfg::Config;
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_control_matcher::ControlMatchers;
@@ -778,19 +778,19 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         );
 
         match step {
-            TfmStepCfg::Nop { .. } => {}
-            TfmStepCfg::Script { script, .. } => {
+            TfmStepCfg::Nop(_) => {}
+            TfmStepCfg::Script(script) => {
                 if script.enabled {
                     vd = self.apply_script(step.get_id(), script, mapping, is_idle_tick, vd);
                     vd.interval = step.get_state().get_out_interval();
                 }
             }
-            TfmStepCfg::Invert { invert, .. } => {
+            TfmStepCfg::Invert(invert) => {
                 if invert.enabled {
                     vd.value = self.apply_invert(vd.to_owned());
                 }
             }
-            TfmStepCfg::Integrate { integrate, .. } => {
+            TfmStepCfg::Integrate(integrate) => {
                 if integrate.enabled {
                     // assert!(
                     //     vd.is_relative == Relativity::Rel,
@@ -801,9 +801,9 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     }
                 }
             }
-            TfmStepCfg::Clamp { clamp, state } => {
+            TfmStepCfg::Clamp(clamp) => {
                 if clamp.enabled {
-                    let in_interval = state.0.read().get_in_interval();
+                    let in_interval = vd.interval;
                     vd.value = clamp.get_clamping_interval(in_interval).clamp(vd.value);
                     vd.interval = clamp.get_out_interval(in_interval);
                     // Clamping interval may not contain current value, for now this is not an error.
@@ -813,7 +813,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     vd.value = vd.interval.clamp(vd.value);
                 }
             }
-            TfmStepCfg::Steering { steering, .. } => {
+            TfmStepCfg::Steering(steering) => {
                 if steering.enabled {
                     // if vd.relativity.into() {
                     //     warn!("Steering transform should only be applied to relative inputs.");
@@ -821,7 +821,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     vd = self.apply_steering(mapping, step, steering, vd, Instant::now(), is_idle_tick);
                 }
             }
-            TfmStepCfg::RaiseFall { raise_fall, .. } => {
+            TfmStepCfg::RaiseFall(raise_fall) => {
                 if raise_fall.enabled {
                     if vd.relativity != Relativity::Abs {
                         log::warn!("Raise-fall transform should only be applied to absolute inputs.");
@@ -829,7 +829,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     vd = self.apply_raise_fall(step.get_id(), raise_fall, vd, is_idle_tick);
                 }
             }
-            TfmStepCfg::Ema { ema: ema_filter, .. } => {
+            TfmStepCfg::Ema(ema_filter) => {
                 if ema_filter.enabled
                     && (!is_idle_tick || vd.relativity == Relativity::Abs || ema_filter.on_relative_input_feed_on_idle)
                 {
@@ -838,38 +838,32 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     self.reset_ema_filter(step.get_id(), vd.value);
                 }
             }
-            TfmStepCfg::Linear { linear, .. } => {
+            TfmStepCfg::Linear(linear) => {
                 if linear.enabled && (!is_idle_tick || linear.on_idle) {
                     vd.value = self.apply_linear(linear, vd.value, vd.interval);
                 }
             }
-            TfmStepCfg::Smoothstep {
-                smoothstep: smoothstep_curve,
-                ..
-            } => {
+            TfmStepCfg::Smoothstep(smoothstep_curve) => {
                 if smoothstep_curve.enabled && (!is_idle_tick || smoothstep_curve.on_idle) {
                     vd.value = self.apply_smoothstep(vd.value, vd.interval);
                 }
             }
-            TfmStepCfg::SCurve { s_curve, .. } => {
+            TfmStepCfg::SCurve(s_curve) => {
                 if s_curve.enabled && (!is_idle_tick || s_curve.on_idle) {
                     vd.value = self.apply_s_curve(s_curve, vd.value, vd.interval);
                 }
             }
-            TfmStepCfg::NormExp { exp, state: _ } => {
+            TfmStepCfg::Exp(exp) => {
                 if exp.enabled && (!is_idle_tick || exp.on_idle) {
                     vd.value = self.apply_norm_exp_curve(exp, vd.value, vd.interval);
                 }
             }
-            TfmStepCfg::SignedPower {
-                signed_power: signed_power_curve,
-                ..
-            } => {
+            TfmStepCfg::SignedPower(signed_power_curve) => {
                 if signed_power_curve.enabled && (!is_idle_tick || signed_power_curve.on_idle) {
                     vd.value = self.apply_signed_power_curve(signed_power_curve, vd.value, vd.interval);
                 }
             }
-            TfmStepCfg::OneEuro { one_euro, .. } => {
+            TfmStepCfg::OneEuro(one_euro) => {
                 if one_euro.enabled
                     && (!is_idle_tick || vd.relativity == Relativity::Abs || one_euro.on_relative_input_feed_on_idle)
                 {
@@ -878,7 +872,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     self.reset_one_euro_filter(step.get_id(), vd.value);
                 }
             }
-            TfmStepCfg::_HighPass { highpass, .. } => {
+            TfmStepCfg::_HighPass(highpass) => {
                 if highpass.enabled {
                     let __v = // Update state.
                         self.apply_high_pass_filter(step, highpass, vd.value);
@@ -887,11 +881,8 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     }
                 }
             }
-            TfmStepCfg::_ForceFeedback {
-                state: _,
-                force_feedback: _,
-            } => {
-                todo!(
+            TfmStepCfg::_ForceFeedback(_) => {
+                log::warn!(
                     "Standalone force feedback transform is WIP   . Currently supported only within steering transform."
                 )
             }

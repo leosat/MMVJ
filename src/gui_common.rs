@@ -196,7 +196,7 @@ impl traversable::VisitorMut for GuiCmdScriptAuxRename {
     fn enter_mut(&mut self, this: &mut dyn std::any::Any) -> std::ops::ControlFlow<Self::Break> {
         if let Some(step) = this.downcast_mut::<TfmStepCfg>() {
             if step.get_id() == self.tfm_step_id {
-                if let TfmStepCfg::Script { script, .. } = step {
+                if let TfmStepCfg::Script(script) = step {
                     match self.kind {
                         ScriptAuxKind::Source => {
                             if script.aux_srcs.contains_key(&self.new_key) {

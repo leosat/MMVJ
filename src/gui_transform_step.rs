@@ -460,7 +460,7 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let step_idx = gui_in.0;
         let container_id = gui_in.1;
-        let self_id = self.get_id();
+        let step_id = self.get_id();
         match gui_in.2 {
             GuiInTfmStepsSeq::Edit {
                 graph_states,
@@ -568,11 +568,12 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                         |ui| {
                                             let label = self.to_string();
                                             ui.separator();
+                                            let in_interval = self.get_state().get_in_interval();
                                             match self {
-                                                Self::Script { script, .. } => script.egui(
+                                                Self::Script(s) => s.egui(
                                                     (
-                                                        self_id,
-                                                        gui_in.2.clone_and_push_hier(self_id),
+                                                        step_id,
+                                                        gui_in.2.clone_and_push_hier(step_id),
                                                         GuiInValue::Edit(GuiInValueEditParams {
                                                             allow_interval_edit: true,
                                                             slider_log_scale: false,
@@ -582,46 +583,27 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                                     ),
                                                     ui,
                                                 ),
-                                                Self::Nop { .. } | Self::Invert { .. } => None,
-                                                Self::Integrate { integrate, state } => {
-                                                    integrate.egui(state.0.read().get_in_interval(), ui)
-                                                }
-                                                Self::Steering { steering, state } => {
+                                                Self::Nop(_) | Self::Invert(_) => None,
+                                                Self::Integrate(s) => s.egui(in_interval, ui),
+                                                Self::Steering(s) => {
                                                     ui.push_id(state_id, |ui| {
-                                                        steering.egui(
-                                                            gui_in.2.clone_and_push_hier(state.0.read().get_id()),
-                                                            ui,
-                                                        )
+                                                        s.egui(gui_in.2.clone_and_push_hier(step_id), ui)
                                                     })
                                                     .inner
                                                 }
-                                                Self::Clamp { clamp, state } => {
-                                                    clamp.egui(state.0.read().get_in_interval(), ui)
+                                                Self::Clamp(s) => s.egui(in_interval, ui),
+                                                Self::RaiseFall(s) => {
+                                                    s.egui((cfg_variables, cfg_devices, in_interval), ui)
                                                 }
-                                                Self::RaiseFall { raise_fall, state } => raise_fall.egui(
-                                                    (cfg_variables, cfg_devices, state.0.read().get_in_interval()),
-                                                    ui,
-                                                ),
-                                                Self::Ema { ema: ema_filter, state } => {
-                                                    ema_filter.egui(in_is_relative, ui)
-                                                }
-                                                Self::Linear { linear, state } => {
-                                                    linear.egui(state.0.read().get_in_interval(), ui)
-                                                }
+                                                Self::Ema(s) => s.egui(in_is_relative, ui),
+                                                Self::Linear(s) => s.egui(in_interval, ui),
                                                 Self::Smoothstep { .. } => None,
-                                                Self::SCurve { s_curve, .. } => s_curve.egui((), ui),
-                                                Self::NormExp {
-                                                    exp: norm_exp_curve, ..
-                                                } => norm_exp_curve.egui((), ui),
-                                                Self::SignedPower {
-                                                    signed_power: signed_power_curve,
-                                                    ..
-                                                } => signed_power_curve.egui((), ui),
-                                                Self::OneEuro { one_euro, .. } => one_euro.egui(in_is_relative, ui),
-                                                Self::_HighPass { .. } => todo!(),
-                                                Self::_ForceFeedback { .. } => {
-                                                    todo!()
-                                                }
+                                                Self::SCurve(s) => s.egui((), ui),
+                                                Self::Exp(s) => s.egui((), ui),
+                                                Self::SignedPower(s) => s.egui((), ui),
+                                                Self::OneEuro(s) => s.egui(in_is_relative, ui),
+                                                Self::_HighPass(_) => None,
+                                                Self::_ForceFeedback(_) => None,
                                             }
                                         },
                                     )

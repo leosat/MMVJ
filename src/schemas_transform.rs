@@ -22,8 +22,7 @@ use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
-use std::{str::FromStr, sync::Arc};
-use strum::IntoEnumIterator;
+use std::sync::Arc;
 use strum_macros::{Display, EnumIter, EnumString};
 
 use traversable::Traversable;
@@ -228,10 +227,7 @@ impl std::fmt::Debug for TfmStepState {
 
 impl Default for TfmStepCfg {
     fn default() -> Self {
-        TfmStepCfg::Nop {
-            state: TfmStepStateShared::new(),
-            nop: true,
-        }
+        TfmStepCfg::Nop(Default::default())
     }
 }
 
@@ -250,226 +246,117 @@ impl PartialEq for TfmStepStateShared {
 }
 
 #[derive(
-    JsonSchema, Display, Debug, Serialize, EnumString, EnumIter, Traversable, TraversableMut, Clone, PartialEq, Validate,
+    JsonSchema,
+    Display,
+    Debug,
+    Serialize,
+    Deserialize,
+    EnumString,
+    EnumIter,
+    Traversable,
+    TraversableMut,
+    Clone,
+    PartialEq,
+    Validate,
 )]
 #[strum(serialize_all = "snake_case")]
-#[serde(untagged)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum TfmStepCfg {
-    Nop {
-        #[serde(skip)]
-        #[traverse(skip)]
-        #[garde(skip)]
-        state: TfmStepStateShared,
-        #[traverse(skip)]
-        #[garde(skip)]
-        nop: bool,
-    },
-    Invert {
-        #[serde(skip)]
-        #[traverse(skip)]
-        #[garde(skip)]
-        state: TfmStepStateShared,
-        #[traverse(skip)]
-        #[garde(skip)]
-        invert: InvertCfg,
-    },
-    Integrate {
-        #[serde(skip)]
-        #[traverse(skip)]
-        #[garde(skip)]
-        state: TfmStepStateShared,
-        #[traverse(skip)]
-        #[garde(skip)]
-        integrate: IntegrateCfg,
-    },
-    Steering {
-        #[serde(skip)]
-        #[traverse(skip)]
-        #[garde(skip)]
-        state: TfmStepStateShared,
-        #[garde(skip)]
-        steering: Box<SteeringCfg>,
-    },
-    Clamp {
-        #[serde(skip)]
-        #[traverse(skip)]
-        #[garde(skip)]
-        state: TfmStepStateShared,
-        #[traverse(skip)]
-        #[garde(skip)]
-        clamp: ClampCfg,
-    },
-    RaiseFall {
-        #[serde(skip)]
-        #[traverse(skip)]
-        #[garde(skip)]
-        state: TfmStepStateShared,
-        #[garde(skip)]
-        raise_fall: RaiseFallCfg,
-    },
-    Ema {
-        #[serde(skip)]
-        #[traverse(skip)]
-        #[garde(skip)]
-        state: TfmStepStateShared,
-        #[traverse(skip)]
-        #[garde(skip)]
-        ema: EmaFilterCfg,
-    },
-    Linear {
-        #[serde(skip)]
-        #[traverse(skip)]
-        #[garde(skip)]
-        state: TfmStepStateShared,
-        #[traverse(skip)]
-        #[garde(skip)]
-        linear: LinearCfg,
-    },
-    Smoothstep {
-        #[serde(skip)]
-        #[traverse(skip)]
-        #[garde(skip)]
-        state: TfmStepStateShared,
-        #[traverse(skip)]
-        #[garde(skip)]
-        smoothstep: SmoothstepCfg,
-    },
-    SCurve {
-        #[serde(skip)]
-        #[traverse(skip)]
-        #[garde(skip)]
-        state: TfmStepStateShared,
-        #[traverse(skip)]
-        #[garde(skip)]
-        s_curve: SCurveCfg,
-    },
-    #[strum(serialize = "exp")]
-    NormExp {
-        #[serde(skip)]
-        #[traverse(skip)]
-        #[garde(skip)]
-        state: TfmStepStateShared,
-        #[traverse(skip)]
-        #[garde(skip)]
-        exp: NormExpCfg,
-    },
-    SignedPower {
-        #[serde(skip)]
-        #[traverse(skip)]
-        #[garde(skip)]
-        state: TfmStepStateShared,
-        #[traverse(skip)]
-        #[garde(skip)]
-        signed_power: SignedPowerCfg,
-    },
-    OneEuro {
-        #[serde(skip)]
-        #[traverse(skip)]
-        #[garde(skip)]
-        state: TfmStepStateShared,
-        #[traverse(skip)]
-        #[garde(skip)]
-        one_euro: OneEuroFilterCfg,
-    },
-    Script {
-        #[serde(skip)]
-        #[traverse(skip)]
-        #[garde(skip)]
-        state: TfmStepStateShared,
-        #[garde(skip)]
-        script: ScriptCfg,
-    },
+    #[traverse(skip)]
+    Nop(#[garde(skip)] NopCfg),
+    #[traverse(skip)]
+    Invert(#[garde(skip)] InvertCfg),
+    #[traverse(skip)]
+    Integrate(#[garde(skip)] IntegrateCfg),
+    Steering(#[garde(skip)] Box<SteeringCfg>),
+    #[traverse(skip)]
+    Clamp(#[garde(skip)] ClampCfg),
+    RaiseFall(#[garde(skip)] RaiseFallCfg),
+    #[traverse(skip)]
+    Ema(#[garde(skip)] EmaFilterCfg),
+    #[traverse(skip)]
+    Linear(#[garde(skip)] LinearCfg),
+    #[traverse(skip)]
+    Smoothstep(#[garde(skip)] SmoothstepCfg),
+    #[traverse(skip)]
+    #[serde(alias = "s_curve")]
+    SCurve(#[garde(skip)] SCurveCfg),
+    #[traverse(skip)]
+    Exp(#[garde(skip)] NormExpCfg),
+    #[traverse(skip)]
+    SignedPower(#[garde(skip)] SignedPowerCfg),
+    #[traverse(skip)]
+    OneEuro(#[garde(skip)] OneEuroFilterCfg),
+    Script(#[garde(skip)] ScriptCfg),
     #[strum(disabled)]
-    _HighPass {
-        #[serde(skip)]
-        #[traverse(skip)]
-        #[garde(skip)]
-        state: TfmStepStateShared,
-        #[traverse(skip)]
-        #[garde(skip)]
-        highpass: HighPassCfg,
-    },
+    #[traverse(skip)]
+    _HighPass(#[garde(skip)] HighPassCfg),
     #[strum(disabled)]
-    _ForceFeedback {
-        #[serde(skip)]
-        #[traverse(skip)]
-        #[garde(skip)]
-        state: TfmStepStateShared,
-        #[traverse(skip)]
-        #[garde(skip)]
-        force_feedback: ForceFeedbackCfg,
-    },
+    #[traverse(skip)]
+    _ForceFeedback(#[garde(skip)] ForceFeedbackCfg),
 }
 
 impl TfmStepCfg {
     pub(crate) fn get_enabled_ref_mut(&mut self) -> &mut bool {
         match self {
-            Self::Nop { nop, .. } => nop,
-            Self::Invert { invert, .. } => &mut invert.enabled,
-            Self::Integrate { integrate, .. } => &mut integrate.enabled,
-            Self::Steering { steering, .. } => &mut steering.enabled,
-            Self::Clamp { clamp, .. } => &mut clamp.enabled,
-            Self::RaiseFall { raise_fall, .. } => &mut raise_fall.enabled,
-            Self::Ema { ema, .. } => &mut ema.enabled,
-            Self::Linear { linear, .. } => &mut linear.enabled,
-            Self::Smoothstep {
-                smoothstep: smoothstep_curve,
-                ..
-            } => &mut smoothstep_curve.enabled,
-            Self::SCurve { s_curve, .. } => &mut s_curve.enabled,
-            Self::NormExp {
-                exp: norm_exp_curve, ..
-            } => &mut norm_exp_curve.enabled,
-            Self::SignedPower {
-                signed_power: signed_power_curve,
-                ..
-            } => &mut signed_power_curve.enabled,
-            Self::OneEuro { one_euro, .. } => &mut one_euro.enabled,
-            Self::Script { script, .. } => &mut script.enabled,
-            Self::_HighPass { highpass, .. } => &mut highpass.enabled,
-            Self::_ForceFeedback { force_feedback, .. } => &mut force_feedback.enabled,
+            Self::Nop(s) => &mut s.enabled,
+            Self::Invert(s) => &mut s.enabled,
+            Self::Integrate(s) => &mut s.enabled,
+            Self::Steering(s) => &mut s.enabled,
+            Self::Clamp(s) => &mut s.enabled,
+            Self::RaiseFall(s) => &mut s.enabled,
+            Self::Ema(s) => &mut s.enabled,
+            Self::Linear(s) => &mut s.enabled,
+            Self::Smoothstep(s) => &mut s.enabled,
+            Self::SCurve(s) => &mut s.enabled,
+            Self::Exp(s) => &mut s.enabled,
+            Self::SignedPower(s) => &mut s.enabled,
+            Self::OneEuro(s) => &mut s.enabled,
+            Self::Script(s) => &mut s.enabled,
+            Self::_HighPass(s) => &mut s.enabled,
+            Self::_ForceFeedback(s) => &mut s.enabled,
         }
     }
 
     pub(crate) fn get_state_arc(&self) -> &Arc<RwLock<TfmStepState>> {
         match self {
-            Self::Nop { state, .. }
-            | Self::Invert { state, .. }
-            | Self::Integrate { state, .. }
-            | Self::Steering { state, .. }
-            | Self::Clamp { state, .. }
-            | Self::RaiseFall { state, .. }
-            | Self::Ema { state, .. }
-            | Self::Linear { state, .. }
-            | Self::Smoothstep { state, .. }
-            | Self::SCurve { state, .. }
-            | Self::NormExp { state, .. }
-            | Self::SignedPower { state, .. }
-            | Self::OneEuro { state, .. }
-            | Self::Script { state, .. }
-            | Self::_HighPass { state, .. }
-            | Self::_ForceFeedback { state, .. } => &state.0,
+            TfmStepCfg::Nop(s) => &s.state.0,
+            TfmStepCfg::Invert(s) => &s.state.0,
+            TfmStepCfg::Integrate(s) => &s.state.0,
+            TfmStepCfg::Steering(s) => &s.state.0,
+            TfmStepCfg::Clamp(s) => &s.state.0,
+            TfmStepCfg::RaiseFall(s) => &s.state.0,
+            TfmStepCfg::Ema(s) => &s.state.0,
+            TfmStepCfg::Linear(s) => &s.state.0,
+            TfmStepCfg::Smoothstep(s) => &s.state.0,
+            TfmStepCfg::SCurve(s) => &s.state.0,
+            TfmStepCfg::Exp(s) => &s.state.0,
+            TfmStepCfg::SignedPower(s) => &s.state.0,
+            TfmStepCfg::OneEuro(s) => &s.state.0,
+            TfmStepCfg::Script(s) => &s.state.0,
+            TfmStepCfg::_HighPass(s) => &s.state.0,
+            TfmStepCfg::_ForceFeedback(s) => &s.state.0,
         }
     }
 
     pub(crate) fn get_state_arc_mut(&mut self) -> &mut Arc<RwLock<TfmStepState>> {
         match self {
-            Self::Nop { state, .. }
-            | Self::Invert { state, .. }
-            | Self::Integrate { state, .. }
-            | Self::Steering { state, .. }
-            | Self::Clamp { state, .. }
-            | Self::RaiseFall { state, .. }
-            | Self::Ema { state, .. }
-            | Self::Linear { state, .. }
-            | Self::Smoothstep { state, .. }
-            | Self::SCurve { state, .. }
-            | Self::NormExp { state, .. }
-            | Self::SignedPower { state, .. }
-            | Self::OneEuro { state, .. }
-            | Self::Script { state, .. }
-            | Self::_HighPass { state, .. }
-            | Self::_ForceFeedback { state, .. } => &mut state.0,
+            TfmStepCfg::Nop(s) => &mut s.state.0,
+            TfmStepCfg::Invert(s) => &mut s.state.0,
+            TfmStepCfg::Integrate(s) => &mut s.state.0,
+            TfmStepCfg::Steering(s) => &mut s.state.0,
+            TfmStepCfg::Clamp(s) => &mut s.state.0,
+            TfmStepCfg::RaiseFall(s) => &mut s.state.0,
+            TfmStepCfg::Ema(s) => &mut s.state.0,
+            TfmStepCfg::Linear(s) => &mut s.state.0,
+            TfmStepCfg::Smoothstep(s) => &mut s.state.0,
+            TfmStepCfg::SCurve(s) => &mut s.state.0,
+            TfmStepCfg::Exp(s) => &mut s.state.0,
+            TfmStepCfg::SignedPower(s) => &mut s.state.0,
+            TfmStepCfg::OneEuro(s) => &mut s.state.0,
+            TfmStepCfg::Script(s) => &mut s.state.0,
+            TfmStepCfg::_HighPass(s) => &mut s.state.0,
+            TfmStepCfg::_ForceFeedback(s) => &mut s.state.0,
         }
     }
 
@@ -489,145 +376,6 @@ impl TfmStepCfg {
 }
 
 // ===========================================================
-
-fn step_parse_result(key: &str) -> anyhow::Result<TfmStepCfg> {
-    let r = TfmStepCfg::from_str(key).map_err(|_| {
-        anyhow::anyhow!(
-            "Unexpected transformation step \"{key}\" found. Supported steps are: {:?}",
-            TfmStepCfg::iter()
-                .map(|c: TfmStepCfg| c.to_string())
-                .collect::<Vec<_>>()
-        )
-    })?;
-
-    Ok(r)
-}
-
-impl<'de> Deserialize<'de> for TfmStepCfg {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        use serde::de::{self, MapAccess, Visitor};
-        use std::fmt;
-        struct StepVisitor {}
-
-        impl<'de> Visitor<'de> for StepVisitor {
-            type Value = TfmStepCfg;
-
-            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                f.write_str("a map with exactly one transformation step key (e.g. { clamp: {...} }) or `invert`")
-            }
-
-            fn visit_str<E>(self, key: &str) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                let step: TfmStepCfg = step_parse_result(key).map_err(|e| de::Error::custom(e))?;
-
-                match step {
-                    TfmStepCfg::Invert { state, .. } => Ok(TfmStepCfg::Invert {
-                        state,
-                        invert: InvertCfg { enabled: true },
-                    }),
-                    _ => Err(de::Error::custom("Expected invert")),
-                }
-            }
-
-            fn visit_string<E>(self, key: String) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                self.visit_str(&key)
-            }
-
-            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
-            where
-                M: MapAccess<'de>,
-            {
-                let Some(key) = map.next_key::<String>()? else {
-                    return Err(de::Error::custom("empty transformation step object"));
-                };
-
-                type S = TfmStepCfg;
-                let step = match step_parse_result(key.as_str()).map_err(de::Error::custom)? {
-                    S::Nop { .. } => S::Nop {
-                        nop: map.next_value()?,
-                        state: Default::default(),
-                    },
-                    S::Invert { .. } => S::Invert {
-                        invert: map.next_value()?,
-                        state: Default::default(),
-                    },
-                    S::Integrate { .. } => S::Integrate {
-                        integrate: map.next_value()?,
-                        state: Default::default(),
-                    },
-                    S::Steering { .. } => S::Steering {
-                        steering: map.next_value()?,
-                        state: Default::default(),
-                    },
-                    S::Clamp { .. } => S::Clamp {
-                        clamp: map.next_value()?,
-                        state: Default::default(),
-                    },
-                    S::RaiseFall { .. } => S::RaiseFall {
-                        raise_fall: map.next_value()?,
-                        state: Default::default(),
-                    },
-                    S::Ema { .. } => S::Ema {
-                        ema: map.next_value()?,
-                        state: Default::default(),
-                    },
-                    S::Linear { .. } => S::Linear {
-                        linear: map.next_value()?,
-                        state: Default::default(),
-                    },
-                    S::Smoothstep { .. } => S::Smoothstep {
-                        smoothstep: map.next_value()?,
-                        state: Default::default(),
-                    },
-                    S::SCurve { .. } => S::SCurve {
-                        s_curve: map.next_value()?,
-                        state: Default::default(),
-                    },
-                    S::NormExp { .. } => S::NormExp {
-                        exp: map.next_value()?,
-                        state: Default::default(),
-                    },
-                    S::SignedPower { .. } => S::SignedPower {
-                        signed_power: map.next_value()?,
-                        state: Default::default(),
-                    },
-                    S::OneEuro { .. } => S::OneEuro {
-                        one_euro: map.next_value()?,
-                        state: Default::default(),
-                    },
-                    S::Script { .. } => S::Script {
-                        script: map.next_value()?,
-                        state: Default::default(),
-                    },
-                    S::_HighPass { .. } => todo!(),
-                    S::_ForceFeedback { .. } => todo!(),
-                };
-
-                // Enforce "exactly one key" (catch typos like { clamp: {...}, foo: 1 })
-                if let Some(extra) = map.next_key::<String>()? {
-                    return Err(de::Error::custom(format!(
-                        "transformation step must contain exactly one key; found extra key '{}' after '{}'",
-                        extra, key
-                    )));
-                }
-
-                Ok(step)
-            }
-        }
-
-        deserializer.deserialize_any(StepVisitor {})
-    }
-}
-
-// pub(crate) type TfmStep = TfmStepGen<ForceFeedbackCfg, SteeringCfg, RaiseFallCfg>;
 
 #[derive(
     JsonSchema,
@@ -656,6 +404,11 @@ pub(crate) enum ForceFeedbackComponent {
 )]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ForceFeedbackCfg {
+    #[serde(skip)]
+    #[traverse(skip)]
+    #[garde(skip)]
+    state: TfmStepStateShared,
+
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -706,6 +459,9 @@ pub(crate) struct ForceFeedbackCfg {
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ClampCfg {
+    #[serde(skip)]
+    #[garde(skip)]
+    state: TfmStepStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) desc: DescriptionCfg,
@@ -725,6 +481,7 @@ impl Default for ClampCfg {
             from: Default::default(),
             to: Default::default(),
             override_range: Default::default(),
+            state: Default::default(),
         }
     }
 }
@@ -747,7 +504,47 @@ impl ClampCfg {
 
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
+#[serde(from = "bool", into = "bool")]
+pub(crate) struct NopCfg {
+    #[serde(skip)]
+    #[garde(skip)]
+    state: TfmStepStateShared,
+    #[garde(skip)]
+    #[serde(default = "default_step_enabled")]
+    pub(crate) enabled: bool,
+}
+
+impl Default for NopCfg {
+    fn default() -> Self {
+        Self {
+            state: Default::default(),
+            enabled: default_step_enabled(),
+        }
+    }
+}
+
+impl From<NopCfg> for bool {
+    fn from(value: NopCfg) -> Self {
+        value.enabled
+    }
+}
+
+impl From<bool> for NopCfg {
+    fn from(value: bool) -> Self {
+        Self {
+            state: Default::default(),
+            enabled: value,
+        }
+    }
+}
+
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct InvertCfg {
+    #[serde(skip)]
+    #[garde(skip)]
+    state: TfmStepStateShared,
+    #[garde(skip)]
     #[serde(default = "default_step_enabled")]
     pub(crate) enabled: bool,
 }
@@ -755,6 +552,7 @@ pub(crate) struct InvertCfg {
 impl Default for InvertCfg {
     fn default() -> Self {
         Self {
+            state: Default::default(),
             enabled: default_step_enabled(),
         }
     }
@@ -763,6 +561,9 @@ impl Default for InvertCfg {
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Validate)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct EmaFilterCfg {
+    #[serde(skip)]
+    #[garde(skip)]
+    state: TfmStepStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -791,6 +592,7 @@ impl Default for EmaFilterCfg {
             tau: 0.01,
             on_relative_input_reset_on_idle: default_false(),
             desc: Default::default(),
+            state: Default::default(),
         }
     }
 }
@@ -798,6 +600,10 @@ impl Default for EmaFilterCfg {
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Validate)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct OneEuroFilterCfg {
+    #[serde(skip)]
+    #[garde(skip)]
+    state: TfmStepStateShared,
+
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -834,6 +640,7 @@ impl Default for OneEuroFilterCfg {
             d_cutoff_hz: default_1euro_d_cutoff_hz(),
             on_relative_input_reset_on_idle: default_false(),
             desc: Default::default(),
+            state: Default::default(),
         }
     }
 }
@@ -841,6 +648,9 @@ impl Default for OneEuroFilterCfg {
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct LinearCfg {
+    #[serde(skip)]
+    #[garde(skip)]
+    state: TfmStepStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) desc: DescriptionCfg,
@@ -869,6 +679,7 @@ impl Default for LinearCfg {
             center_symmetric: Default::default(),
             on_idle: default_on_idle(),
             desc: Default::default(),
+            state: Default::default(),
         }
     }
 }
@@ -876,6 +687,8 @@ impl Default for LinearCfg {
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct SmoothstepCfg {
+    #[serde(skip)]
+    state: TfmStepStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) desc: DescriptionCfg,
@@ -892,6 +705,7 @@ impl Default for SmoothstepCfg {
             enabled: default_step_enabled(),
             on_idle: default_on_idle(),
             desc: Default::default(),
+            state: Default::default(),
         }
     }
 }
@@ -899,6 +713,10 @@ impl Default for SmoothstepCfg {
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Validate)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct SCurveCfg {
+    #[serde(skip)]
+    #[garde(skip)]
+    state: TfmStepStateShared,
+
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -922,6 +740,7 @@ impl Default for SCurveCfg {
             steepness: default_scurve_steepness(),
             on_idle: default_on_idle(),
             desc: Default::default(),
+            state: Default::default(),
         }
     }
 }
@@ -935,6 +754,10 @@ impl Default for SCurveCfg {
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Validate)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct NormExpCfg {
+    #[serde(skip)]
+    #[garde(skip)]
+    state: TfmStepStateShared,
+
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -963,6 +786,7 @@ impl Default for NormExpCfg {
             center_symmetric: Default::default(),
             on_idle: default_on_idle(),
             desc: Default::default(),
+            state: Default::default(),
         }
     }
 }
@@ -970,6 +794,10 @@ impl Default for NormExpCfg {
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Validate)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct SignedPowerCfg {
+    #[serde(skip)]
+    #[garde(skip)]
+    state: TfmStepStateShared,
+
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -998,6 +826,7 @@ impl Default for SignedPowerCfg {
             center_symmetric: Default::default(),
             on_idle: default_on_idle(),
             desc: Default::default(),
+            state: Default::default(),
         }
     }
 }
@@ -1005,6 +834,10 @@ impl Default for SignedPowerCfg {
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Default, Validate)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct HighPassCfg {
+    #[serde(skip)]
+    #[garde(skip)]
+    state: TfmStepStateShared,
+
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -1023,6 +856,9 @@ pub(crate) struct HighPassCfg {
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Validate)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct IntegrateCfg {
+    #[serde(skip)]
+    #[garde(skip)]
+    state: TfmStepStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -1053,6 +889,7 @@ impl Default for IntegrateCfg {
             smoothing_alpha: default_smoothing_alpha(),
             on_idle: default_on_idle(),
             desc: Default::default(),
+            state: Default::default(),
         }
     }
 }
@@ -1089,7 +926,7 @@ impl TfmSeqCfg {
         let mut in_interval = self.in_meta.interval;
         for step in &mut self.steps {
             let (out_interval, out_relativity) = match step {
-                TfmStepCfg::Script { script, .. } => {
+                TfmStepCfg::Script(script) => {
                     script
                         .aux_transformations
                         .iter_mut()
@@ -1099,8 +936,8 @@ impl TfmSeqCfg {
                         script.output_relativity.unwrap_or(in_relativity),
                     )
                 }
-                TfmStepCfg::Integrate { integrate, .. } if integrate.enabled => (integrate.range, Relativity::Abs),
-                TfmStepCfg::Steering { steering, .. } if steering.enabled => {
+                TfmStepCfg::Integrate(integrate) if integrate.enabled => (integrate.range, Relativity::Abs),
+                TfmStepCfg::Steering(steering) if steering.enabled => {
                     steering
                         .integrated_user_input_transform
                         .recompute_metadata(AutoOrManual::Auto(InputValueMetadata {
@@ -1116,27 +953,25 @@ impl TfmSeqCfg {
                     };
                     (SYMM_UNIT_INTERVAL, Relativity::Abs)
                 }
-                TfmStepCfg::_ForceFeedback { force_feedback, .. } if force_feedback.enabled => {
+                TfmStepCfg::_ForceFeedback(force_feedback) if force_feedback.enabled => {
                     (SYMM_UNIT_INTERVAL, Relativity::Abs)
                 }
-                TfmStepCfg::Clamp { clamp, .. } if clamp.enabled => {
-                    (clamp.get_out_interval(in_interval), in_relativity)
-                }
-                TfmStepCfg::Nop { .. }
-                | TfmStepCfg::Invert { .. }
-                | TfmStepCfg::Integrate { .. }
-                | TfmStepCfg::Steering { .. }
-                | TfmStepCfg::Clamp { .. }
-                | TfmStepCfg::RaiseFall { .. }
-                | TfmStepCfg::Ema { .. }
-                | TfmStepCfg::Linear { .. }
-                | TfmStepCfg::Smoothstep { .. }
-                | TfmStepCfg::SCurve { .. }
-                | TfmStepCfg::NormExp { .. }
-                | TfmStepCfg::SignedPower { .. }
-                | TfmStepCfg::OneEuro { .. }
-                | TfmStepCfg::_HighPass { .. }
-                | TfmStepCfg::_ForceFeedback { .. } => (in_interval, in_relativity),
+                TfmStepCfg::Clamp(clamp) if clamp.enabled => (clamp.get_out_interval(in_interval), in_relativity),
+                TfmStepCfg::Nop(_)
+                | TfmStepCfg::Invert(_)
+                | TfmStepCfg::Integrate(_)
+                | TfmStepCfg::Steering(_)
+                | TfmStepCfg::Clamp(_)
+                | TfmStepCfg::RaiseFall(_)
+                | TfmStepCfg::Ema(_)
+                | TfmStepCfg::Linear(_)
+                | TfmStepCfg::Smoothstep(_)
+                | TfmStepCfg::SCurve(_)
+                | TfmStepCfg::Exp(_)
+                | TfmStepCfg::SignedPower(_)
+                | TfmStepCfg::OneEuro(_)
+                | TfmStepCfg::_HighPass(_)
+                | TfmStepCfg::_ForceFeedback(_) => (in_interval, in_relativity),
             };
 
             step.get_state_as_mut()
@@ -1413,6 +1248,10 @@ impl WithRuntimeId for TfmSeqCfg {
 
 #[derive(Debug, Clone, Serialize, Traversable, TraversableMut, Deserialize, JsonSchema, PartialEq, Validate)]
 pub(crate) struct SteeringCfg {
+    #[serde(skip)]
+    #[traverse(skip)]
+    #[garde(skip)]
+    state: TfmStepStateShared,
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -1478,12 +1317,17 @@ impl Default for SteeringCfg {
             integrated_user_input_transform: TfmSeqCfg::default(),
             desc: Default::default(),
             accumulator: Default::default(),
+            state: Default::default(),
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Deserialize, JsonSchema, Traversable, TraversableMut, Validate)]
 pub(crate) struct RaiseFallCfg {
+    #[serde(skip)]
+    #[traverse(skip)]
+    #[garde(skip)]
+    state: TfmStepStateShared,
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -1526,6 +1370,7 @@ impl Default for RaiseFallCfg {
             }),
             invert_fall_hold_factor: false,
             desc: Default::default(),
+            state: Default::default(),
         }
     }
 }
@@ -1567,6 +1412,11 @@ pub(crate) enum ScriptLanguage {
 
 #[derive(Clone, Serialize, Deserialize, JsonSchema, Debug, TraversableMut, Traversable, PartialEq)]
 pub(crate) struct ScriptCfg {
+    #[serde(skip)]
+    #[traverse(skip)]
+    #[garde(skip)]
+    state: TfmStepStateShared,
+
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -1616,6 +1466,7 @@ impl Default for ScriptCfg {
             aux_srcs: Default::default(),
             aux_dsts: Default::default(),
             aux_transformations: Default::default(),
+            state: Default::default(),
         }
     }
 }
@@ -1701,22 +1552,22 @@ impl WithRuntimeId for TfmStepCfg {
 impl WithDescriptionMut for TfmStepCfg {
     fn description_mut(&mut self) -> Option<&mut DescriptionCfg> {
         match self {
-            TfmStepCfg::Nop { .. } => None,
-            TfmStepCfg::Invert { .. } => None,
-            TfmStepCfg::Integrate { integrate, .. } => Some(&mut integrate.desc),
-            TfmStepCfg::Steering { steering, .. } => Some(&mut steering.desc),
-            TfmStepCfg::Clamp { clamp, .. } => Some(&mut clamp.desc),
-            TfmStepCfg::RaiseFall { raise_fall, .. } => Some(&mut raise_fall.desc),
-            TfmStepCfg::Ema { ema, .. } => Some(&mut ema.desc),
-            TfmStepCfg::Linear { linear, .. } => Some(&mut linear.desc),
-            TfmStepCfg::Smoothstep { smoothstep, .. } => Some(&mut smoothstep.desc),
-            TfmStepCfg::SCurve { s_curve, .. } => Some(&mut s_curve.desc),
-            TfmStepCfg::NormExp { exp, .. } => Some(&mut exp.desc),
-            TfmStepCfg::SignedPower { signed_power, .. } => Some(&mut signed_power.desc),
-            TfmStepCfg::OneEuro { one_euro, .. } => Some(&mut one_euro.desc),
-            TfmStepCfg::Script { script, .. } => Some(&mut script.desc),
-            TfmStepCfg::_HighPass { highpass, .. } => Some(&mut highpass.desc),
-            TfmStepCfg::_ForceFeedback { force_feedback, .. } => Some(&mut force_feedback.desc),
+            TfmStepCfg::Nop(_) => None,
+            TfmStepCfg::Invert(_) => None,
+            TfmStepCfg::Integrate(integrate) => Some(&mut integrate.desc),
+            TfmStepCfg::Steering(steering) => Some(&mut steering.desc),
+            TfmStepCfg::Clamp(clamp) => Some(&mut clamp.desc),
+            TfmStepCfg::RaiseFall(raise_fall) => Some(&mut raise_fall.desc),
+            TfmStepCfg::Ema(ema) => Some(&mut ema.desc),
+            TfmStepCfg::Linear(linear) => Some(&mut linear.desc),
+            TfmStepCfg::Smoothstep(smoothstep) => Some(&mut smoothstep.desc),
+            TfmStepCfg::SCurve(s_curve) => Some(&mut s_curve.desc),
+            TfmStepCfg::Exp(exp) => Some(&mut exp.desc),
+            TfmStepCfg::SignedPower(signed_power) => Some(&mut signed_power.desc),
+            TfmStepCfg::OneEuro(one_euro) => Some(&mut one_euro.desc),
+            TfmStepCfg::Script(script) => Some(&mut script.desc),
+            TfmStepCfg::_HighPass(highpass) => Some(&mut highpass.desc),
+            TfmStepCfg::_ForceFeedback(force_feedback) => Some(&mut force_feedback.desc),
         }
     }
 }
