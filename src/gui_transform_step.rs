@@ -39,8 +39,8 @@ impl TfmStepCfg {
     pub(crate) fn get_graph_legend(&self) -> String {
         format!(
             "Input: Blue, range: {}, Output: Red, range: {}.",
-            self.get_state().get_in_interval(),
-            self.get_state().get_out_interval()
+            self.get_mon_state_read_guard().get_in_interval(),
+            self.get_mon_state_read_guard().get_out_interval()
         )
     }
 }
@@ -62,7 +62,7 @@ fn draw_graph_docked_or_windowed(
     // ui.label(state.0.read().get_state_id().to_string());
 
     // ---------------------------------------
-    if tfm_step.get_state().trace_channel.is_none() {
+    if tfm_step.get_mon_state_read_guard().trace_channel.is_none() {
         let (trace_graph_handle, gui_graph_state) = make_trace_graph_2d(
             &tfm_step.get_graph_hash_key_string(),
             &tfm_step.get_graph_legend(),
@@ -83,12 +83,12 @@ fn draw_graph_docked_or_windowed(
     let mut graph_displayed = false;
     let mut display_graph = |ui: &mut egui::Ui| {
         if let Some(gui_graph) = gui_graphs.borrow_mut().get_mut(&tfm_step.get_graph_hash_key_string()) {
-            if !tfm_step.get_state().is_gui_tracing_enabled() {
+            if !tfm_step.get_mon_state_read_guard().is_gui_tracing_enabled() {
                 tfm_step.get_state_as_mut().enable_gui_tracing();
                 changed = true;
             }
             graph_displayed = true;
-            if gui_graph._in_interval != tfm_step.get_state().get_in_interval() {
+            if gui_graph._in_interval != tfm_step.get_mon_state_read_guard().get_in_interval() {
                 gui_graph.legend = tfm_step.get_graph_legend();
             }
             gui_graph.consume_input_queue_and_draw_gui(ui);
@@ -106,7 +106,7 @@ fn draw_graph_docked_or_windowed(
             })
             .map(|r| r.inner.unwrap_or_default())
             .unwrap_or_default();
-        if !tfm_step.get_state().is_gui_tracing_enabled() {
+        if !tfm_step.get_mon_state_read_guard().is_gui_tracing_enabled() {
             tfm_step.get_state_as_mut().enable_gui_tracing();
             changed = true;
         }
@@ -141,7 +141,7 @@ fn draw_graph_docked_or_windowed(
 
     ui.data_mut(|d| d.insert_temp(is_graph_window_opened_egui_id, *egui_state_is_graph_window_opened));
 
-    if !graph_displayed && tfm_step.get_state().is_gui_tracing_enabled() {
+    if !graph_displayed && tfm_step.get_mon_state_read_guard().is_gui_tracing_enabled() {
         tfm_step.get_state_as_mut().disable_gui_tracing();
         changed = true;
     }
@@ -222,7 +222,7 @@ impl<'g> GuiInTfmStepsSeq<'g> {
     }
 }
 
-fn draw_step_in_out(ui: &mut egui::Ui, state: &TfmStepState, is_enabled: bool) {
+fn draw_step_in_out(ui: &mut egui::Ui, state: &TfmStepMonState, is_enabled: bool) {
     let last_in = state.last_in.load(std::sync::atomic::Ordering::Relaxed);
     let last_out = state.last_out.load(std::sync::atomic::Ordering::Relaxed);
 
@@ -468,7 +468,7 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                 cfg_variables,
                 ..
             } => {
-                let in_is_relative = self.get_state().is_in_relative();
+                let in_is_relative = self.get_mon_state_read_guard().is_in_relative();
                 let transform_name = self.to_string();
                 let label = format!("({}) {}", step_idx + 1, transform_name);
                 let is_enabled = *self.get_enabled_ref_mut();
@@ -525,7 +525,7 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                     let mut gui_out = bool_to_simple_change_gui_cmd(
                                         ui.checkbox(self.get_enabled_ref_mut(), enable_disable_text).changed(),
                                     );
-                                    draw_step_in_out(ui, &self.get_state(), is_enabled);
+                                    draw_step_in_out(ui, &self.get_mon_state_read_guard(), is_enabled);
                                     ui.separator();
                                     if ui
                                         .button(format!("{}", egui_phosphor::bold::TRASH))
@@ -568,7 +568,7 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                         |ui| {
                                             let label = self.to_string();
                                             ui.separator();
-                                            let in_interval = self.get_state().get_in_interval();
+                                            let in_interval = self.get_mon_state_read_guard().get_in_interval();
                                             match self {
                                                 Self::Script(s) => s.egui(
                                                     (
@@ -1243,7 +1243,7 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
 
 // =========================================
 
-impl TfmStepState {
+impl TfmStepMonState {
     pub(crate) fn enable_gui_tracing(&mut self) {
         self.gui_trace_graph_opened = true
     }
