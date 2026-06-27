@@ -9,7 +9,9 @@ use crate::{
         is_false, is_none_or_default, is_zero,
     },
     schemas_predefined::HidControlPredefined,
-    schemas_value::_WithDstRefCount,
+    schemas_value::{
+        _WithDstRefCount, WithLastKnownIO, WithLastKnownIOSettable, WithNumericValue, WithNumericValueSettable,
+    },
 };
 use crossbeam_utils::CachePadded;
 use doc_for::*;
@@ -18,7 +20,10 @@ use garde::Validate;
 use serde::{Deserialize, Deserializer, Serialize, de::IntoDeserializer};
 use std::{
     collections::BTreeMap,
-    sync::{Arc, atomic::AtomicUsize},
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering::Relaxed},
+    },
 };
 use strum_macros::{Display, EnumIter, EnumString};
 use traversable::{Traversable, TraversableMut};
@@ -600,13 +605,41 @@ pub(crate) struct HidControlMatcherCfg {
     pub(crate) idle_tick_enabled: IdleTickEnabledFlag,
     #[serde(skip)]
     #[traverse(skip)]
-    pub(crate) last_known_io_value: Arc<CachePadded<BaseAtomicT>>,
+    last_known_io_value: Arc<CachePadded<BaseAtomicT>>,
     #[serde(skip)]
     #[traverse(skip)]
-    pub(crate) current_value: Arc<CachePadded<BaseAtomicT>>,
+    current_value: Arc<CachePadded<BaseAtomicT>>,
     #[serde(skip)]
     #[traverse(skip)]
     _dst_refs_count: Arc<CachePadded<AtomicUsize>>,
+}
+
+impl WithLastKnownIOSettable<BaseNumT> for HidControlMatcherCfg {
+    fn set_last_known_io(&self, v: BaseNumT) {
+        self.last_known_io_value.store(v, Relaxed);
+    }
+}
+
+impl WithNumericValue for HidControlMatcherCfg {
+    type ValueT = BaseNumT;
+
+    fn get_numeric_value(&self) -> Self::ValueT {
+        self.current_value.load(Relaxed)
+    }
+}
+
+impl WithNumericValueSettable for HidControlMatcherCfg {
+    type ValueT = BaseNumT;
+
+    fn set_numeric_value(&self, v: Self::ValueT) {
+        self.current_value.store(v, Relaxed);
+    }
+}
+
+impl WithLastKnownIO<BaseNumT> for HidControlMatcherCfg {
+    fn get_last_known_io(&self) -> BaseNumT {
+        self.last_known_io_value.load(Relaxed) as BaseNumT
+    }
 }
 
 impl From<HidControlPredefined> for HidControlMatcherCfg {

@@ -1,0 +1,38 @@
+name: Partial Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test-no-default:
+    name: Test with No Default Features
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install ALSA dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build and Test NDF (Debug Mode)
+        run: cargo test --no-default-features --verbose
+
+      - name: Build and Test MIDI ONLY (Debug Mode)
+        run: cargo test --no-default-features  --features=midi --verbose
+
+      - name: Build and Test GUI ONLY (Debug Mode)
+        run: cargo test --no-default-features  --features=gui --verbose
+
+

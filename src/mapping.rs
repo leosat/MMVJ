@@ -367,6 +367,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
 
     pub(crate) fn stop(&mut self) -> Result<()> {
         self.running = false;
+        #[cfg(feature = "midi")]
         self.midi_mgr.stop()?;
         Ok(())
     }
@@ -402,7 +403,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     msg.matches_control_matcher(cm)
                 })
                 .for_each(|(cm_idx, cm)| {
-                    cm.set_last_known_io(msg.get_value());
+                    cm.set_numeric_value(msg.get_value());
                     if mappings.len() > 0 {
                         self.router_buff_mappings_to_execute.extend(&mappings[cm_idx]);
                     }
@@ -428,7 +429,8 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                 cms.iter_mut().enumerate().for_each(|(cm_idx, cm)| {
                     cm.set_last_known_io(value);
                     cm.set_numeric_value(
-                        value, /* NB: for "stable mode" we'd do: value + cm.get_numeric_value()) */
+                        value, /* NB/TODO: for Rel controls in proposed "stable mode": value + cm.get_numeric_value())
+                              and safe ptr to the control to zero-out after mappings run complete*/
                     );
                     if mappings.len() > 0 {
                         self.router_buff_mappings_to_execute.extend(&mappings[cm_idx]);
@@ -437,7 +439,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
 
                 self.run_mappings__(device_id);
 
-                // Extra step for relative values: provide 0 after consumed by all the relevant mappings.
+                // NB/TODO: for Rel controls in proposed "stable mode": zero-out.
                 if control_type.is_relative()
                     && let Some((cms, _)) = self
                         .router_index_sysdev_and_ctl_type_to_cms_and_mappings
@@ -458,6 +460,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             self.execute_mapping_on_active_input(triggering_device_id, mapping, mapping.src.get_numeric_value());
         }
         self.router_buff_mappings_to_execute.clear();
+        // NB/TODO: for Rel controls in proposed "stable mode": zero out value caches for all the updated ones.
     }
 
     fn execute_mapping_on_active_input(
@@ -516,17 +519,14 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
     #[cfg(feature = "gui")]
     fn gui_trace_transform_step(
         &self,
-        store_last_in_out: bool, // TODO: perf: always on.
         stage: gui_transform_step::TfmStepTraceStage,
         step_ref: &TfmStepCfg,
         vd: &MappedValue<BaseNumT>,
     ) {
-        if store_last_in_out {
-            match stage {
-                TfmStepTraceStage::In => step_ref.get_state().last_in.store(vd.value as f32, Relaxed),
-                TfmStepTraceStage::Out => step_ref.get_state().last_out.store(vd.value as f32, Relaxed),
-                _ => {}
-            }
+        match stage {
+            TfmStepTraceStage::In => step_ref.get_state().last_in.store(vd.value as f32, Relaxed),
+            TfmStepTraceStage::Out => step_ref.get_state().last_out.store(vd.value as f32, Relaxed),
+            _ => {}
         }
 
         step_ref.get_state().gui_trace(stage, vd, Instant::now());
@@ -770,12 +770,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         is_idle_tick: bool,
     ) -> MappedValue<BaseNumT> {
         #[cfg(feature = "gui")]
-        self.gui_trace_transform_step(
-            mapping.store_last_in_out, // TODO: perf: always on.
-            gui_transform_step::TfmStepTraceStage::In,
-            step,
-            &vd,
-        );
+        self.gui_trace_transform_step(gui_transform_step::TfmStepTraceStage::In, step, &vd);
 
         match step {
             TfmStepCfg::Nop(_) => {}
@@ -901,12 +896,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         }
 
         #[cfg(feature = "gui")]
-        self.gui_trace_transform_step(
-            mapping.store_last_in_out, // TODO: perf: always on.
-            gui_transform_step::TfmStepTraceStage::Out,
-            step,
-            &vd,
-        );
+        self.gui_trace_transform_step(gui_transform_step::TfmStepTraceStage::Out, step, &vd);
 
         vd
     }
@@ -1315,7 +1305,10 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
     fn set_dyn_value(&self, d: &DynValueRefs, val: BaseNumT, debug: DebugLevel) {
         match d {
             DynValueRefs::DeviceControlMatcher(d) => {
+                // NB/TODO: for Rel controls in proposed "stable mode": do not reset those buffers
+                // NB/TODO: just emit event for the value to be re-fed into engine later
                 d.control_matcher.set_last_known_io(val);
+                d.control_matcher.set_numeric_value(val);
 
                 match d.control_matcher {
                     #[cfg(feature = "midi")]

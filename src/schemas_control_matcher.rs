@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
+use std::sync::atomic::AtomicBool;
 use traversable::{Traversable, TraversableMut};
 
 #[cfg(feature = "midi")]
@@ -24,9 +24,10 @@ pub(crate) enum ControlMatchers {
 impl WithNumericValueSettable for ControlMatchers {
     type ValueT = BaseNumT;
 
-    fn set_numeric_value(&mut self, v: Self::ValueT) {
+    fn set_numeric_value(&self, v: Self::ValueT) {
         match self {
-            ControlMatchers::Midi(m) => m.set_last_known_io(v),
+            #[cfg(feature = "midi")]
+            ControlMatchers::Midi(m) => m.set_numeric_value(v),
             ControlMatchers::Hid(h) => h.set_numeric_value(v),
         }
     }
@@ -38,7 +39,7 @@ impl WithNumericValue for ControlMatchers {
     fn get_numeric_value(&self) -> Self::ValueT {
         match self {
             #[cfg(feature = "midi")]
-            ControlMatchers::Midi(m) => m.get_last_known_io(),
+            ControlMatchers::Midi(m) => m.get_numeric_value(),
             ControlMatchers::Hid(h) => h.get_numeric_value(),
         }
     }
@@ -55,61 +56,12 @@ impl WithLastKnownIO<BaseNumT> for ControlMatchers {
 }
 
 impl WithLastKnownIOSettable<BaseNumT> for ControlMatchers {
-    fn set_last_known_io(&self, val: BaseNumT) {
+    fn set_last_known_io(&self, v: BaseNumT) {
         match self {
             #[cfg(feature = "midi")]
-            ControlMatchers::Midi(m) => m
-                .last_known_value
-                .store(val as BaseNumT, std::sync::atomic::Ordering::Relaxed),
-            ControlMatchers::Hid(h) => h
-                .last_known_io_value
-                .store(val as BaseNumT, std::sync::atomic::Ordering::Relaxed),
+            ControlMatchers::Midi(m) => m.set_last_known_io(v),
+            ControlMatchers::Hid(h) => h.set_last_known_io(v),
         }
-    }
-}
-
-#[cfg(feature = "midi")]
-impl WithNumericValue for MidiControlMatcherCfg {
-    type ValueT = BaseNumT;
-
-    fn get_numeric_value(&self) -> Self::ValueT {
-        self.get_last_known_io()
-    }
-}
-
-impl WithNumericValue for HidControlMatcherCfg {
-    type ValueT = BaseNumT;
-
-    fn get_numeric_value(&self) -> Self::ValueT {
-        self.current_value.load(Relaxed)
-    }
-}
-
-impl WithNumericValueSettable for HidControlMatcherCfg {
-    type ValueT = BaseNumT;
-
-    fn set_numeric_value(&mut self, v: Self::ValueT) {
-        self.current_value.store(v, Relaxed);
-    }
-}
-
-#[cfg(feature = "midi")]
-impl WithLastKnownIO<BaseNumT> for MidiControlMatcherCfg {
-    fn get_last_known_io(&self) -> BaseNumT {
-        self.last_known_value.load(std::sync::atomic::Ordering::Relaxed) as BaseNumT
-    }
-}
-
-#[cfg(feature = "midi")]
-impl WithLastKnownIOSettable<BaseNumT> for MidiControlMatcherCfg {
-    fn set_last_known_io(&self, v: BaseNumT) {
-        self.last_known_value.store(v, std::sync::atomic::Ordering::Relaxed);
-    }
-}
-
-impl WithLastKnownIO<BaseNumT> for HidControlMatcherCfg {
-    fn get_last_known_io(&self) -> BaseNumT {
-        self.last_known_io_value.load(std::sync::atomic::Ordering::Relaxed) as BaseNumT
     }
 }
 
