@@ -1,3 +1,5 @@
+#[cfg(feature = "midi")]
+use crate::schemas_value::{WithLastKnownIO, WithLastKnownIOSettable, WithNumericValueSettable};
 use crate::{
     common::{BaseAtomicT, BaseNumT},
     mapped_controls::{MappedCtls, MappedCtlsMidi},
@@ -6,13 +8,15 @@ use crate::{
         IdleTickEnabledFlag, MarkedAsFromPredefinedControl, ObjId, WithRuntimeId, deserialize_device_controls,
     },
     schemas_predefined::MidiControlPredefined,
-    schemas_value::_WithDstRefCount,
+    schemas_value::{_WithDstRefCount, WithNumericValue},
 };
 use crossbeam_utils::CachePadded;
 use doc_for::*;
 // use lasso::Key;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
+#[cfg(feature = "midi")]
+use std::sync::atomic::Ordering::Relaxed;
 use std::{
     collections::BTreeMap,
     sync::{Arc, atomic::AtomicUsize},
@@ -270,10 +274,38 @@ pub(crate) struct MidiControlMatcherCfg {
     pub(crate) idle_tick_enabled: IdleTickEnabledFlag,
     #[serde(skip)]
     #[traverse(skip)]
-    pub(crate) last_known_value: Arc<CachePadded<BaseAtomicT>>,
+    current_value: Arc<CachePadded<BaseAtomicT>>,
     #[serde(skip)]
     #[traverse(skip)]
     _dst_refs_count: Arc<CachePadded<AtomicUsize>>,
+}
+
+#[cfg(feature = "midi")]
+impl WithNumericValueSettable for MidiControlMatcherCfg {
+    type ValueT = BaseNumT;
+    fn set_numeric_value(&self, v: Self::ValueT) {
+        self.current_value.store(v, Relaxed);
+    }
+}
+
+impl WithLastKnownIO<BaseNumT> for MidiControlMatcherCfg {
+    fn get_last_known_io(&self) -> BaseNumT {
+        self.current_value.load(Relaxed) as BaseNumT
+    }
+}
+
+impl WithLastKnownIOSettable<BaseNumT> for MidiControlMatcherCfg {
+    fn set_last_known_io(&self, v: BaseNumT) {
+        self.current_value.store(v, Relaxed);
+    }
+}
+
+impl WithNumericValue for MidiControlMatcherCfg {
+    type ValueT = BaseNumT;
+
+    fn get_numeric_value(&self) -> Self::ValueT {
+        self.get_last_known_io()
+    }
 }
 
 impl PartialEq for MidiControlMatcherCfg {
@@ -290,7 +322,7 @@ impl From<MidiControlPredefined> for MidiControlMatcherCfg {
             description: Some(value.description), // TODO: remove Option.
             id: Default::default(),
             idle_tick_enabled: Default::default(),
-            last_known_value: Default::default(),
+            current_value: Default::default(),
             from_predefined: Default::default(),
             _dst_refs_count: Default::default(),
         }

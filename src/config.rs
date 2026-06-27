@@ -9,7 +9,10 @@ use crate::schemas_midi::{MidiControlMatcherCfg, MidiMatcherCfg};
 use crate::schemas_predefined::ControlsPredefinedCfg;
 use crate::schemas_transform::*;
 
-use crate::schemas_value::{DeviceControlMatcherRef, DynValueRefs, WithNumInterval, WithRelativity};
+use crate::schemas_value::{
+    DeviceControlMatcherRef, DynValueRefs, WithLastKnownIOSettable, WithNumInterval, WithNumericValueSettable,
+    WithRelativity,
+};
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
 
@@ -334,9 +337,8 @@ impl Config {
             bail!("Joystick control has undefined type and no valid 'predefined' control found: {entry:#?}");
         }
 
-        entry
-            .last_known_io_value
-            .store(entry.initial_value as BaseNumT, std::sync::atomic::Ordering::Relaxed);
+        entry.set_last_known_io(entry.initial_value as BaseNumT);
+        entry.set_numeric_value(entry.initial_value as BaseNumT);
 
         Ok(())
     }

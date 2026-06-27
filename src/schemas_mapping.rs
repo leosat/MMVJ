@@ -75,10 +75,6 @@ pub(crate) struct Mapping {
     #[serde(rename = "destination")]
     #[garde(skip)]
     pub(crate) dst: ValueDsts,
-    #[serde(skip)]
-    #[serde(default = "crate::schemas_common::default_true")]
-    #[garde(skip)]
-    pub(crate) store_last_in_out: bool, // TODO: perf: always on.
     #[serde(default)]
     #[garde(skip)]
     pub(crate) transformation: TfmSeqCfg,
@@ -114,7 +110,6 @@ impl Default for Mapping {
             enabled: true,
             src: Default::default(),
             dst: Default::default(),
-            store_last_in_out: true,
             transformation: Default::default(),
             requires_idle_tick: Default::default(),
         };

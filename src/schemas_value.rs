@@ -150,7 +150,7 @@ pub(crate) trait WithNumericValue {
 
 pub(crate) trait WithNumericValueSettable {
     type ValueT;
-    fn set_numeric_value(&mut self, v: Self::ValueT);
+    fn set_numeric_value(&self, v: Self::ValueT);
 }
 
 pub(crate) trait WithNumInterval {
