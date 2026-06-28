@@ -1,6 +1,6 @@
 [package]
 name = "mmvj"
-version = "2026.6.28-3"
+version = "2026.6.28-4"
 edition = "2024"
 # rust-version = "1.85.0"
 authors = ["Leonid Satanovskiy"]

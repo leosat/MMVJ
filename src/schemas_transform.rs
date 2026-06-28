@@ -1698,7 +1698,6 @@ impl TfmExeState for ScriptCfg {
     fn exe_state_reset(&self, _: Self::ResetInput) {
         let mut state = self.exe_state_mut();
 
-        log::debug!("Compiling Luau script!");
         if get_debug_level().is_on() {
             log::debug!("Compiling Luau script!");
         }
