@@ -236,8 +236,8 @@ mappings:
         out_lo = -out_scale
         out_hi = out_scale
         
-        kbd_left  = -transform(aux_tfm_idx["kbd_left_tfm"], inputs["kbd_left"])
-        kbd_right =  transform(aux_tfm_idx["kbd_right_tfm"], inputs["kbd_right"])
+        kbd_left  = -transform("kbd_left_tfm", inputs["kbd_left"])
+        kbd_right =  transform("kbd_right_tfm", inputs["kbd_right"])
         
         ks_sum_raw = math.clamp(kbd_left + kbd_right, -1, 1)
         if ks_sum_raw == 0 then
@@ -265,15 +265,15 @@ mappings:
         
         if use_mouse_steering then
           outputs["hold_applied"] = inputs["ms_hold"]
-          outputs[0] = transform(aux_tfm_idx["mouse_steering"], math.clamp(ms*out_scale, out_lo, out_hi))
+          outputs[0] = transform("mouse_steering", math.clamp(ms*out_scale, out_lo, out_hi))
         else
-          outputs["hold_applied"] = transform(aux_tfm_idx["kbd_hold_tfm"], math.clamp(inputs["kbd_hold"] + inputs["kbd_up"], 0, 2))
+          outputs["hold_applied"] = transform("kbd_hold_tfm", math.clamp(inputs["kbd_hold"] + inputs["kbd_up"], 0, 2))
           outputs["kbd_sens"] = inputs["ks_sens_base"]
                                 * (1 + math.clamp(inputs["kbd_up"],0,1)         * inputs["ks_sens_inc"]) 
                                 / (1 + math.clamp(outputs["hold_applied"],0,1)  * inputs["ks_sens_dec"]);
           outputs[0] = 
             transform(
-              aux_tfm_idx["kbd_steering"],
+              "kbd_steering",
               math.clamp(ks_sum_raw * out_scale, out_lo, out_hi))
         end
       output_interval:

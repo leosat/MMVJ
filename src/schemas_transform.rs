@@ -4,7 +4,7 @@ use crate::schemas_value::{
     DeviceControlMatcherRef, DynValueRefs, ValueDsts, VariableRef, WithNumInterval, WithRelativityRef,
     serialize_value_src_rt_ignore_interval,
 };
-use crate::tfm_exec::{IntegrateExeState, RaiseFallExeState, ScriptExeState, SteeringExeState};
+use crate::tfm_exec::{IntegrateExeState, RaiseFallExeState, ScriptExeState, SteeringExeState, ThreadLocalState};
 use crate::{
     common::{Relativity, SYMM_UNIT_INTERVAL, UNIT_INTERVAL},
     num_interval::NumInterval,
@@ -1514,7 +1514,7 @@ pub(crate) struct ScriptCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    pub(super) exe_state: Arc<Mutex<ScriptExeState>>,
+    pub(super) exe_state: Arc<ThreadLocalState<ScriptExeState>>,
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
