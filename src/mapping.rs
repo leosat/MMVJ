@@ -276,7 +276,9 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         impl traversable::Visitor for ScripCacheResetVisitor {
             type Break = ();
             fn enter(&mut self, this: &dyn core::any::Any) -> std::ops::ControlFlow<Self::Break> {
-                if let Some(s) = this.downcast_ref::<ScriptCfg>() {
+                if let Some(s) = this.downcast_ref::<ScriptCfg>()
+                    && s.enabled
+                {
                     s.exe_state_reset(());
                 }
                 std::ops::ControlFlow::Continue(())
