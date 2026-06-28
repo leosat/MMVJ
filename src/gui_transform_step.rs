@@ -1,6 +1,7 @@
 use crate::common::BaseNumT;
 use crate::common::{MappingEngineCmd, Relativity, SYMM_UNIT_INTERVAL};
 use crate::config::MORE_DEBUG;
+use crate::config::WithSanitize;
 use crate::gui_common::{
     DrawEgui, GuiCmd, GuiCmdScriptAuxRename, GuiDndJob, GuiDndJobMoveTfmStep, GuiDndJobNewTfmStep, GuiInKinds,
     ScriptAuxKind, bool_to_simple_change_gui_cmd, draw_collapsing_ui, get_item_name_with_random_suffix,
@@ -637,7 +638,7 @@ impl<'s> DrawEgui<'s> for ClampCfg {
         ui.label(format!("Input interval: {} ", in_interval));
 
         let mut changed = false;
-        let clamping_interval = self.get_clamping_interval(in_interval);
+        let clamping_interval = self.get_clamping_interval();
         let mut clamp_from_iherited_from_in_interval = clamping_interval.from == in_interval.from;
         let mut clamp_to_iherited_from_in_interval = clamping_interval.to == in_interval.to;
 
@@ -657,20 +658,16 @@ impl<'s> DrawEgui<'s> for ClampCfg {
 
         ui.separator();
 
-        // TODO: resolve those at config resolve-time and remove Option for runtime clamp config.
         ui.horizontal(|ui| {
             if clamp_from_iherited_from_in_interval {
-                self.from = Some(in_interval.from);
+                self.range.from = in_interval.from;
             }
 
             if clamp_to_iherited_from_in_interval {
-                self.to = Some(in_interval.to);
+                self.range.to = in_interval.to;
             }
 
-            assert!(self.from.is_some() && self.to.is_some());
-
-            let mut clamping_interval = NumInterval::new(self.from.unwrap(), self.to.unwrap());
-            changed |= clamping_interval.egui(
+            changed |= self.range.egui(
                 GuiInInterval::Edit {
                     max_range: HID_AXIS_MAX_RANGE,
                     from_label: "From: ",
@@ -680,14 +677,14 @@ impl<'s> DrawEgui<'s> for ClampCfg {
                 },
                 ui,
             );
-            self.from = Some(clamping_interval.from);
-            self.to = Some(clamping_interval.to);
         });
 
         ui.separator();
         changed |= ui
             .checkbox(&mut self.override_range, "Override output interval.")
             .changed();
+
+        self.sanitize_inplace();
 
         bool_to_simple_change_gui_cmd(changed)
     }

@@ -103,6 +103,17 @@ impl DebugLevel {
 }
 
 //-----------------------------------------------------------------
+pub(crate) trait WithSanitize {
+    fn sanitize_inplace(&mut self);
+    #[allow(unused)]
+    fn sanitize(mut self) -> Self
+    where
+        Self: Sized,
+    {
+        self.sanitize_inplace();
+        self
+    }
+}
 
 // -------------------------------------------------------
 

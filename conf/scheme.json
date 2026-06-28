@@ -1762,19 +1762,32 @@
           "type": "boolean",
           "default": true
         },
+        "range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NumInterval"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "from": {
           "type": [
             "number",
             "null"
           ],
-          "format": "float"
+          "format": "float",
+          "writeOnly": true
         },
         "to": {
           "type": [
             "number",
             "null"
           ],
-          "format": "float"
+          "format": "float",
+          "writeOnly": true
         },
         "override_range": {
           "type": "boolean",

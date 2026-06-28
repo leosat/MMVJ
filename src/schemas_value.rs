@@ -374,11 +374,11 @@ impl<'de> Deserialize<'de> for DynValueRefs {
             Err(err_matcher) => match VariableRef::deserialize(raw.clone().into_deserializer()) {
                 Ok(variable) => return Ok(DynValueRefs::Variable(variable)),
                 Err(err_variable) => Err(D::Error::custom(format!(
-                    "DynValueRefs configuration mismatch.\n\
-                             Expected either a DeviceControlMatcher or a Variable reference.\n\n\
-                             Received input: {:?}\n\n\
-                             DeviceControlMatcher error: {}\n\
-                             Variable error: {}",
+                    "Dynamic value ref config error.\n\
+                        Expected either a DeviceControlMatcher or a Variable reference.\n\n\
+                        Received input: {:?}\n\n\
+                        DeviceControlMatcher error: {}\n\
+                        Variable error: {}",
                     raw, err_matcher, err_variable
                 ))),
             },

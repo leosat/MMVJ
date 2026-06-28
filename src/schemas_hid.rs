@@ -122,7 +122,7 @@ impl<'de> Deserialize<'de> for HidVirtualOrMatcherParamsCfg {
             Err(err1) => match HidMatcherParamsCfg::deserialize(value.into_deserializer()) {
                 Ok(v) => Ok(Self::Matcher(v)),
                 Err(err2) => Err(D::Error::custom(format!(
-                    "Configuration mismatch:\n\nIf virtual device config: {}\n\nIf device matcher config: {}\n\n",
+                    "Configuration parse error.\nIf virtual device config: {}\nIf device matcher config: {}\n",
                     err1, err2
                 ))),
             },
