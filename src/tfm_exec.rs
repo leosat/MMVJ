@@ -20,14 +20,45 @@ use crate::tracing::GraphDisplayStyle;
 use eframe::egui::Color32;
 use log::debug;
 use mlua::Lua;
-use std::ops::Add;
+use std::ops::{Add, DerefMut};
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::Instant;
 
+use std::cell::UnsafeCell;
+
+#[derive(Debug, Default)]
+pub(crate) struct ThreadLocalState<T> {
+    inner: UnsafeCell<T>,
+}
+
+// SAFETY: We guarantee that only one thread accesses this at a time
+unsafe impl<T> Send for ThreadLocalState<T> {}
+unsafe impl<T> Sync for ThreadLocalState<T> {}
+
+impl<T> ThreadLocalState<T> {
+    #[allow(unused)]
+    fn new(value: T) -> Self {
+        Self {
+            inner: UnsafeCell::new(value),
+        }
+    }
+
+    #[allow(unused)]
+    fn get(&self) -> &T {
+        unsafe { &*self.inner.get() }
+    }
+
+    fn get_mut(&self) -> &mut T {
+        unsafe { &mut *self.inner.get() }
+    }
+}
+
 pub(crate) trait TfmExeState {
-    type StateMutT;
+    type StateMutT<'a>: DerefMut
+    where
+        Self: 'a;
     type ResetInput;
-    fn exe_state_mut(&self) -> Self::StateMutT;
+    fn exe_state_mut(&self) -> Self::StateMutT<'_>;
     fn exe_state_reset(&self, reset_with: Self::ResetInput);
 }
 pub(crate) trait TfmExecCtx {
@@ -86,10 +117,13 @@ impl WithTfmExec for ClampCfg {
 }
 
 impl TfmExeState for OneEuroFilterCfg {
-    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, crate::filters::OneEuroFilter>;
+    type StateMutT<'a>
+        = parking_lot::ArcMutexGuard<parking_lot::RawMutex, crate::filters::OneEuroFilter>
+    where
+        Self: 'a;
     type ResetInput = BaseNumT;
 
-    fn exe_state_mut(&self) -> Self::StateMutT {
+    fn exe_state_mut(&self) -> Self::StateMutT<'_> {
         self.exe_state.lock_arc()
     }
 
@@ -137,11 +171,14 @@ impl Default for RaiseFallExeState {
 }
 
 impl TfmExeState for RaiseFallCfg {
-    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, RaiseFallExeState>;
+    type StateMutT<'a>
+        = parking_lot::ArcMutexGuard<parking_lot::RawMutex, RaiseFallExeState>
+    where
+        Self: 'a;
 
     type ResetInput = Option<RaiseFallExeState>;
 
-    fn exe_state_mut(&self) -> Self::StateMutT {
+    fn exe_state_mut(&self) -> Self::StateMutT<'_> {
         self.exe_state.lock_arc()
     }
 
@@ -229,10 +266,14 @@ impl WithTfmExec for RaiseFallCfg {
 }
 
 impl TfmExeState for EmaFilterCfg {
-    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, crate::filters::EmaFilter>;
+    type StateMutT<'a>
+        = parking_lot::ArcMutexGuard<parking_lot::RawMutex, crate::filters::EmaFilter>
+    where
+        Self: 'a;
+
     type ResetInput = BaseNumT;
 
-    fn exe_state_mut(&self) -> Self::StateMutT {
+    fn exe_state_mut(&self) -> Self::StateMutT<'_> {
         self.exe_state.lock_arc()
     }
 
@@ -426,15 +467,19 @@ impl Default for ScriptExeState {
 }
 
 impl TfmExeState for ScriptCfg {
-    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, ScriptExeState>;
+    type StateMutT<'a>
+        = &'a mut ScriptExeState
+    where
+        Self: 'a;
+
     type ResetInput = ();
 
-    fn exe_state_mut(&self) -> Self::StateMutT {
-        self.exe_state.lock_arc()
+    fn exe_state_mut(&self) -> Self::StateMutT<'_> {
+        self.exe_state.get_mut()
     }
 
     fn exe_state_reset(&self, _: Self::ResetInput) {
-        let mut state = self.exe_state_mut();
+        let state = self.exe_state_mut();
 
         // if get_debug_level().is_on() {
         log::debug!("Compiling Luau script!");
@@ -461,9 +506,10 @@ impl TfmExeState for ScriptCfg {
             .set("outputs", state.outputs.clone())
             .inspect_err(|e| log::error!("{e}"));
 
+        // COMPAT
         let aux_tfm_idx = state.lua.create_table().unwrap();
-        for (idx, (name, _)) in self.aux_transformations.iter().enumerate() {
-            let _ = aux_tfm_idx.set(name.as_str(), idx);
+        for (_idx, (name, _)) in self.aux_transformations.iter().enumerate() {
+            let _ = aux_tfm_idx.set(name.as_str(), name.to_string());
         }
         let _ = state
             .lua
@@ -484,8 +530,8 @@ impl WithTfmExec for ScriptCfg {
         match self.lang {
             crate::schemas_transform::ScriptLanguage::Luau => {
                 let transform_closure =
-                    |_lua: &mlua::Lua, args: (usize, BaseNumT)| -> std::result::Result<BaseNumT, mlua::Error> {
-                        let tfm = self.aux_transformations.iter().nth(args.0).unwrap().1;
+                    |_lua: &mlua::Lua, args: (String, BaseNumT)| -> std::result::Result<BaseNumT, mlua::Error> {
+                        let tfm = self.aux_transformations.get(&args.0).unwrap();
                         let ret = tfm.exec(
                             MappedValue {
                                 value: args.1,
@@ -594,11 +640,14 @@ pub(crate) struct IntegrateExeState {
 }
 
 impl TfmExeState for IntegrateCfg {
-    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, IntegrateExeState>;
+    type StateMutT<'a>
+        = parking_lot::ArcMutexGuard<parking_lot::RawMutex, IntegrateExeState>
+    where
+        Self: 'a;
 
     type ResetInput = ();
 
-    fn exe_state_mut(&self) -> Self::StateMutT {
+    fn exe_state_mut(&self) -> Self::StateMutT<'_> {
         self.exe_state.lock_arc()
     }
 
@@ -643,10 +692,14 @@ impl Default for SteeringExeState {
 }
 
 impl TfmExeState for SteeringCfg {
-    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, SteeringExeState>;
+    type StateMutT<'a>
+        = parking_lot::ArcMutexGuard<parking_lot::RawMutex, SteeringExeState>
+    where
+        Self: 'a;
+
     type ResetInput = Option<SteeringExeState>;
 
-    fn exe_state_mut(&self) -> Self::StateMutT {
+    fn exe_state_mut(&self) -> Self::StateMutT<'_> {
         self.exe_state.lock_arc()
     }
 
