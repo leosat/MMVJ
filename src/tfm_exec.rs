@@ -2,6 +2,7 @@ use crate::common::{BaseNumT, Relativity, SYMM_UNIT_INTERVAL, UNIT_INTERVAL, get
 use crate::curves::Curves;
 #[cfg(feature = "gui")]
 use crate::gui_transform_step::TfmStepTraceStage;
+use crate::mapping::MappingTfmExecCtx;
 use crate::num_interval::{NumInterval, OutOfRangePolicy};
 
 use crate::schemas_common::WithRuntimeId;
@@ -11,7 +12,7 @@ use crate::schemas_transform::{
     ClampCfg, EmaFilterCfg, ForceFeedbackComponent, IntegrateCfg, InvertCfg, LinearCfg, NormExpCfg, OneEuroFilterCfg,
     RaiseFallCfg, SCurveCfg, ScriptCfg, SignedPowerCfg, SmoothstepCfg, SteeringCfg, TfmSeqCfg, TfmStepCfg,
 };
-use crate::schemas_value::{DynValueRefs, ValueDsts, WithNumInterval};
+use crate::schemas_value::{DynValueRefs, ValueDsts, WithNumInterval, WithRelativity};
 use crate::schemas_value::{MappedValue, WithNumericValue};
 
 #[cfg(feature = "gui")]
@@ -19,6 +20,8 @@ use crate::tracing::GraphDisplayStyle;
 #[cfg(feature = "gui")]
 use eframe::egui::Color32;
 use log::debug;
+use mlua::Lua;
+use std::collections::BTreeMap;
 use std::ops::Add;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::Instant;
@@ -84,6 +87,19 @@ impl WithTfmExec for ClampCfg {
     }
 }
 
+impl TfmExeState for OneEuroFilterCfg {
+    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, crate::filters::OneEuroFilter>;
+    type ResetInput = BaseNumT;
+
+    fn exe_state_mut(&self) -> Self::StateMutT {
+        self.exe_state.lock_arc()
+    }
+
+    fn exe_state_reset(&self, reset_with: Self::ResetInput) {
+        self.exe_state_mut().reset(reset_with);
+    }
+}
+
 impl WithTfmExec for OneEuroFilterCfg {
     fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &mut impl TfmExecCtx) -> MappedValue<BaseNumT> {
         if self.enabled
@@ -100,6 +116,39 @@ impl WithTfmExec for OneEuroFilterCfg {
             self.exe_state_reset(input.value);
         }
         input
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct RaiseFallExeState {
+    pub(crate) prev_out: BaseNumT,
+    pub(crate) last_target: BaseNumT,
+    pub(crate) prev_out_time: Option<Instant>,
+    pub(crate) prev_user_input_time: Option<Instant>,
+}
+
+impl Default for RaiseFallExeState {
+    fn default() -> Self {
+        Self {
+            prev_out: Default::default(),
+            last_target: Default::default(),
+            prev_out_time: Default::default(),
+            prev_user_input_time: Default::default(),
+        }
+    }
+}
+
+impl TfmExeState for RaiseFallCfg {
+    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, RaiseFallExeState>;
+
+    type ResetInput = Option<RaiseFallExeState>;
+
+    fn exe_state_mut(&self) -> Self::StateMutT {
+        self.exe_state.lock_arc()
+    }
+
+    fn exe_state_reset(&self, reset_with: Self::ResetInput) {
+        *self.exe_state_mut() = reset_with.unwrap_or_default();
     }
 }
 
@@ -178,6 +227,19 @@ impl WithTfmExec for RaiseFallCfg {
 
         input.value = final_out;
         input
+    }
+}
+
+impl TfmExeState for EmaFilterCfg {
+    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, crate::filters::EmaFilter>;
+    type ResetInput = BaseNumT;
+
+    fn exe_state_mut(&self) -> Self::StateMutT {
+        self.exe_state.lock_arc()
+    }
+
+    fn exe_state_reset(&self, reset_with: Self::ResetInput) {
+        self.exe_state_mut().reset(reset_with);
     }
 }
 
@@ -340,6 +402,128 @@ impl WithTfmExec for LinearCfg {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct ScriptExeState {
+    #[allow(unused)]
+    pub(crate) lua: Lua,
+    pub(crate) inputs: mlua::Table,
+    pub(crate) outputs: mlua::Table,
+    pub(crate) compiled: mlua::Function,
+}
+
+impl Default for ScriptExeState {
+    fn default() -> Self {
+        let lua = Lua::new();
+        Self {
+            lua: lua.clone(),
+            inputs: lua.create_table().unwrap(),
+            outputs: lua.create_table().unwrap(),
+            compiled: lua
+                .load(" ")
+                .into_function()
+                .inspect_err(|e| log::error!("{e}"))
+                .unwrap_or(lua.load(" ").into_function().unwrap()),
+        }
+    }
+}
+
+impl TfmExeState for ScriptCfg {
+    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, ScriptExeState>;
+    type ResetInput = ();
+
+    fn exe_state_mut(&self) -> Self::StateMutT {
+        self.exe_state.lock_arc()
+    }
+
+    fn exe_state_reset(&self, _: Self::ResetInput) {
+        let mut state = self.exe_state_mut();
+
+        if get_debug_level().is_on() {
+            log::debug!("Compiling Luau script!");
+        }
+
+        state.inputs = state.lua.create_table().unwrap();
+        state.outputs = state.lua.create_table().unwrap();
+
+        let aux_tfm_idx = state.lua.create_table().unwrap();
+        state.compiled = state
+            .lua
+            .load(&self.script)
+            .into_function()
+            .inspect_err(|e| log::error!("{e}"))
+            .unwrap_or(state.lua.load(" ").into_function().unwrap());
+
+        let tfms_ptr = &self.aux_transformations as *const _ as *const () as usize;
+
+        let run_tfm_func = state
+            .lua
+            .create_function(
+                move |lua: &mlua::Lua, args: (usize, BaseNumT)| -> std::result::Result<BaseNumT, mlua::Error> {
+                    let tfm_idx = args.0;
+                    let input_value = args.1;
+                    // SAFETY: scripting cache MUST be reset (scripting_cache_reset())
+                    // whenever tfm config tree is updated beyond most trivial changes (like parameter values changes).
+                    let tfms = unsafe { &*(tfms_ptr as *const BTreeMap<String, TfmSeqCfg>) };
+                    if tfm_idx < tfms.len() {
+                        let tfm = tfms.values().nth(tfm_idx).unwrap();
+                        let ctx = unsafe {
+                            &mut *(lua.named_registry_value::<usize>(&"ctx").unwrap() as *mut MappingTfmExecCtx)
+                        };
+
+                        Ok(tfm
+                            .exec(
+                                crate::schemas_value::MappedValue {
+                                    value: input_value,
+                                    interval: tfm.get_interval(),
+                                    relativity: tfm.get_relativity(),
+                                },
+                                ctx,
+                            )
+                            .value)
+                    } else {
+                        Err(mlua::Error::RuntimeError(format!(
+                            "Referenced transformation {} is not found. \
+                                Total transformations available for the script: {}, indexing starting from 0 ",
+                            tfm_idx,
+                            tfms.len()
+                        )))
+                    }
+                },
+            )
+            .unwrap();
+
+        let _ = state
+            .lua
+            .globals()
+            .set("transform", run_tfm_func)
+            .inspect_err(|e| log::error!("{e}"));
+
+        let _ = state
+            .lua
+            .globals()
+            .set("inputs", state.inputs.clone())
+            .inspect_err(|e| log::error!("{e}"));
+
+        let _ = state
+            .lua
+            .globals()
+            .set("outputs", state.outputs.clone())
+            .inspect_err(|e| log::error!("{e}"));
+
+        // let _ = state.inputs.set("idle_tick_rate", idle_tick_rate);
+
+        for (idx, (name, _)) in self.aux_transformations.iter().enumerate() {
+            let _ = aux_tfm_idx.set(name.as_str(), idx);
+        }
+
+        let _ = state
+            .lua
+            .globals()
+            .set("aux_tfm_idx", aux_tfm_idx)
+            .inspect_err(|e| log::error!("{e}"));
+    }
+}
+
 impl WithTfmExec for ScriptCfg {
     fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &mut impl TfmExecCtx) -> MappedValue<BaseNumT> {
         if !self.enabled {
@@ -432,6 +616,25 @@ impl WithTfmExec for InvertCfg {
     }
 }
 
+#[derive(Default, Debug, Clone, Copy, PartialOrd, PartialEq)]
+pub(crate) struct IntegrateExeState {
+    pub(crate) prev_val: BaseNumT, //  prev_val: (self.range.from() + self.range.to()) * 0.5,
+}
+
+impl TfmExeState for IntegrateCfg {
+    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, IntegrateExeState>;
+
+    type ResetInput = ();
+
+    fn exe_state_mut(&self) -> Self::StateMutT {
+        self.exe_state.lock_arc()
+    }
+
+    fn exe_state_reset(&self, _: Self::ResetInput) {
+        *self.exe_state_mut() = Default::default()
+    }
+}
+
 impl WithTfmExec for IntegrateCfg {
     fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &mut impl TfmExecCtx) -> MappedValue<BaseNumT> {
         if !(self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
@@ -447,6 +650,36 @@ impl WithTfmExec for IntegrateCfg {
             interval: self.range,
             relativity: Relativity::Abs,
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct SteeringExeState {
+    pub(crate) last_time: Instant,
+    pub(crate) pre_filter: BaseNumT,
+    pub(crate) post_filter: BaseNumT,
+}
+
+impl Default for SteeringExeState {
+    fn default() -> Self {
+        Self {
+            last_time: Instant::now(),
+            pre_filter: Default::default(),
+            post_filter: Default::default(),
+        }
+    }
+}
+
+impl TfmExeState for SteeringCfg {
+    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, SteeringExeState>;
+    type ResetInput = Option<SteeringExeState>;
+
+    fn exe_state_mut(&self) -> Self::StateMutT {
+        self.exe_state.lock_arc()
+    }
+
+    fn exe_state_reset(&self, reset_with: Self::ResetInput) {
+        *self.exe_state_mut() = reset_with.unwrap_or_default()
     }
 }
 
