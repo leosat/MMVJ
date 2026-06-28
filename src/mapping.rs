@@ -480,7 +480,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             relativity: mapping.src.get_relativity(),
         };
 
-        if !vd.interval.contains_inclusive(vd.value) {
+        if !vd.interval.contains_value_closed(vd.value) {
             warn!(
                 "The value (={}) read from device {} \
                         is out of configured interval ({:?}), clamping it.",

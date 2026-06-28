@@ -61,6 +61,7 @@ pub(crate) trait TfmExeState {
     fn exe_state_mut(&self) -> Self::StateMutT<'_>;
     fn exe_state_reset(&self, reset_with: Self::ResetInput);
 }
+
 pub(crate) trait TfmExecCtx {
     fn is_idle_tick(&self) -> bool;
     #[allow(unused)]
@@ -83,7 +84,7 @@ impl WithTfmExec for TfmSeqCfg {
     fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
         for step in &self.steps {
             input = step.exec(input, ctx);
-            if !input.interval.contains_inclusive(input.value) {
+            if !input.interval.contains_value_closed(input.value) {
                 log::warn!(
                     "Value {} must fit in interval {} after transformation step ``{}'' (ID: {}). 
             Each step must ensure it, clamping!",
@@ -100,18 +101,14 @@ impl WithTfmExec for TfmSeqCfg {
 }
 
 impl WithTfmExec for ClampCfg {
+    /// NB: clamping interval and input interval must intersect.
     fn exec(&self, mut input: MappedValue<BaseNumT>, _ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
         if !self.enabled {
             return input;
         }
-        let in_interval = input.interval;
-        input.value = self.get_clamping_interval(in_interval).clamp(input.value);
-        input.interval = self.get_out_interval(in_interval);
-        // Clamping interval may not contain current value, for now this is not an error.
-        // In such a case the above clamping is a nop.
-        // If we override out interval with clamping interval the value will not fit,
-        // so we need to clamp value to the out interval also.
-        input.value = input.interval.clamp(input.value);
+        input.value = self.get_clamping_interval().clamp(input.value);
+        input.interval = self.get_out_interval();
+        //input.value = input.interval.clamp(input.value);
         input
     }
 }
@@ -481,9 +478,9 @@ impl TfmExeState for ScriptCfg {
     fn exe_state_reset(&self, _: Self::ResetInput) {
         let state = self.exe_state_mut();
 
-        // if get_debug_level().is_on() {
-        log::debug!("Compiling Luau script!");
-        // }
+        if get_debug_level().is_on() {
+            log::debug!("Compiling Luau script!");
+        }
 
         state.inputs = state.lua.create_table().unwrap();
         state.outputs = state.lua.create_table().unwrap();

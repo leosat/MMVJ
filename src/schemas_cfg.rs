@@ -73,7 +73,7 @@ impl<'de> Deserialize<'de> for ConfigVariants {
             Err(new_err) => match ConfigOld::deserialize(value.into_deserializer()) {
                 Ok(old_cfg) => Ok(ConfigVariants::Old(old_cfg)),
                 Err(old_err) => Err(D::Error::custom(format!(
-                    "Configuration mismatch:\n\nIf using new format: {}\n\nIf using old format: {}\n\n",
+                    "Configuration parse error.\nIf using new format: {}\nIf using old format: {}\n",
                     new_err, old_err
                 ))),
             },

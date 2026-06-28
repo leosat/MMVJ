@@ -326,7 +326,7 @@ impl<T: NumIntervalValue> NumInterval<T> {
     ) -> T {
         let value_as_tgt_interval_type = self.try_value_cast(value);
         let is_out_of_bounds = match value_as_tgt_interval_type {
-            Some(v_cast) => !self.contains_inclusive(v_cast),
+            Some(v_cast) => !self.contains_value_closed(v_cast),
             None => true,
         };
 
@@ -512,12 +512,20 @@ impl<T: NumIntervalValue> NumInterval<T> {
         )
     }
 
-    pub(crate) fn contains_inclusive(&self, value: T) -> bool {
+    pub(crate) fn intersects(&self, other: Self) -> bool {
+        self.from <= other.to && self.to >= other.from
+    }
+
+    pub(crate) fn contains_interval(&self, other: Self) -> bool {
+        other.from >= self.from && other.to <= self.to
+    }
+
+    pub(crate) fn contains_value_closed(&self, value: T) -> bool {
         value >= self.from && value <= self.to
     }
 
     #[allow(unused)]
-    pub(crate) fn contains_exclusive(&self, value: T) -> bool {
+    pub(crate) fn contains_value_open(&self, value: T) -> bool {
         value >= self.from && value < self.to
     }
 
@@ -538,7 +546,7 @@ impl<T: NumIntervalValue> NumInterval<T> {
     }
 
     pub(crate) fn try_invert_value(&self, value: T) -> Result<T> {
-        if self.contains_inclusive(value) {
+        if self.contains_value_closed(value) {
             let half_span = self.span() / <<T as NumIntervalSpanT>::SpanT as NumCast>::from(2).unwrap();
             let dist_from_from = self.from.span_to(value);
             if dist_from_from <= half_span {
@@ -587,6 +595,20 @@ mod tests {
 
     fn f64_approx_eq(a: f64, b: f64) -> bool {
         (a - b).abs() < 0.0001
+    }
+
+    #[test]
+    fn contains_interval() {
+        assert!(NumInterval::new(0.0, 1.0).contains_interval(NumInterval::new(0.0, 1.0)));
+        assert!(NumInterval::new(0.0, 1.0).contains_interval(NumInterval::new(0.3, 0.6)));
+        assert!(!NumInterval::new(0.0, 1.0).contains_interval(NumInterval::new(0.3, 1.2)));
+    }
+
+    #[test]
+    fn intersects() {
+        assert!(NumInterval::new(0.0, 1.0).intersects(NumInterval::new(0.0, 1.0)));
+        assert!(NumInterval::new(0.0, 1.0).intersects(NumInterval::new(0.3, 1.6)));
+        assert!(!NumInterval::new(0.0, 1.0).intersects(NumInterval::new(1.1, 1.2)));
     }
 
     #[test]
@@ -993,29 +1015,29 @@ mod tests {
 
     fn test_containment() {
         let r = NumInterval::new(10.0, 20.0);
-        assert!(r.contains_inclusive(10.0), "Inclusive should contain 'from'");
-        assert!(r.contains_inclusive(15.0), "Inclusive should contain middle value");
-        assert!(r.contains_inclusive(20.0), "Inclusive should contain 'to'");
+        assert!(r.contains_value_closed(10.0), "Inclusive should contain 'from'");
+        assert!(r.contains_value_closed(15.0), "Inclusive should contain middle value");
+        assert!(r.contains_value_closed(20.0), "Inclusive should contain 'to'");
         assert!(
-            !r.contains_inclusive(9.9),
+            !r.contains_value_closed(9.9),
             "Inclusive should not contain value below 'from'"
         );
         assert!(
-            !r.contains_inclusive(20.1),
+            !r.contains_value_closed(20.1),
             "Inclusive should not contain value above 'to'"
         );
-        assert!(r.contains_exclusive(10.0), "Exclusive should contain 'from'");
+        assert!(r.contains_value_open(10.0), "Exclusive should contain 'from'");
         assert!(
-            r.contains_exclusive(19.99),
+            r.contains_value_open(19.99),
             "Exclusive should contain value just below 'to'"
         );
         assert!(
-            !r.contains_exclusive(9.9),
+            !r.contains_value_open(9.9),
             "Exclusive should not contain value below 'from'"
         );
-        assert!(!r.contains_exclusive(20.0), "Exclusive should not contain 'to'");
+        assert!(!r.contains_value_open(20.0), "Exclusive should not contain 'to'");
         assert!(
-            !r.contains_exclusive(20.1),
+            !r.contains_value_open(20.1),
             "Exclusive should not contain value above 'to'"
         );
     }

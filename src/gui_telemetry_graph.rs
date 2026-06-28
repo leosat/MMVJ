@@ -123,7 +123,7 @@ impl GuiGraphState {
         // }
 
         if let Some(interval) = self.y_interval
-            && interval.contains_inclusive(0.0 as BaseNumT)
+            && interval.contains_value_closed(0.0 as BaseNumT)
         {
             let zero_y = rect.max.y
                 - (interval.map_to_unit::<f32>(0.0 as BaseNumT, OutOfRangePolicy::WarnAndClamp) * rect.height());

@@ -51,7 +51,7 @@ impl Curves {
             );
             base = crate::schemas_transform::default_norm_exp_base();
         };
-        debug_assert!(UNIT_INTERVAL.contains_inclusive(x));
+        debug_assert!(UNIT_INTERVAL.contains_value_closed(x));
         (base.powf(x) - 1.0) / (base - 1.0)
     }
 

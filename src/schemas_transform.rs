@@ -1,4 +1,5 @@
 use crate::common::BaseNumT;
+use crate::config::WithSanitize;
 use crate::schemas_value::{DescriptionCfg, InputValueMetadata, WithDescriptionMut};
 use crate::schemas_value::{
     DeviceControlMatcherRef, DynValueRefs, ValueDsts, VariableRef, WithNumInterval, WithRelativityRef,
@@ -457,8 +458,32 @@ pub(crate) struct ForceFeedbackCfg {
     pub(crate) custom_source: Option<ValueSrcs>,
 }
 
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct ClampCfgCompat__ {
+    #[serde(skip)]
+    #[garde(skip)]
+    mon_state: TfmStepStateShared,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub(crate) desc: DescriptionCfg,
+    #[serde(default = "default_step_enabled")]
+    pub(crate) enabled: bool,
+    #[serde(default)]
+    pub(crate) range: Option<NumInterval<BaseNumT>>,
+    #[serde(skip_serializing)]
+    #[serde(rename = "from")]
+    from_deprecated__: Option<BaseNumT>,
+    #[serde(skip_serializing)]
+    #[serde(rename = "to")]
+    to_deprecated__: Option<BaseNumT>,
+    #[serde(default = "default_clamp_transform_override_interval")]
+    pub(crate) override_range: bool,
+}
+
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
+#[serde(from = "ClampCfgCompat__")]
 pub(crate) struct ClampCfg {
     #[serde(skip)]
     #[garde(skip)]
@@ -468,38 +493,89 @@ pub(crate) struct ClampCfg {
     pub(crate) desc: DescriptionCfg,
     #[serde(default = "default_step_enabled")]
     pub(crate) enabled: bool,
-    pub(crate) from: Option<BaseNumT>,
-    pub(crate) to: Option<BaseNumT>,
+    #[serde(default)]
+    pub(crate) range: NumInterval<BaseNumT>,
     #[serde(default = "default_clamp_transform_override_interval")]
     pub(crate) override_range: bool,
 }
 
-impl Default for ClampCfg {
-    fn default() -> Self {
+impl From<ClampCfgCompat__> for ClampCfg {
+    fn from(value: ClampCfgCompat__) -> Self {
+        let err =
+            "Clamp transform parse error: full range must be specified either with range: ... or from: ... and to: ...";
         Self {
-            desc: Default::default(),
-            enabled: default_step_enabled(),
-            from: Default::default(),
-            to: Default::default(),
-            override_range: Default::default(),
-            mon_state: Default::default(),
+            mon_state: value.mon_state,
+            desc: value.desc,
+            enabled: value.enabled,
+            range: NumInterval::new(
+                value.from_deprecated__.unwrap_or_else(|| value.range.expect(err).from),
+                value.to_deprecated__.unwrap_or_else(|| value.range.expect(err).to),
+            ),
+            override_range: value.override_range,
+        }
+    }
+}
+
+impl WithSanitize for ClampCfg {
+    fn sanitize_inplace(&mut self) {
+        let mut clamping_interval = self.get_clamping_interval();
+        let in_interval = self.get_in_interval();
+        let clamping_interval_saved = clamping_interval;
+        if !in_interval.contains_interval(clamping_interval) {
+            if !clamping_interval.intersects(in_interval) {
+                if clamping_interval.from > in_interval.from {
+                    clamping_interval.from = in_interval.to;
+                    clamping_interval.to = in_interval.to;
+                } else {
+                    clamping_interval.from = in_interval.from;
+                    clamping_interval.to = in_interval.from;
+                }
+            } else {
+                if in_interval.from > clamping_interval.from {
+                    clamping_interval.from = in_interval.from;
+                }
+                if in_interval.to < clamping_interval.to {
+                    clamping_interval.to = in_interval.to;
+                }
+            }
+        }
+        if clamping_interval_saved != clamping_interval {
+            log::warn!(
+                "Sanitizing clamp transform: \n
+                clamping interval{clamping_interval_saved:?} was not fully contained within input interval {in_interval:?},\
+                converted it to {clamping_interval:?}"
+            );
+            self.range = clamping_interval;
         }
     }
 }
 
 impl ClampCfg {
-    pub(crate) fn get_clamping_interval(&self, in_interval: NumInterval<BaseNumT>) -> NumInterval<BaseNumT> {
-        NumInterval::new(
-            self.from.unwrap_or(in_interval.from()),
-            self.to.unwrap_or(in_interval.to()),
-        )
+    pub(crate) fn get_clamping_interval(&self) -> NumInterval<BaseNumT> {
+        self.range
     }
-    pub(crate) fn get_out_interval(&self, in_interval: NumInterval<BaseNumT>) -> NumInterval<BaseNumT> {
+
+    pub(crate) fn get_out_interval(&self) -> NumInterval<BaseNumT> {
         if self.override_range {
-            self.get_clamping_interval(in_interval)
+            self.get_clamping_interval()
         } else {
-            in_interval
+            self.get_in_interval()
         }
+    }
+    pub(crate) fn get_in_interval(&self) -> NumInterval<BaseNumT> {
+        self.mon_state_ref().intervals.0
+    }
+}
+
+impl WithMonState for ClampCfg {
+    fn mon_state_ref(&self) -> parking_lot::ArcRwLockReadGuard<parking_lot::RawRwLock, TfmStepMonState> {
+        self.mon_state.0.read_arc()
+    }
+}
+
+impl WithMonStateMut for ClampCfg {
+    fn mon_state_mut(&self) -> parking_lot::ArcRwLockWriteGuard<parking_lot::RawRwLock, TfmStepMonState> {
+        self.mon_state.0.write_arc()
     }
 }
 
@@ -971,6 +1047,9 @@ impl TfmSeqCfg {
         let mut in_relativity = self.in_meta.relativity;
         let mut in_interval = self.in_meta.interval;
         for step in &mut self.steps {
+            step.get_state_as_mut()
+                .set_input_relativity(in_relativity)
+                .set_input_interval(in_interval);
             let (out_interval, out_relativity) = match step {
                 TfmStepCfg::Script(script) => {
                     script
@@ -1002,7 +1081,10 @@ impl TfmSeqCfg {
                 TfmStepCfg::_ForceFeedback(force_feedback) if force_feedback.enabled => {
                     (SYMM_UNIT_INTERVAL, Relativity::Abs)
                 }
-                TfmStepCfg::Clamp(clamp) if clamp.enabled => (clamp.get_out_interval(in_interval), in_relativity),
+                TfmStepCfg::Clamp(clamp) if clamp.enabled => {
+                    clamp.sanitize_inplace();
+                    (clamp.get_out_interval(), in_relativity)
+                }
                 TfmStepCfg::Nop(_)
                 | TfmStepCfg::Invert(_)
                 | TfmStepCfg::Integrate(_)
@@ -1021,8 +1103,6 @@ impl TfmSeqCfg {
             };
 
             step.get_state_as_mut()
-                .set_input_relativity(in_relativity)
-                .set_input_interval(in_interval)
                 .set_output_relativity(out_relativity)
                 .set_output_interval(out_interval);
 
@@ -1121,7 +1201,7 @@ impl<'de> Deserialize<'de> for TfmSeqVariants {
             Err(e1) => match TfmSeqFull::deserialize(vv.into_deserializer()) {
                 Ok(v) => Ok(Self::Full(v)),
                 Err(e2) => Err(D::Error::custom(format!(
-                    "Configuration mismatch:\n\nIf using steps list only: {}\n\nIf using steps + input spec: {}\n\n",
+                    "Configuration parse error.\nIf using steps list only: {}\nIf using steps + input spec: {}\n",
                     e1, e2
                 ))),
             },
@@ -1310,6 +1390,11 @@ impl PartialEq for SteeringCfg {
 
 pub(crate) trait WithMonState {
     fn mon_state_ref(&self) -> parking_lot::ArcRwLockReadGuard<parking_lot::RawRwLock, TfmStepMonState>;
+}
+
+#[allow(unused)]
+pub(crate) trait WithMonStateMut {
+    fn mon_state_mut(&self) -> parking_lot::ArcRwLockWriteGuard<parking_lot::RawRwLock, TfmStepMonState>;
 }
 
 impl WithMonState for SteeringCfg {
@@ -1688,6 +1773,20 @@ impl WithDescriptionMut for TfmStepCfg {
 mod tests {
     #[allow(unused)]
     use super::*;
+
+    #[test]
+    fn clamp_cfg_sanitize() {
+        let mut clamp_cfg = ClampCfg::default();
+        clamp_cfg.mon_state_mut().set_input_interval((3.0..4.0).into());
+
+        clamp_cfg.range = (-100.0..-100.0).into();
+        clamp_cfg.sanitize_inplace();
+        assert!(clamp_cfg.range.to == 3.0);
+
+        clamp_cfg.range = (100.0..100.0).into();
+        clamp_cfg.sanitize_inplace();
+        assert!(clamp_cfg.range.from == 4.0);
+    }
 
     #[test]
     fn default_on_idle_is_true() {
