@@ -204,7 +204,7 @@ impl WithTfmExec for TfmStepCfg {
             .gui_trace(TfmStepTraceStage::In, &input, Instant::now());
 
         input = match self {
-            TfmStepCfg::Nop(s) => input,
+            TfmStepCfg::Nop(_) => input,
             TfmStepCfg::Invert(s) => s.exec(input, ctx),
             TfmStepCfg::Integrate(s) => s.exec(input, ctx),
             TfmStepCfg::Steering(s) => s.exec(input, ctx),

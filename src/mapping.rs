@@ -22,6 +22,7 @@ use crate::schemas_value::{ValueSrcs, WithRelativity};
 use crate::tfm_exec::{TfmExeState, TfmExecCtx, WithTfmExec};
 use anyhow::Result;
 use log::{debug, info, warn};
+use rand::seq::SliceRandom;
 use std::collections::HashMap;
 use std::fs;
 use std::sync::atomic::Ordering::Relaxed;
@@ -398,9 +399,11 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
     }
 
     fn run_mappings__(&mut self, triggering_device_id: ObjId) {
-        self.router_buff_mappings_to_execute.sort();
-        self.router_buff_mappings_to_execute.dedup();
-        //mappings.shuffle(&mut rand::rng());
+        if self.router_buff_mappings_to_execute.len() > 1 {
+            self.router_buff_mappings_to_execute.sort();
+            self.router_buff_mappings_to_execute.dedup();
+            self.router_buff_mappings_to_execute.shuffle(&mut rand::rng());
+        }
         for mapping_idx in self.router_buff_mappings_to_execute.iter() {
             let mapping = &self.cfg.mappings[*mapping_idx];
             self.execute_mapping_on_active_input(triggering_device_id, mapping, mapping.src.get_numeric_value());
