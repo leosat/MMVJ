@@ -2,7 +2,6 @@ use crate::common::{BaseNumT, Relativity, SYMM_UNIT_INTERVAL, UNIT_INTERVAL, get
 use crate::curves::Curves;
 #[cfg(feature = "gui")]
 use crate::gui_transform_step::TfmStepTraceStage;
-use crate::mapping::MappingTfmExecCtx;
 use crate::num_interval::{NumInterval, OutOfRangePolicy};
 
 use crate::schemas_common::WithRuntimeId;
@@ -21,7 +20,6 @@ use crate::tracing::GraphDisplayStyle;
 use eframe::egui::Color32;
 use log::debug;
 use mlua::Lua;
-use std::collections::BTreeMap;
 use std::ops::Add;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::Instant;
@@ -47,11 +45,11 @@ pub(crate) trait TfmExecCtx {
 }
 
 pub(crate) trait WithTfmExec {
-    fn exec(&self, input: MappedValue<BaseNumT>, ctx: &mut impl TfmExecCtx) -> MappedValue<BaseNumT>;
+    fn exec(&self, input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT>;
 }
 
 impl WithTfmExec for TfmSeqCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &mut impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
         for step in &self.steps {
             input = step.exec(input, ctx);
             if !input.interval.contains_inclusive(input.value) {
@@ -71,7 +69,7 @@ impl WithTfmExec for TfmSeqCfg {
 }
 
 impl WithTfmExec for ClampCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, _ctx: &mut impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: MappedValue<BaseNumT>, _ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
         if !self.enabled {
             return input;
         }
@@ -101,7 +99,7 @@ impl TfmExeState for OneEuroFilterCfg {
 }
 
 impl WithTfmExec for OneEuroFilterCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &mut impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
         if self.enabled
             && (!ctx.is_idle_tick() || input.relativity == Relativity::Abs || self.on_relative_input_feed_on_idle)
         {
@@ -153,7 +151,7 @@ impl TfmExeState for RaiseFallCfg {
 }
 
 impl WithTfmExec for RaiseFallCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &mut impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
         if !self.enabled {
             return input;
         }
@@ -244,7 +242,7 @@ impl TfmExeState for EmaFilterCfg {
 }
 
 impl WithTfmExec for EmaFilterCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &mut impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
         if self.enabled
             && (!ctx.is_idle_tick() || input.relativity == Relativity::Abs || self.on_relative_input_feed_on_idle)
         {
@@ -257,7 +255,7 @@ impl WithTfmExec for EmaFilterCfg {
 }
 
 impl WithTfmExec for TfmStepCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &mut impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
         self.get_mon_state_read_guard()
             .last_in
             .store(input.value as f32, Relaxed);
@@ -296,7 +294,7 @@ impl WithTfmExec for TfmStepCfg {
 }
 
 impl WithTfmExec for SignedPowerCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &mut impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
         if !(self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
             return input;
         }
@@ -321,7 +319,7 @@ impl WithTfmExec for SignedPowerCfg {
 }
 
 impl WithTfmExec for NormExpCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &mut impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
         if !(self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
             return input;
         }
@@ -346,7 +344,7 @@ impl WithTfmExec for NormExpCfg {
 }
 
 impl WithTfmExec for SCurveCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &mut impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
         if !(self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
             return input;
         }
@@ -362,7 +360,7 @@ impl WithTfmExec for SCurveCfg {
 }
 
 impl WithTfmExec for SmoothstepCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &mut impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
         if !(self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
             return input;
         }
@@ -375,7 +373,7 @@ impl WithTfmExec for SmoothstepCfg {
 }
 
 impl WithTfmExec for LinearCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &mut impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
         if !(self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
             return input;
         }
@@ -422,7 +420,7 @@ impl Default for ScriptExeState {
                 .load(" ")
                 .into_function()
                 .inspect_err(|e| log::error!("{e}"))
-                .unwrap_or(lua.load(" ").into_function().unwrap()),
+                .unwrap(),
         }
     }
 }
@@ -438,65 +436,18 @@ impl TfmExeState for ScriptCfg {
     fn exe_state_reset(&self, _: Self::ResetInput) {
         let mut state = self.exe_state_mut();
 
-        if get_debug_level().is_on() {
-            log::debug!("Compiling Luau script!");
-        }
+        // if get_debug_level().is_on() {
+        log::debug!("Compiling Luau script!");
+        // }
 
         state.inputs = state.lua.create_table().unwrap();
         state.outputs = state.lua.create_table().unwrap();
-
-        let aux_tfm_idx = state.lua.create_table().unwrap();
         state.compiled = state
             .lua
             .load(&self.script)
             .into_function()
             .inspect_err(|e| log::error!("{e}"))
             .unwrap_or(state.lua.load(" ").into_function().unwrap());
-
-        let tfms_ptr = &self.aux_transformations as *const _ as *const () as usize;
-
-        let run_tfm_func = state
-            .lua
-            .create_function(
-                move |lua: &mlua::Lua, args: (usize, BaseNumT)| -> std::result::Result<BaseNumT, mlua::Error> {
-                    let tfm_idx = args.0;
-                    let input_value = args.1;
-                    // SAFETY: scripting cache MUST be reset (scripting_cache_reset())
-                    // whenever tfm config tree is updated beyond most trivial changes (like parameter values changes).
-                    let tfms = unsafe { &*(tfms_ptr as *const BTreeMap<String, TfmSeqCfg>) };
-                    if tfm_idx < tfms.len() {
-                        let tfm = tfms.values().nth(tfm_idx).unwrap();
-                        let ctx = unsafe {
-                            &mut *(lua.named_registry_value::<usize>(&"ctx").unwrap() as *mut MappingTfmExecCtx)
-                        };
-
-                        Ok(tfm
-                            .exec(
-                                crate::schemas_value::MappedValue {
-                                    value: input_value,
-                                    interval: tfm.get_interval(),
-                                    relativity: tfm.get_relativity(),
-                                },
-                                ctx,
-                            )
-                            .value)
-                    } else {
-                        Err(mlua::Error::RuntimeError(format!(
-                            "Referenced transformation {} is not found. \
-                                Total transformations available for the script: {}, indexing starting from 0 ",
-                            tfm_idx,
-                            tfms.len()
-                        )))
-                    }
-                },
-            )
-            .unwrap();
-
-        let _ = state
-            .lua
-            .globals()
-            .set("transform", run_tfm_func)
-            .inspect_err(|e| log::error!("{e}"));
 
         let _ = state
             .lua
@@ -510,12 +461,10 @@ impl TfmExeState for ScriptCfg {
             .set("outputs", state.outputs.clone())
             .inspect_err(|e| log::error!("{e}"));
 
-        // let _ = state.inputs.set("idle_tick_rate", idle_tick_rate);
-
+        let aux_tfm_idx = state.lua.create_table().unwrap();
         for (idx, (name, _)) in self.aux_transformations.iter().enumerate() {
             let _ = aux_tfm_idx.set(name.as_str(), idx);
         }
-
         let _ = state
             .lua
             .globals()
@@ -525,31 +474,37 @@ impl TfmExeState for ScriptCfg {
 }
 
 impl WithTfmExec for ScriptCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &mut impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    #[inline]
+    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
         if !self.enabled {
             return input;
         }
+        const NAIVE_BENCH: bool = false;
+        let now = Instant::now();
         match self.lang {
             crate::schemas_transform::ScriptLanguage::Luau => {
-                let (inputs, outputs, compiled) = {
-                    let script_data = self.exe_state_mut();
-                    script_data
-                        .lua
-                        .set_named_registry_value(&"ctx", std::ptr::from_mut(ctx) as *mut () as usize)
-                        .inspect_err(|e| log::error!("{e:?}"))
-                        .unwrap();
-                    (
-                        script_data.inputs.clone(),
-                        script_data.outputs.clone(),
-                        script_data.compiled.clone(),
-                    )
-                };
+                let transform_closure =
+                    |_lua: &mlua::Lua, args: (usize, BaseNumT)| -> std::result::Result<BaseNumT, mlua::Error> {
+                        let tfm = self.aux_transformations.iter().nth(args.0).unwrap().1;
+                        let ret = tfm.exec(
+                            MappedValue {
+                                value: args.1,
+                                interval: tfm.get_interval(),
+                                relativity: tfm.get_relativity(),
+                            },
+                            ctx,
+                        );
+                        Ok(ret.value)
+                    };
+
+                let exe_state = self.exe_state_mut();
 
                 // -----------------------------------
                 // Set runtime inputs.
                 // -----------------------------------
-                let _ = inputs.set("is_idle_tick", ctx.is_idle_tick());
-                let _ = inputs.set(0, input.value);
+                let _ = exe_state.inputs.set("is_idle_tick", ctx.is_idle_tick());
+                let _ = exe_state.inputs.set("idle_tick_rate", ctx.get_idle_tick_rate());
+                let _ = exe_state.inputs.set(0, input.value);
                 for (idx, (name, src)) in self.aux_srcs.iter().enumerate() {
                     let mut input_val = src.source.get_numeric_value();
                     src.remap_to_interval.inspect(|to_interval| {
@@ -557,39 +512,52 @@ impl WithTfmExec for ScriptCfg {
                             to_interval.map_from(input_val, &src.source.get_interval(), OutOfRangePolicy::WarnAndClamp)
                     });
 
-                    let _ = inputs.set(idx + 1, input_val).inspect_err(|e| log::error!("{e}"));
-                    let _ = inputs.set(name.as_str(), input_val).inspect_err(|e| log::error!("{e}"));
+                    let _ = exe_state
+                        .inputs
+                        .set(idx + 1, input_val)
+                        .inspect_err(|e| log::error!("{e}"));
+                    let _ = exe_state
+                        .inputs
+                        .set(name.as_str(), input_val)
+                        .inspect_err(|e| log::error!("{e}"));
                     //let _ = lua.globals().set(name.as_str(), input_val).inspect_err(|e| log::error!("{e}"));
                 }
 
-                if let Err(e) = compiled.call::<()>(()) {
-                    log::error!("{e} ");
-                } else {
-                    // -----------------------------------
-                    // Set outputs.
-                    // -----------------------------------
-                    input.value = outputs.get(0).unwrap_or(input.value);
-                    for (idx, (name, dst)) in self.aux_dsts.iter().enumerate() {
-                        match &dst.destination {
-                            ValueDsts::Void => {}
-                            ValueDsts::Dynamic(dynamic_value_refs_rt) => {
-                                if let Ok(mut out) = outputs.get(name.as_str()).or(outputs.get(idx + 1)) {
-                                    if let Some(from_interval) = dst.remap_from_interval {
-                                        out = dst.destination.get_interval().map_from(
-                                            out,
-                                            &from_interval,
-                                            OutOfRangePolicy::WarnAndClamp,
-                                        );
+                let globals = exe_state.lua.globals();
+                let _ = exe_state.lua.scope(|s| {
+                    let _ = globals.set("transform", s.create_function(transform_closure).unwrap());
+                    if let Err(e) = exe_state.compiled.call::<()>(()) {
+                        log::error!("{e} ");
+                    } else {
+                        // -----------------------------------
+                        // Set outputs.
+                        // -----------------------------------
+                        input.value = exe_state.outputs.get(0).unwrap_or(input.value);
+                        for (idx, (name, dst)) in self.aux_dsts.iter().enumerate() {
+                            match &dst.destination {
+                                ValueDsts::Void => {}
+                                ValueDsts::Dynamic(dynamic_value_refs_rt) => {
+                                    if let Ok(mut out) =
+                                        exe_state.outputs.get(name.as_str()).or(exe_state.outputs.get(idx + 1))
+                                    {
+                                        if let Some(from_interval) = dst.remap_from_interval {
+                                            out = dst.destination.get_interval().map_from(
+                                                out,
+                                                &from_interval,
+                                                OutOfRangePolicy::WarnAndClamp,
+                                            );
+                                        }
+                                        ctx.set_dyn_value(dynamic_value_refs_rt, out);
                                     }
-                                    ctx.set_dyn_value(dynamic_value_refs_rt, out);
                                 }
                             }
                         }
                     }
-                }
+                    Ok(())
+                });
 
                 // let _ = inputs.clear();
-                let _ = outputs.clear();
+                let _ = exe_state.outputs.clear();
 
                 // -----------------------------------
                 input.relativity = self.output_relativity.unwrap_or(input.relativity);
@@ -599,12 +567,16 @@ impl WithTfmExec for ScriptCfg {
         if let Some(intvl) = self.output_interval {
             input.interval = intvl;
         }
+
+        if NAIVE_BENCH {
+            dbg!((Instant::now() - now).as_secs_f64());
+        }
         input
     }
 }
 
 impl WithTfmExec for InvertCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, _ctx: &mut impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: MappedValue<BaseNumT>, _ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
         if !self.enabled {
             return input;
         }
@@ -636,7 +608,7 @@ impl TfmExeState for IntegrateCfg {
 }
 
 impl WithTfmExec for IntegrateCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &mut impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
         if !(self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
             return input;
         }
@@ -684,7 +656,7 @@ impl TfmExeState for SteeringCfg {
 }
 
 impl WithTfmExec for SteeringCfg {
-    fn exec(&self, input: MappedValue<BaseNumT>, ctx: &mut impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
         if !self.enabled {
             return input;
         }
