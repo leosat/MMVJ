@@ -1,11 +1,10 @@
-use crate::common::{BaseNumT, get_debug_level};
-use crate::mapping::MappingTfmExecCtx;
-use crate::schemas_value::{DescriptionCfg, InputValueMetadata, WithDescriptionMut, WithRelativity};
+use crate::common::BaseNumT;
+use crate::schemas_value::{DescriptionCfg, InputValueMetadata, WithDescriptionMut};
 use crate::schemas_value::{
     DeviceControlMatcherRef, DynValueRefs, ValueDsts, VariableRef, WithNumInterval, WithRelativityRef,
     serialize_value_src_rt_ignore_interval,
 };
-use crate::tfm_exec::{TfmExeState, WithTfmExec};
+use crate::tfm_exec::{IntegrateExeState, RaiseFallExeState, ScriptExeState, SteeringExeState};
 use crate::{
     common::{Relativity, SYMM_UNIT_INTERVAL, UNIT_INTERVAL},
     num_interval::NumInterval,
@@ -18,7 +17,6 @@ use bitflags::bitflags;
 use crossbeam_utils::CachePadded;
 use doc_for::*;
 use garde::Validate;
-use mlua::Lua;
 use parking_lot::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use schemars::JsonSchema;
 use serde::de::IntoDeserializer;
@@ -26,7 +24,6 @@ use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-use std::time::Instant;
 use strum_macros::{Display, EnumIter, EnumString};
 
 use traversable::Traversable;
@@ -570,7 +567,7 @@ pub(crate) struct EmaFilterCfg {
     mon_state: TfmStepStateShared,
     #[serde(skip)]
     #[garde(skip)]
-    exe_state: Arc<Mutex<crate::filters::EmaFilter>>,
+    pub(super) exe_state: Arc<Mutex<crate::filters::EmaFilter>>,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -589,19 +586,6 @@ pub(crate) struct EmaFilterCfg {
     #[serde(default = "default_ema_tau")]
     #[garde(range(min = 0.0))]
     pub(crate) tau: BaseNumT,
-}
-
-impl TfmExeState for EmaFilterCfg {
-    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, crate::filters::EmaFilter>;
-    type ResetInput = BaseNumT;
-
-    fn exe_state_mut(&self) -> Self::StateMutT {
-        self.exe_state.lock_arc()
-    }
-
-    fn exe_state_reset(&self, reset_with: Self::ResetInput) {
-        self.exe_state_mut().reset(reset_with);
-    }
 }
 
 impl PartialEq for EmaFilterCfg {
@@ -636,7 +620,7 @@ pub(crate) struct OneEuroFilterCfg {
     mon_state: TfmStepStateShared,
     #[serde(skip)]
     #[garde(skip)]
-    exe_state: Arc<Mutex<crate::filters::OneEuroFilter>>,
+    pub(super) exe_state: Arc<Mutex<crate::filters::OneEuroFilter>>,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -661,19 +645,6 @@ pub(crate) struct OneEuroFilterCfg {
     #[serde(default = "default_1euro_d_cutoff_hz")]
     #[garde(range(min = 0.0))]
     pub(crate) d_cutoff_hz: BaseNumT,
-}
-
-impl TfmExeState for OneEuroFilterCfg {
-    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, crate::filters::OneEuroFilter>;
-    type ResetInput = BaseNumT;
-
-    fn exe_state_mut(&self) -> Self::StateMutT {
-        self.exe_state.lock_arc()
-    }
-
-    fn exe_state_reset(&self, reset_with: Self::ResetInput) {
-        self.exe_state_mut().reset(reset_with);
-    }
 }
 
 impl PartialEq for OneEuroFilterCfg {
@@ -912,11 +883,6 @@ pub(crate) struct HighPassCfg {
     pub(crate) on_idle: bool,
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialOrd, PartialEq)]
-pub(crate) struct IntegrateMappingState {
-    pub(crate) prev_val: BaseNumT, //  prev_val: (self.range.from() + self.range.to()) * 0.5,
-}
-
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct IntegrateCfg {
@@ -925,7 +891,7 @@ pub(crate) struct IntegrateCfg {
     mon_state: TfmStepStateShared,
     #[serde(skip)]
     #[garde(skip)]
-    exe_state: Arc<Mutex<IntegrateMappingState>>,
+    pub(super) exe_state: Arc<Mutex<IntegrateExeState>>,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -945,20 +911,6 @@ pub(crate) struct IntegrateCfg {
     #[serde(skip_serializing_if = "is_true")]
     #[garde(skip)]
     pub(crate) on_idle: bool,
-}
-
-impl TfmExeState for IntegrateCfg {
-    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, IntegrateMappingState>;
-
-    type ResetInput = ();
-
-    fn exe_state_mut(&self) -> Self::StateMutT {
-        self.exe_state.lock_arc()
-    }
-
-    fn exe_state_reset(&self, _: Self::ResetInput) {
-        *self.exe_state_mut() = Default::default()
-    }
 }
 
 impl PartialEq for IntegrateCfg {
@@ -1339,22 +1291,6 @@ impl WithRuntimeId for TfmSeqCfg {
 }
 
 // ==================================================================
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct SteeringExeState {
-    pub(crate) last_time: Instant,
-    pub(crate) pre_filter: BaseNumT,
-    pub(crate) post_filter: BaseNumT,
-}
-
-impl Default for SteeringExeState {
-    fn default() -> Self {
-        Self {
-            last_time: Instant::now(),
-            pre_filter: Default::default(),
-            post_filter: Default::default(),
-        }
-    }
-}
 
 impl PartialEq for SteeringCfg {
     fn eq(&self, other: &Self) -> bool {
@@ -1391,7 +1327,7 @@ pub(crate) struct SteeringCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    exe_state: Arc<Mutex<SteeringExeState>>,
+    pub(super) exe_state: Arc<Mutex<SteeringExeState>>,
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -1432,19 +1368,6 @@ pub(crate) struct SteeringCfg {
     pub(crate) integrated_user_input_transform: TfmSeqCfg,
 }
 
-impl TfmExeState for SteeringCfg {
-    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, SteeringExeState>;
-    type ResetInput = Option<SteeringExeState>;
-
-    fn exe_state_mut(&self) -> Self::StateMutT {
-        self.exe_state.lock_arc()
-    }
-
-    fn exe_state_reset(&self, reset_with: Self::ResetInput) {
-        *self.exe_state_mut() = reset_with.unwrap_or_default()
-    }
-}
-
 impl Default for SteeringCfg {
     fn default() -> Self {
         Self {
@@ -1476,25 +1399,6 @@ impl Default for SteeringCfg {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct RaiseFallMappingState {
-    pub(crate) prev_out: BaseNumT,
-    pub(crate) last_target: BaseNumT,
-    pub(crate) prev_out_time: Option<Instant>,
-    pub(crate) prev_user_input_time: Option<Instant>,
-}
-
-impl Default for RaiseFallMappingState {
-    fn default() -> Self {
-        Self {
-            prev_out: Default::default(),
-            last_target: Default::default(),
-            prev_out_time: Default::default(),
-            prev_user_input_time: Default::default(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Traversable, TraversableMut, Validate)]
 pub(crate) struct RaiseFallCfg {
     #[serde(skip)]
@@ -1504,7 +1408,7 @@ pub(crate) struct RaiseFallCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    exe_state: Arc<Mutex<RaiseFallMappingState>>,
+    pub(super) exe_state: Arc<Mutex<RaiseFallExeState>>,
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -1531,20 +1435,6 @@ pub(crate) struct RaiseFallCfg {
     #[serde(default)]
     #[garde(skip)]
     pub(crate) invert_fall_hold_factor: bool,
-}
-
-impl TfmExeState for RaiseFallCfg {
-    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, RaiseFallMappingState>;
-
-    type ResetInput = Option<RaiseFallMappingState>;
-
-    fn exe_state_mut(&self) -> Self::StateMutT {
-        self.exe_state.lock_arc()
-    }
-
-    fn exe_state_reset(&self, reset_with: Self::ResetInput) {
-        *self.exe_state_mut() = reset_with.unwrap_or_default();
-    }
 }
 
 impl PartialEq for RaiseFallCfg {
@@ -1615,31 +1505,6 @@ pub(crate) enum ScriptLanguage {
     Luau,
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct ScriptMappingState {
-    #[allow(unused)]
-    pub(crate) lua: Lua,
-    pub(crate) inputs: mlua::Table,
-    pub(crate) outputs: mlua::Table,
-    pub(crate) compiled: mlua::Function,
-}
-
-impl Default for ScriptMappingState {
-    fn default() -> Self {
-        let lua = Lua::new();
-        Self {
-            lua: lua.clone(),
-            inputs: lua.create_table().unwrap(),
-            outputs: lua.create_table().unwrap(),
-            compiled: lua
-                .load(" ")
-                .into_function()
-                .inspect_err(|e| log::error!("{e}"))
-                .unwrap_or(lua.load(" ").into_function().unwrap()),
-        }
-    }
-}
-
 #[derive(Clone, Serialize, Deserialize, JsonSchema, Debug, TraversableMut, Traversable)]
 pub(crate) struct ScriptCfg {
     #[serde(skip)]
@@ -1649,7 +1514,7 @@ pub(crate) struct ScriptCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    exe_state: Arc<Mutex<ScriptMappingState>>,
+    pub(super) exe_state: Arc<Mutex<ScriptExeState>>,
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -1685,110 +1550,6 @@ pub(crate) struct ScriptCfg {
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     #[serde(deserialize_with = "deserialize_btree_or_vec")]
     pub(crate) aux_transformations: BTreeMap<String, TfmSeqCfg>,
-}
-
-impl TfmExeState for ScriptCfg {
-    type StateMutT = parking_lot::ArcMutexGuard<parking_lot::RawMutex, ScriptMappingState>;
-    type ResetInput = ();
-
-    fn exe_state_mut(&self) -> Self::StateMutT {
-        self.exe_state.lock_arc()
-    }
-
-    fn exe_state_reset(&self, _: Self::ResetInput) {
-        let mut state = self.exe_state_mut();
-
-        if get_debug_level().is_on() {
-            log::debug!("Compiling Luau script!");
-        }
-
-        // let lua = state.lua.clone();
-        state.inputs = state.lua.create_table().unwrap();
-        state.outputs = state.lua.create_table().unwrap();
-
-        let aux_tfm_idx = state.lua.create_table().unwrap();
-        state.compiled = state
-            .lua
-            .load(&self.script)
-            .into_function()
-            .inspect_err(|e| log::error!("{e}"))
-            .unwrap_or(state.lua.load(" ").into_function().unwrap());
-
-        let tfms_ptr = &self.aux_transformations as *const _ as *const () as usize;
-
-        let run_tfm_func = state
-            .lua
-            .create_function(
-                move |lua, args: (usize, BaseNumT)| -> std::result::Result<BaseNumT, mlua::Error> {
-                    let tfm_idx = args.0;
-                    let input_value = args.1;
-                    // SAFETY: scripting cache MUST be reset (scripting_cache_reset())
-                    // whenever configuration is updated beyond trivial changes like parameter values changes.
-                    let tfms = unsafe { &*(tfms_ptr as *const BTreeMap<String, TfmSeqCfg>) };
-                    if tfm_idx < tfms.len() {
-                        let tfm = tfms.values().nth(tfm_idx).unwrap();
-                        let ctx = unsafe {
-                            &mut *(lua.named_registry_value::<usize>(&"ctx").unwrap() as *mut MappingTfmExecCtx)
-                        };
-
-                        Ok(tfm
-                            .exec(
-                                crate::schemas_value::MappedValue {
-                                    value: input_value,
-                                    interval: tfm.get_interval(),
-                                    relativity: tfm.get_relativity(),
-                                },
-                                ctx,
-                            )
-                            .value)
-                    } else {
-                        Err(mlua::Error::RuntimeError(format!(
-                            "Referenced transformation {} is not found. \
-                                Total transformations available for the script: {}, indexing starting from 0 ",
-                            tfm_idx,
-                            tfms.len()
-                        )))
-                    }
-                },
-            )
-            .unwrap();
-
-        let _ = state
-            .lua
-            .globals()
-            .set("transform", run_tfm_func)
-            .inspect_err(|e| log::error!("{e}"));
-        let _ = state
-            .lua
-            .globals()
-            .set("inputs", state.inputs.clone())
-            .inspect_err(|e| log::error!("{e}"));
-        let _ = state
-            .lua
-            .globals()
-            .set("outputs", state.outputs.clone())
-            .inspect_err(|e| log::error!("{e}"));
-
-        // let _ = state.inputs.set("idle_tick_rate", idle_tick_rate);
-
-        for (idx, (name, _)) in self.aux_transformations.iter().enumerate() {
-            // let _ = lua.globals().set(name.as_str(), idx);
-            let _ = aux_tfm_idx.set(name.as_str(), idx);
-        }
-        let _ = state
-            .lua
-            .globals()
-            .set("aux_tfm_idx", aux_tfm_idx)
-            .inspect_err(|e| log::error!("{e}"));
-
-        // *state = ScriptMappingState {
-        //     state.lua,
-        //     inputs,
-        //     outputs,
-        //     compiled,
-        // }
-        //state
-    }
 }
 
 impl PartialEq for ScriptCfg {
