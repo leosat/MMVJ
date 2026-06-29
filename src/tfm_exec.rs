@@ -528,16 +528,22 @@ impl WithTfmExec for ScriptCfg {
             crate::schemas_transform::ScriptLanguage::Luau => {
                 let transform_closure =
                     |_lua: &mlua::Lua, args: (String, BaseNumT)| -> std::result::Result<BaseNumT, mlua::Error> {
-                        let tfm = self.aux_transformations.get(&args.0).unwrap();
-                        let ret = tfm.exec(
-                            MappedValue {
-                                value: args.1,
-                                interval: tfm.get_interval(),
-                                relativity: tfm.get_relativity(),
-                            },
-                            ctx,
-                        );
-                        Ok(ret.value)
+                        if let Some(tfm) = self.aux_transformations.get(&args.0) {
+                            let ret = tfm.exec(
+                                MappedValue {
+                                    value: args.1,
+                                    interval: tfm.get_interval(),
+                                    relativity: tfm.get_relativity(),
+                                },
+                                ctx,
+                            );
+                            Ok(ret.value)
+                        } else {
+                            Err(mlua::Error::RuntimeError(format!(
+                                "Can't find transformation with key {}",
+                                &args.0
+                            )))
+                        }
                     };
 
                 let exe_state = self.exe_state_mut();
