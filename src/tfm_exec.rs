@@ -5,7 +5,6 @@ use crate::gui_transform_step::TfmStepTraceStage;
 use crate::num_interval::{NumInterval, OutOfRangePolicy};
 
 use crate::schemas_common::WithRuntimeId;
-#[cfg(feature = "gui")]
 use crate::schemas_transform::WithCommonState;
 use crate::schemas_transform::{
     ClampCfg, EmaFilterCfg, ForceFeedbackComponent, IntegrateCfg, InvertCfg, LinearCfg, NormExpCfg, OneEuroFilterCfg,
