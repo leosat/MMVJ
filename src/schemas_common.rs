@@ -22,7 +22,7 @@ impl std::fmt::Debug for ObjId {
         //     f.write_str(str)
         //         .inspect_err(|e| log::error!("Error while debug-printing ObjId {}", self.0));
         // }
-        f.debug_tuple(" ~ ObjId").field(&self.0).finish()
+        f.debug_tuple("ObjId").field(&self.0).finish()
     }
 }
 
@@ -157,12 +157,4 @@ pub(crate) fn deserialize_device_controls<
 pub(crate) trait WithRuntimeId {
     fn get_id(&self) -> ObjId;
     fn assign_new_id(&mut self);
-}
-
-pub(crate) trait WithRuntimeState
-where
-    Self: WithRuntimeId,
-{
-    type StateT;
-    fn assign_new_state(&mut self);
 }

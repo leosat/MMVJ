@@ -126,14 +126,6 @@ pub(crate) struct TfmStepMonState {
     pub(crate) trace_channel: Option<Arc<TraceChannel>>,
 }
 
-impl WithRuntimeState for TfmStepCfg {
-    fn assign_new_state(&mut self) {
-        *self.get_mon_state_arc_mut() = Default::default()
-    }
-
-    type StateT = TfmStepMonState;
-}
-
 impl Default for TfmStepMonState {
     fn default() -> Self {
         Self {
@@ -299,6 +291,10 @@ pub(crate) enum TfmStepCfg {
 }
 
 impl TfmStepCfg {
+    fn assign_new_state(&mut self) {
+        *self.get_mon_state_arc_mut() = Default::default()
+    }
+
     pub(crate) fn get_enabled_ref_mut(&mut self) -> &mut bool {
         match self {
             Self::Nop(s) => &mut s.enabled,
