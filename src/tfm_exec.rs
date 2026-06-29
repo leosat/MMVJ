@@ -100,14 +100,14 @@ impl WithTfmExec for TfmSeqCfg {
 }
 
 impl WithTfmExec for ClampCfg {
-    /// NB: clamping interval and input interval must intersect.
     fn exec(&self, mut input: MappedValue<BaseNumT>, _ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
         if !self.enabled {
             return input;
         }
         input.value = self.get_clamping_interval().clamp(input.value);
         input.interval = self.get_out_interval();
-        //input.value = input.interval.clamp(input.value);
+        // NB: clamping interval is ensured to be contained wihin input interval,
+        // NB: so no more need for input.value = input.interval.clamp(input.value);
         input
     }
 }
