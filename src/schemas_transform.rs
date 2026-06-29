@@ -13,25 +13,26 @@ use crate::{
     schemas_value::{StaticValueCfg, ValueSrcs},
     tracing::TraceChannel,
 };
+use ambassador::{Delegate, delegatable_trait};
 use atomic_float::AtomicF32;
 use bitflags::bitflags;
 use crossbeam_utils::CachePadded;
 use doc_for::*;
 use garde::Validate;
-use parking_lot::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use parking_lot::Mutex;
 use schemars::JsonSchema;
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
+#[cfg(feature = "gui")]
+use std::sync::atomic::AtomicBool;
 use strum_macros::{Display, EnumIter, EnumString};
-
 use traversable::Traversable;
 use traversable::TraversableMut;
 
 // =================================================
-
 const fn default_step_enabled() -> bool {
     true
 }
@@ -89,7 +90,6 @@ const fn default_ema_tau() -> BaseNumT {
 }
 
 // ============================================================
-
 pub(crate) trait DuplicateTfmTree
 where
     Self: Clone + TraversableMut + WithRuntimeId,
@@ -98,10 +98,9 @@ where
         struct RuntimeInfoRenewVisitor {}
         impl traversable::VisitorMut for RuntimeInfoRenewVisitor {
             type Break = ();
-
             fn enter_mut(&mut self, this: &mut dyn core::any::Any) -> std::ops::ControlFlow<Self::Break> {
                 if let Some(v) = this.downcast_mut::<TfmStepCfg>() {
-                    v.assign_new_state();
+                    v.common_state_assign_new();
                 } else if let Some(v) = this.downcast_mut::<TfmSeqCfg>() {
                     v.assign_new_id();
                 }
@@ -115,52 +114,53 @@ where
 }
 
 // ============================================================
-pub(crate) struct TfmStepMonState {
+#[derive(Clone)]
+pub(crate) struct TfmStepCommonState {
     id: ObjId,
     intervals: (NumInterval<BaseNumT>, NumInterval<BaseNumT>),
     relativity: (Relativity, Relativity),
     #[cfg(feature = "gui")]
-    pub(crate) gui_trace_graph_opened: bool,
-    pub(crate) last_in: CachePadded<AtomicF32>,
-    pub(crate) last_out: CachePadded<AtomicF32>,
+    pub(crate) gui_trace_graph_opened: Arc<AtomicBool>,
+    pub(crate) last_in: Arc<CachePadded<AtomicF32>>,
+    pub(crate) last_out: Arc<CachePadded<AtomicF32>>,
     pub(crate) trace_channel: Option<Arc<TraceChannel>>,
 }
 
-impl Default for TfmStepMonState {
+impl Default for TfmStepCommonState {
     fn default() -> Self {
         Self {
             id: Default::default(),
             intervals: (NumInterval::default(), NumInterval::default()),
             relativity: (Relativity::Abs, Relativity::Abs),
             #[cfg(feature = "gui")]
-            gui_trace_graph_opened: false,
+            gui_trace_graph_opened: Default::default(),
             trace_channel: None,
-            last_in: CachePadded::new(AtomicF32::new(0.0)),
-            last_out: CachePadded::new(AtomicF32::new(0.0)),
+            last_in: Default::default(),
+            last_out: Default::default(),
         }
     }
 }
 
-impl WithRuntimeId for TfmStepMonState {
+impl WithRuntimeId for TfmStepCommonState {
     fn get_id(&self) -> ObjId {
         self.id
     }
-
     fn assign_new_id(&mut self) {
         self.id = Default::default()
     }
 }
 
 // ===========================================================
-
-impl TfmStepMonState {
+impl TfmStepCommonState {
     #[allow(unused)]
     pub(crate) fn is_in_relative(&self) -> bool {
         self.relativity.0.into()
     }
+
     pub(crate) fn is_out_relative(&self) -> bool {
         self.relativity.1.into()
     }
+
     pub(crate) fn set_input_relativity(&mut self, is_relative: Relativity) -> &mut Self {
         self.relativity.0 = is_relative;
         self
@@ -202,7 +202,7 @@ impl TfmStepMonState {
     }
 }
 
-impl std::fmt::Debug for TfmStepMonState {
+impl std::fmt::Debug for TfmStepCommonState {
     #[cfg(feature = "gui")]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TfmStepState")
@@ -218,24 +218,20 @@ impl std::fmt::Debug for TfmStepMonState {
 }
 
 // ============================================================
-
 impl Default for TfmStepCfg {
     fn default() -> Self {
         TfmStepCfg::Nop(Default::default())
     }
 }
 
-#[derive(Debug, Clone, Default)]
-pub(crate) struct TfmStepStateShared(pub(crate) Arc<RwLock<TfmStepMonState>>);
-impl TfmStepStateShared {
-    pub(crate) fn new() -> Self {
-        Default::default()
-    }
-}
+// #[derive(Debug, Clone, Default)]
+// pub(crate) struct TfmStepCommonStateShared(pub(crate) Arc<RwLock<TfmStepCommonState>>);
 
-impl PartialEq for TfmStepStateShared {
+pub type TfmStepCommonStateShared = TfmStepCommonState;
+
+impl PartialEq for TfmStepCommonStateShared {
     fn eq(&self, other: &Self) -> bool {
-        self.0.read().get_id() == other.0.read().get_id()
+        self.get_id() == other.get_id()
     }
 }
 
@@ -255,6 +251,10 @@ impl PartialEq for TfmStepStateShared {
 )]
 #[strum(serialize_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
+#[derive(Delegate)]
+#[delegate(WithCommonState)]
+#[delegate(WithCommonStateMut)]
+#[delegate(WithCommonStateAssignedNew)]
 pub(crate) enum TfmStepCfg {
     #[traverse(skip)]
     Nop(#[garde(skip)] NopCfg),
@@ -291,10 +291,6 @@ pub(crate) enum TfmStepCfg {
 }
 
 impl TfmStepCfg {
-    fn assign_new_state(&mut self) {
-        *self.get_mon_state_arc_mut() = Default::default()
-    }
-
     pub(crate) fn get_enabled_ref_mut(&mut self) -> &mut bool {
         match self {
             Self::Nop(s) => &mut s.enabled,
@@ -316,65 +312,14 @@ impl TfmStepCfg {
         }
     }
 
-    pub(crate) fn get_mon_state_arc(&self) -> &Arc<RwLock<TfmStepMonState>> {
-        match self {
-            TfmStepCfg::Nop(s) => &s.mon_state.0,
-            TfmStepCfg::Invert(s) => &s.mon_state.0,
-            TfmStepCfg::Integrate(s) => &s.mon_state.0,
-            TfmStepCfg::Steering(s) => &s.mon_state.0,
-            TfmStepCfg::Clamp(s) => &s.mon_state.0,
-            TfmStepCfg::RaiseFall(s) => &s.mon_state.0,
-            TfmStepCfg::Ema(s) => &s.mon_state.0,
-            TfmStepCfg::Linear(s) => &s.mon_state.0,
-            TfmStepCfg::Smoothstep(s) => &s.mon_state.0,
-            TfmStepCfg::SCurve(s) => &s.mon_state.0,
-            TfmStepCfg::Exp(s) => &s.mon_state.0,
-            TfmStepCfg::SignedPower(s) => &s.mon_state.0,
-            TfmStepCfg::OneEuro(s) => &s.mon_state.0,
-            TfmStepCfg::Script(s) => &s.mon_state.0,
-            TfmStepCfg::_HighPass(s) => &s.mon_state.0,
-            TfmStepCfg::_ForceFeedback(s) => &s.mon_state.0,
-        }
-    }
-
-    pub(crate) fn get_mon_state_arc_mut(&mut self) -> &mut Arc<RwLock<TfmStepMonState>> {
-        match self {
-            TfmStepCfg::Nop(s) => &mut s.mon_state.0,
-            TfmStepCfg::Invert(s) => &mut s.mon_state.0,
-            TfmStepCfg::Integrate(s) => &mut s.mon_state.0,
-            TfmStepCfg::Steering(s) => &mut s.mon_state.0,
-            TfmStepCfg::Clamp(s) => &mut s.mon_state.0,
-            TfmStepCfg::RaiseFall(s) => &mut s.mon_state.0,
-            TfmStepCfg::Ema(s) => &mut s.mon_state.0,
-            TfmStepCfg::Linear(s) => &mut s.mon_state.0,
-            TfmStepCfg::Smoothstep(s) => &mut s.mon_state.0,
-            TfmStepCfg::SCurve(s) => &mut s.mon_state.0,
-            TfmStepCfg::Exp(s) => &mut s.mon_state.0,
-            TfmStepCfg::SignedPower(s) => &mut s.mon_state.0,
-            TfmStepCfg::OneEuro(s) => &mut s.mon_state.0,
-            TfmStepCfg::Script(s) => &mut s.mon_state.0,
-            TfmStepCfg::_HighPass(s) => &mut s.mon_state.0,
-            TfmStepCfg::_ForceFeedback(s) => &mut s.mon_state.0,
-        }
-    }
-
-    pub(crate) fn get_mon_state_read_guard(&self) -> RwLockReadGuard<'_, TfmStepMonState> {
-        self.get_mon_state_arc().read()
-    }
-
-    pub(crate) fn get_state_as_mut(&self) -> RwLockWriteGuard<'_, TfmStepMonState> {
-        self.get_mon_state_arc().write()
-    }
-
     pub(crate) fn clone_with_new_state_no_recurse(&self) -> Self {
         let mut cloned = self.clone();
-        *cloned.get_mon_state_arc_mut() = TfmStepStateShared::new().0.clone();
+        cloned.common_state_assign_new();
         cloned
     }
 }
 
 // ===========================================================
-
 #[derive(
     JsonSchema,
     Display,
@@ -405,8 +350,7 @@ pub(crate) struct ForceFeedbackCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    mon_state: TfmStepStateShared,
-
+    common_state: TfmStepCommonStateShared,
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -459,7 +403,7 @@ pub(crate) struct ForceFeedbackCfg {
 pub(crate) struct ClampCfgCompat__ {
     #[serde(skip)]
     #[garde(skip)]
-    mon_state: TfmStepStateShared,
+    common_state: TfmStepCommonStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) desc: DescriptionCfg,
@@ -483,7 +427,7 @@ pub(crate) struct ClampCfgCompat__ {
 pub(crate) struct ClampCfg {
     #[serde(skip)]
     #[garde(skip)]
-    mon_state: TfmStepStateShared,
+    common_state: TfmStepCommonStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) desc: DescriptionCfg,
@@ -500,7 +444,7 @@ impl From<ClampCfgCompat__> for ClampCfg {
         let err =
             "Clamp transform parse error: full range must be specified either with range: ... or from: ... and to: ...";
         Self {
-            mon_state: value.mon_state,
+            common_state: value.common_state,
             desc: value.desc,
             enabled: value.enabled,
             range: NumInterval::new(
@@ -538,8 +482,8 @@ impl WithSanitize for ClampCfg {
         if clamping_interval_saved != clamping_interval {
             log::warn!(
                 "Sanitizing clamp transform: \n
-                clamping interval{clamping_interval_saved:?} was not fully contained within input interval {in_interval:?},\
-                converted it to {clamping_interval:?}"
+clamping interval{clamping_interval_saved:?} was not fully contained within input interval {in_interval:?},
+converted it to {clamping_interval:?}"
             );
             self.range = clamping_interval;
         }
@@ -550,7 +494,6 @@ impl ClampCfg {
     pub(crate) fn get_clamping_interval(&self) -> NumInterval<BaseNumT> {
         self.range
     }
-
     pub(crate) fn get_out_interval(&self) -> NumInterval<BaseNumT> {
         if self.override_range {
             self.get_clamping_interval()
@@ -559,19 +502,7 @@ impl ClampCfg {
         }
     }
     pub(crate) fn get_in_interval(&self) -> NumInterval<BaseNumT> {
-        self.mon_state_ref().intervals.0
-    }
-}
-
-impl WithMonState for ClampCfg {
-    fn mon_state_ref(&self) -> parking_lot::ArcRwLockReadGuard<parking_lot::RawRwLock, TfmStepMonState> {
-        self.mon_state.0.read_arc()
-    }
-}
-
-impl WithMonStateMut for ClampCfg {
-    fn mon_state_mut(&self) -> parking_lot::ArcRwLockWriteGuard<parking_lot::RawRwLock, TfmStepMonState> {
-        self.mon_state.0.write_arc()
+        self.common_state_ref().intervals.0
     }
 }
 
@@ -581,7 +512,7 @@ impl WithMonStateMut for ClampCfg {
 pub(crate) struct NopCfg {
     #[serde(skip)]
     #[garde(skip)]
-    mon_state: TfmStepStateShared,
+    common_state: TfmStepCommonStateShared,
     #[garde(skip)]
     #[serde(default = "default_step_enabled")]
     pub(crate) enabled: bool,
@@ -590,7 +521,7 @@ pub(crate) struct NopCfg {
 impl Default for NopCfg {
     fn default() -> Self {
         Self {
-            mon_state: Default::default(),
+            common_state: Default::default(),
             enabled: default_step_enabled(),
         }
     }
@@ -605,7 +536,7 @@ impl From<NopCfg> for bool {
 impl From<bool> for NopCfg {
     fn from(value: bool) -> Self {
         Self {
-            mon_state: Default::default(),
+            common_state: Default::default(),
             enabled: value,
         }
     }
@@ -616,7 +547,7 @@ impl From<bool> for NopCfg {
 pub(crate) struct InvertCfg {
     #[serde(skip)]
     #[garde(skip)]
-    mon_state: TfmStepStateShared,
+    common_state: TfmStepCommonStateShared,
     #[garde(skip)]
     #[serde(default = "default_step_enabled")]
     pub(crate) enabled: bool,
@@ -625,7 +556,7 @@ pub(crate) struct InvertCfg {
 impl Default for InvertCfg {
     fn default() -> Self {
         Self {
-            mon_state: Default::default(),
+            common_state: Default::default(),
             enabled: default_step_enabled(),
         }
     }
@@ -636,7 +567,7 @@ impl Default for InvertCfg {
 pub(crate) struct EmaFilterCfg {
     #[serde(skip)]
     #[garde(skip)]
-    mon_state: TfmStepStateShared,
+    common_state: TfmStepCommonStateShared,
     #[serde(skip)]
     #[garde(skip)]
     pub(super) exe_state: Arc<Mutex<crate::filters::EmaFilter>>,
@@ -678,7 +609,7 @@ impl Default for EmaFilterCfg {
             tau: 0.01,
             on_relative_input_reset_on_idle: default_false(),
             desc: Default::default(),
-            mon_state: Default::default(),
+            common_state: Default::default(),
             exe_state: Default::default(),
         }
     }
@@ -689,7 +620,7 @@ impl Default for EmaFilterCfg {
 pub(crate) struct OneEuroFilterCfg {
     #[serde(skip)]
     #[garde(skip)]
-    mon_state: TfmStepStateShared,
+    common_state: TfmStepCommonStateShared,
     #[serde(skip)]
     #[garde(skip)]
     pub(super) exe_state: Arc<Mutex<crate::filters::OneEuroFilter>>,
@@ -741,7 +672,7 @@ impl Default for OneEuroFilterCfg {
             d_cutoff_hz: default_1euro_d_cutoff_hz(),
             on_relative_input_reset_on_idle: default_false(),
             desc: Default::default(),
-            mon_state: Default::default(),
+            common_state: Default::default(),
             exe_state: Default::default(),
         }
     }
@@ -752,7 +683,7 @@ impl Default for OneEuroFilterCfg {
 pub(crate) struct LinearCfg {
     #[serde(skip)]
     #[garde(skip)]
-    mon_state: TfmStepStateShared,
+    common_state: TfmStepCommonStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) desc: DescriptionCfg,
@@ -781,7 +712,7 @@ impl Default for LinearCfg {
             center_symmetric: Default::default(),
             on_idle: default_on_idle(),
             desc: Default::default(),
-            mon_state: Default::default(),
+            common_state: Default::default(),
         }
     }
 }
@@ -790,7 +721,7 @@ impl Default for LinearCfg {
 #[serde(deny_unknown_fields)]
 pub(crate) struct SmoothstepCfg {
     #[serde(skip)]
-    mon_state: TfmStepStateShared,
+    common_state: TfmStepCommonStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) desc: DescriptionCfg,
@@ -807,7 +738,7 @@ impl Default for SmoothstepCfg {
             enabled: default_step_enabled(),
             on_idle: default_on_idle(),
             desc: Default::default(),
-            mon_state: Default::default(),
+            common_state: Default::default(),
         }
     }
 }
@@ -817,8 +748,7 @@ impl Default for SmoothstepCfg {
 pub(crate) struct SCurveCfg {
     #[serde(skip)]
     #[garde(skip)]
-    mon_state: TfmStepStateShared,
-
+    common_state: TfmStepCommonStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -842,7 +772,7 @@ impl Default for SCurveCfg {
             steepness: default_scurve_steepness(),
             on_idle: default_on_idle(),
             desc: Default::default(),
-            mon_state: Default::default(),
+            common_state: Default::default(),
         }
     }
 }
@@ -852,14 +782,12 @@ impl Default for SCurveCfg {
 //     validate(greater = 1.0, less = 40.0)
 // )]
 // pub(crate) struct NormExpBase(BaseNumericT);
-
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Validate)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct NormExpCfg {
     #[serde(skip)]
     #[garde(skip)]
-    mon_state: TfmStepStateShared,
-
+    common_state: TfmStepCommonStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -888,7 +816,7 @@ impl Default for NormExpCfg {
             center_symmetric: Default::default(),
             on_idle: default_on_idle(),
             desc: Default::default(),
-            mon_state: Default::default(),
+            common_state: Default::default(),
         }
     }
 }
@@ -898,8 +826,7 @@ impl Default for NormExpCfg {
 pub(crate) struct SignedPowerCfg {
     #[serde(skip)]
     #[garde(skip)]
-    mon_state: TfmStepStateShared,
-
+    common_state: TfmStepCommonStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -928,7 +855,7 @@ impl Default for SignedPowerCfg {
             center_symmetric: Default::default(),
             on_idle: default_on_idle(),
             desc: Default::default(),
-            mon_state: Default::default(),
+            common_state: Default::default(),
         }
     }
 }
@@ -938,8 +865,7 @@ impl Default for SignedPowerCfg {
 pub(crate) struct HighPassCfg {
     #[serde(skip)]
     #[garde(skip)]
-    mon_state: TfmStepStateShared,
-
+    common_state: TfmStepCommonStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -960,7 +886,7 @@ pub(crate) struct HighPassCfg {
 pub(crate) struct IntegrateCfg {
     #[serde(skip)]
     #[garde(skip)]
-    mon_state: TfmStepStateShared,
+    common_state: TfmStepCommonStateShared,
     #[serde(skip)]
     #[garde(skip)]
     pub(super) exe_state: Arc<Mutex<IntegrateExeState>>,
@@ -987,7 +913,7 @@ pub(crate) struct IntegrateCfg {
 
 impl PartialEq for IntegrateCfg {
     fn eq(&self, other: &Self) -> bool {
-        self.mon_state == other.mon_state
+        self.common_state == other.common_state
             && self.desc == other.desc
             && self.enabled == other.enabled
             && self.range == other.range
@@ -1006,7 +932,7 @@ impl Default for IntegrateCfg {
             smoothing_alpha: default_smoothing_alpha(),
             on_idle: default_on_idle(),
             desc: Default::default(),
-            mon_state: Default::default(),
+            common_state: Default::default(),
             exe_state: Default::default(),
         }
     }
@@ -1016,7 +942,6 @@ impl Default for IntegrateCfg {
 impl TfmStepCfg {
     #[allow(unused)]
     fn get_input_interval(&self) {}
-
     #[allow(unused)]
     fn get_output_interval(&self) {}
 
@@ -1030,7 +955,7 @@ impl TfmSeqCfg {
     #[cfg(feature = "gui")]
     pub(crate) fn disable_gui_tracing(&mut self) {
         for step in &mut self.steps {
-            step.get_state_as_mut().disable_gui_tracing();
+            step.common_state_mut().disable_gui_tracing();
         }
     }
 
@@ -1043,7 +968,7 @@ impl TfmSeqCfg {
         let mut in_relativity = self.in_meta.relativity;
         let mut in_interval = self.in_meta.interval;
         for step in &mut self.steps {
-            step.get_state_as_mut()
+            step.common_state_mut()
                 .set_input_relativity(in_relativity)
                 .set_input_interval(in_interval);
             let (out_interval, out_relativity) = match step {
@@ -1098,7 +1023,7 @@ impl TfmSeqCfg {
                 | TfmStepCfg::_ForceFeedback(_) => (in_interval, in_relativity),
             };
 
-            step.get_state_as_mut()
+            step.common_state_mut()
                 .set_output_relativity(out_relativity)
                 .set_output_interval(out_interval);
 
@@ -1116,7 +1041,6 @@ bitflags! {
         const Src = 1 << 2;
         const Dst = 1 << 3;
     }
-
 }
 
 pub(crate) fn collect_dynamic_value_matchers(
@@ -1128,7 +1052,6 @@ pub(crate) fn collect_dynamic_value_matchers(
         ctx: DynValFilter,
         collected: Vec<DynValueRefs>,
     }
-
     impl traversable::Visitor for Collect<'_> {
         type Break = ();
 
@@ -1177,7 +1100,6 @@ pub(crate) fn collect_dynamic_value_matchers(
 }
 
 // ==================================================================
-
 #[derive(Debug, Clone, Traversable, TraversableMut, JsonSchema, PartialEq, Serialize)]
 #[serde(untagged)]
 enum TfmSeqVariants {
@@ -1252,7 +1174,7 @@ impl From<TfmSeqCfg> for TfmSeqVariants {
 }
 
 macro_rules! tfm_seq_tpl {
-    (vis: $v:vis, name: $name:ident, meta: $( $m:meta ),*) => {
+    (vis: $v:vis, name: $name:ident, meta: $( $m:meta ),* ) => {
         #[derive(
             Debug, Clone, Traversable, TraversableMut, Deserialize, Serialize, JsonSchema, PartialEq, Default, Validate
         )]
@@ -1282,7 +1204,7 @@ macro_rules! tfm_seq_tpl {
     };
 }
 
-tfm_seq_tpl!(vis:, name: TfmSeqFull, meta: );
+tfm_seq_tpl!(vis: , name: TfmSeqFull, meta: );
 tfm_seq_tpl!(
     vis: pub(crate),
     name: TfmSeqCfg,
@@ -1302,7 +1224,6 @@ impl<T: Default> AutoOrManual<T> {
     pub(crate) fn is_auto(&self) -> bool {
         if let Self::Auto(_) = self { true } else { false }
     }
-
     pub(crate) fn _set(&mut self, other: T) {
         match self {
             AutoOrManual::Manual(v) => *v = other,
@@ -1313,7 +1234,6 @@ impl<T: Default> AutoOrManual<T> {
 
 impl<T: Default> Deref for AutoOrManual<T> {
     type Target = T;
-
     fn deref(&self) -> &Self::Target {
         match self {
             AutoOrManual::Manual(v) => v,
@@ -1360,17 +1280,15 @@ impl WithRuntimeId for TfmSeqCfg {
     fn get_id(&self) -> ObjId {
         self.id
     }
-
     fn assign_new_id(&mut self) {
         self.id = Default::default()
     }
 }
 
 // ==================================================================
-
 impl PartialEq for SteeringCfg {
     fn eq(&self, other: &Self) -> bool {
-        self.mon_state == other.mon_state
+        self.common_state == other.common_state
             && self.desc == other.desc
             && self.enabled == other.enabled
             && self.accumulator == other.accumulator
@@ -1384,27 +1302,71 @@ impl PartialEq for SteeringCfg {
     }
 }
 
-pub(crate) trait WithMonState {
-    fn mon_state_ref(&self) -> parking_lot::ArcRwLockReadGuard<parking_lot::RawRwLock, TfmStepMonState>;
+#[delegatable_trait]
+pub(crate) trait WithCommonState {
+    fn common_state_ref(&self) -> &TfmStepCommonState;
 }
 
 #[allow(unused)]
-pub(crate) trait WithMonStateMut {
-    fn mon_state_mut(&self) -> parking_lot::ArcRwLockWriteGuard<parking_lot::RawRwLock, TfmStepMonState>;
+#[delegatable_trait]
+pub(crate) trait WithCommonStateMut {
+    fn common_state_mut(&mut self) -> &mut TfmStepCommonState;
 }
 
-impl WithMonState for SteeringCfg {
-    fn mon_state_ref(&self) -> parking_lot::ArcRwLockReadGuard<parking_lot::RawRwLock, TfmStepMonState> {
-        self.mon_state.0.read_arc()
+#[allow(unused)]
+#[delegatable_trait]
+pub(crate) trait WithCommonStateAssignedNew {
+    fn common_state_assign_new(&mut self);
+}
+
+macro_rules! impl_with_common_state {
+    ($($t:ty),* $(,)?) => {
+        $(
+            impl WithCommonState for $t {
+                fn common_state_ref(&self) -> &TfmStepCommonState {
+                    &self.common_state
+                }
+            }
+            impl WithCommonStateMut for $t {
+                fn common_state_mut(&mut self) -> &mut TfmStepCommonState {
+                    &mut self.common_state
+                }
+            }
+            impl WithCommonStateAssignedNew for $t {
+                fn common_state_assign_new(&mut self) {
+                    self.common_state = Default::default();
+                }
+            }
+        )*
     }
 }
+
+impl_with_common_state!(
+    ForceFeedbackCfg,
+    ClampCfg,
+    NopCfg,
+    InvertCfg,
+    EmaFilterCfg,
+    OneEuroFilterCfg,
+    LinearCfg,
+    SmoothstepCfg,
+    SCurveCfg,
+    NormExpCfg,
+    SignedPowerCfg,
+    HighPassCfg,
+    IntegrateCfg,
+    SteeringCfg,
+    Box<SteeringCfg>,
+    RaiseFallCfg,
+    ScriptCfg,
+);
 
 #[derive(Debug, Clone, Serialize, Traversable, TraversableMut, Deserialize, JsonSchema, Validate)]
 pub(crate) struct SteeringCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    mon_state: TfmStepStateShared,
+    common_state: TfmStepCommonStateShared,
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
@@ -1474,7 +1436,7 @@ impl Default for SteeringCfg {
             integrated_user_input_transform: TfmSeqCfg::default(),
             desc: Default::default(),
             accumulator: Default::default(),
-            mon_state: Default::default(),
+            common_state: Default::default(),
             exe_state: Default::default(),
         }
     }
@@ -1485,7 +1447,7 @@ pub(crate) struct RaiseFallCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    mon_state: TfmStepStateShared,
+    common_state: TfmStepCommonStateShared,
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
@@ -1545,14 +1507,13 @@ impl Default for RaiseFallCfg {
             }),
             invert_fall_hold_factor: false,
             desc: Default::default(),
-            mon_state: Default::default(),
+            common_state: Default::default(),
             exe_state: Default::default(),
         }
     }
 }
 
 // -----------------------------------
-
 pub(crate) trait TfmStepIdleBehavior {
     fn relative_input_feed_on_idle_mut(&mut self) -> &mut bool;
     fn relative_input_reset_on_idle_mut(&mut self) -> &mut bool;
@@ -1562,7 +1523,6 @@ impl TfmStepIdleBehavior for EmaFilterCfg {
     fn relative_input_feed_on_idle_mut(&mut self) -> &mut bool {
         &mut self.on_relative_input_feed_on_idle
     }
-
     fn relative_input_reset_on_idle_mut(&mut self) -> &mut bool {
         &mut self.on_relative_input_reset_on_idle
     }
@@ -1572,14 +1532,12 @@ impl TfmStepIdleBehavior for OneEuroFilterCfg {
     fn relative_input_feed_on_idle_mut(&mut self) -> &mut bool {
         &mut self.on_relative_input_feed_on_idle
     }
-
     fn relative_input_reset_on_idle_mut(&mut self) -> &mut bool {
         &mut self.on_relative_input_reset_on_idle
     }
 }
 
 // -------------------------------------
-
 #[derive(JsonSchema, Display, Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
 pub(crate) enum ScriptLanguage {
     #[default]
@@ -1591,7 +1549,7 @@ pub(crate) struct ScriptCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    mon_state: TfmStepStateShared,
+    common_state: TfmStepCommonStateShared,
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
@@ -1614,7 +1572,6 @@ pub(crate) struct ScriptCfg {
     #[traverse(skip)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) output_relativity: Option<Relativity>,
-
     #[serde(default)]
     #[serde(alias = "sources")]
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
@@ -1659,7 +1616,7 @@ impl Default for ScriptCfg {
             aux_srcs: Default::default(),
             aux_dsts: Default::default(),
             aux_transformations: Default::default(),
-            mon_state: Default::default(),
+            common_state: Default::default(),
             exe_state: Default::default(),
         }
     }
@@ -1675,7 +1632,6 @@ where
         Bool(bool),
         ValueSrc(ValueSrcs),
     }
-
     match Data::deserialize(deserializer)? {
         Data::Bool(b) => Ok(ValueSrcs::Static(StaticValueCfg {
             value: if b { 1.0 } else { 0.0 },
@@ -1696,7 +1652,6 @@ where
         Map(BTreeMap<String, T>),
         Vec(Vec<T>),
     }
-
     match MapOrVec::deserialize(deserializer)? {
         MapOrVec::Map(m) => Ok(m),
         MapOrVec::Vec(v) => Ok(v
@@ -1735,11 +1690,10 @@ impl DuplicateTfmTree for TfmStepCfg {}
 
 impl WithRuntimeId for TfmStepCfg {
     fn get_id(&self) -> ObjId {
-        self.get_mon_state_read_guard().get_id()
+        self.common_state_ref().get_id()
     }
-
     fn assign_new_id(&mut self) {
-        self.assign_new_state();
+        self.common_state_assign_new();
     }
 }
 
@@ -1773,7 +1727,7 @@ mod tests {
     #[test]
     fn clamp_cfg_sanitize() {
         let mut clamp_cfg = ClampCfg::default();
-        clamp_cfg.mon_state_mut().set_input_interval((3.0..4.0).into());
+        clamp_cfg.common_state_mut().set_input_interval((3.0..4.0).into());
 
         clamp_cfg.range = (-100.0..-100.0).into();
         clamp_cfg.sanitize_inplace();

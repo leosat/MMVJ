@@ -1,4 +1,4 @@
-use crate::common::{DeviceManager};
+use crate::common::DeviceManager;
 use crate::config::DebugLevel;
 use crate::config::MORE_DEBUG;
 use crate::hid_manager::{HidManager, WithDeviceClassification};
@@ -179,12 +179,11 @@ pub async fn run(
     #[cfg(feature = "gui")] gui_monitors: bool,
     #[cfg(feature = "gui")] gui_full: bool,
 ) -> Result<()> {
-
     crate::common::set_debug_level__(debug);
 
     sanitize_cfg_file_path(cfg_file_path)?;
 
-    #[cfg(feature = "gui")] 
+    #[cfg(feature = "gui")]
     let any_gui = gui_monitors || gui_full;
 
     let mut post_restart_response_channel: Option<DriverResponseOneShotChannels> = None;
@@ -215,12 +214,7 @@ pub async fn run(
         let cancellation_token = gui_thread_cancellation_token.clone();
         let cfg = cfg_mgr.cfg_ref().clone();
         Some(std::thread::spawn(move || {
-            crate::gui_main::run(
-                gui_monitor_only,
-                command_channel_tx,
-                cancellation_token,
-                cfg,
-            )
+            crate::gui_main::run(gui_monitor_only, command_channel_tx, cancellation_token, cfg)
         }))
     } else {
         None
@@ -289,10 +283,12 @@ pub async fn run(
             match tx {
                 DriverResponseOneShotChannels::Empty(tx) => {
                     let _ = tx.send(()).inspect_err(|e| log::error!("{e}"));
-                },
+                }
                 DriverResponseOneShotChannels::Config(tx) => {
-                    let _ = tx.send(Ok(cfg_mgr.cfg_ref().clone())).inspect_err(|e| log::error!("{e}"));
-                },
+                    let _ = tx
+                        .send(Ok(cfg_mgr.cfg_ref().clone()))
+                        .inspect_err(|e| log::error!("{e}"));
+                }
             }
             post_restart_response_channel = None;
         }
@@ -319,12 +315,14 @@ pub async fn run(
 
         info!("Starting...");
 
-        #[cfg(feature = "gui")] 
+        #[cfg(feature = "gui")]
         if !any_gui {
             info!(
                 "\n{}. \n  (Use --log-to-console for log output to console even in Gui mode \
                 \n    Use --gui-monitor to run monitoring overlays only).",
-                "Running in command line mode. To run with Gui, use --gui option.".cyan().bold(),
+                "Running in command line mode. To run with Gui, use --gui option."
+                    .cyan()
+                    .bold(),
             );
         }
 
@@ -415,10 +413,10 @@ pub async fn run(
                     mapping_engine.stop()?;
                     hid_mgr.stop(true)?;
                     #[cfg(feature = "gui")]
-                    if let Some(gui_thread_handle) = gui_thread_handle.take() && 
+                    if let Some(gui_thread_handle) = gui_thread_handle.take() &&
                             !gui_thread_handle.is_finished() {
                         info!("Gui thread still not finished, terminating immediately.");
-                        std::process::exit(0);                        
+                        std::process::exit(0);
                     }
                     info!("Cleanup complete, terminating.");
                     return Ok(())

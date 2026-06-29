@@ -6,7 +6,7 @@ use crate::num_interval::{NumInterval, OutOfRangePolicy};
 
 use crate::schemas_common::WithRuntimeId;
 #[cfg(feature = "gui")]
-use crate::schemas_transform::WithMonState;
+use crate::schemas_transform::WithCommonState;
 use crate::schemas_transform::{
     ClampCfg, EmaFilterCfg, ForceFeedbackComponent, IntegrateCfg, InvertCfg, LinearCfg, NormExpCfg, OneEuroFilterCfg,
     RaiseFallCfg, SCurveCfg, ScriptCfg, SignedPowerCfg, SmoothstepCfg, SteeringCfg, TfmSeqCfg, TfmStepCfg,
@@ -294,11 +294,9 @@ impl WithTfmExec for EmaFilterCfg {
 
 impl WithTfmExec for TfmStepCfg {
     fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
-        self.get_mon_state_read_guard()
-            .last_in
-            .store(input.value as f32, Relaxed);
+        self.common_state_ref().last_in.store(input.value as f32, Relaxed);
         #[cfg(feature = "gui")]
-        self.get_mon_state_read_guard()
+        self.common_state_ref()
             .gui_trace(TfmStepTraceStage::In, &input, Instant::now());
 
         input = match self {
@@ -320,11 +318,9 @@ impl WithTfmExec for TfmStepCfg {
             TfmStepCfg::_ForceFeedback(_) => input,
         };
 
-        self.get_mon_state_read_guard()
-            .last_out
-            .store(input.value as f32, Relaxed);
+        self.common_state_ref().last_out.store(input.value as f32, Relaxed);
         #[cfg(feature = "gui")]
-        self.get_mon_state_read_guard()
+        self.common_state_ref()
             .gui_trace(TfmStepTraceStage::Out, &input, Instant::now());
 
         input
@@ -746,9 +742,9 @@ impl WithTfmExec for SteeringCfg {
 
         #[cfg(feature = "gui")]
         if delta != 0.0 {
-            use crate::schemas_transform::WithMonState;
+            use crate::schemas_transform::WithCommonState;
 
-            self.mon_state_ref().gui_trace(
+            self.common_state_ref().gui_trace(
                 TfmStepTraceStage::Custom(
                     GraphDisplayStyle::as_filled()
                         .with_color(Color32::BROWN.gamma_multiply(0.7))
@@ -764,7 +760,7 @@ impl WithTfmExec for SteeringCfg {
         }
 
         #[cfg(feature = "gui")]
-        self.mon_state_ref().gui_trace(
+        self.common_state_ref().gui_trace(
             TfmStepTraceStage::Custom(GraphDisplayStyle::as_filled().with_color(Color32::BLUE).with_width(1.5)),
             &MappedValue::<BaseNumT> {
                 value: state.pre_filter,
@@ -793,7 +789,7 @@ impl WithTfmExec for SteeringCfg {
         }
 
         #[cfg(feature = "gui")]
-        self.mon_state_ref().gui_trace(
+        self.common_state_ref().gui_trace(
             TfmStepTraceStage::Custom(
                 GraphDisplayStyle::default()
                     .with_color(Color32::MAGENTA)
@@ -891,7 +887,7 @@ impl WithTfmExec for SteeringCfg {
                 }
 
                 #[cfg(feature = "gui")]
-                self.mon_state_ref().gui_trace(
+                self.common_state_ref().gui_trace(
                     TfmStepTraceStage::Custom(
                         GraphDisplayStyle::default()
                             .with_color(
