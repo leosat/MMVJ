@@ -1,6 +1,6 @@
 [package]
 name = "mmvj"
-version = "2026.6.29-0"
+version = "2026.6.29-1"
 edition = "2024"
 # rust-version = "1.85.0"
 authors = ["Leonid Satanovskiy"]
@@ -72,6 +72,7 @@ cfg-if = "1.0.4"
 egui-phosphor = { version = "0.12.0", features = ["bold", "fill"] }
 rand = "0.10.1"
 branches = "0.4.4"
+ambassador = "0.5.1"
 
 [dev-dependencies]
 tempfile = "3.10"
