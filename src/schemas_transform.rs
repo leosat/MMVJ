@@ -939,23 +939,11 @@ impl Default for IntegrateCfg {
 }
 
 // ==================================================================
-impl TfmStepCfg {
-    #[allow(unused)]
-    fn get_input_interval(&self) {}
-    #[allow(unused)]
-    fn get_output_interval(&self) {}
-
-    #[allow(unused)]
-    fn set_current_interval(&mut self, interval: NumInterval<BaseNumT>) {
-        todo!()
-    }
-}
-
 impl TfmSeqCfg {
     #[cfg(feature = "gui")]
-    pub(crate) fn disable_gui_tracing(&mut self) {
-        for step in &mut self.steps {
-            step.common_state_mut().disable_gui_tracing();
+    pub(crate) fn disable_gui_tracing(&self) {
+        for step in &self.steps {
+            step.common_state_ref().disable_gui_tracing();
         }
     }
 
