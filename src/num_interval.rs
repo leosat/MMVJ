@@ -524,11 +524,6 @@ impl<T: NumIntervalValue> NumInterval<T> {
         value >= self.from && value <= self.to
     }
 
-    #[allow(unused)]
-    pub(crate) fn contains_value_open(&self, value: T) -> bool {
-        value >= self.from && value < self.to
-    }
-
     pub(crate) fn clamp(&self, value: T) -> T {
         if value < self.from {
             branches::mark_unlikely();
@@ -1025,20 +1020,6 @@ mod tests {
         assert!(
             !r.contains_value_closed(20.1),
             "Inclusive should not contain value above 'to'"
-        );
-        assert!(r.contains_value_open(10.0), "Exclusive should contain 'from'");
-        assert!(
-            r.contains_value_open(19.99),
-            "Exclusive should contain value just below 'to'"
-        );
-        assert!(
-            !r.contains_value_open(9.9),
-            "Exclusive should not contain value below 'from'"
-        );
-        assert!(!r.contains_value_open(20.0), "Exclusive should not contain 'to'");
-        assert!(
-            !r.contains_value_open(20.1),
-            "Exclusive should not contain value above 'to'"
         );
     }
 
