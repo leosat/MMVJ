@@ -1,4 +1,3 @@
-use crate::common::BaseNumT;
 use crate::hid_manager::WithDeviceClassification;
 use crate::schemas_cfg::*;
 use crate::schemas_control_matcher::ControlMatchers;
@@ -9,10 +8,7 @@ use crate::schemas_midi::{MidiControlMatcherCfg, MidiMatcherCfg};
 use crate::schemas_predefined::ControlsPredefinedCfg;
 use crate::schemas_transform::*;
 
-use crate::schemas_value::{
-    DeviceControlMatcherRef, DynValueRefs, WithLastKnownIOSettable, WithNumInterval, WithNumericValueSettable,
-    WithRelativity,
-};
+use crate::schemas_value::{DeviceControlMatcherRef, DynValueRefs, WithNumInterval, WithRelativity};
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
 
@@ -187,23 +183,24 @@ impl Config {
             })
     }
 
+    #[cfg(feature = "midi")]
     fn get_midi_control_keys(&self, device_matcher_key: &str) -> Result<Vec<String>> {
-        #[cfg(feature = "midi")]
-        if let Some(midi_device) = self.devices.midi.get(device_matcher_key) {
+        if let Some(dm) = self.devices.midi.get(device_matcher_key) {
             let mut c = Vec::new();
-            c.extend(midi_device.controls.keys().cloned());
+            c.extend(dm.controls.keys().cloned());
             c.extend(self.predef_controls.midi_controls.keys().cloned());
             c.sort();
             c.dedup();
-            return Ok(c);
+            Ok(c)
+        } else {
+            bail!("Device definition is not found for {device_matcher_key}");
         }
-        bail!("Device definition is not found for {device_matcher_key}");
     }
 
-    fn list_available_hid_control_keys(&self, device_matcher_key: &str) -> Result<Vec<String>> {
-        if let Some(joystick) = self.devices.hid.get(device_matcher_key) {
+    fn get_hid_control_keys(&self, device_matcher_key: &str) -> Result<Vec<String>> {
+        if let Some(dm) = self.devices.hid.get(device_matcher_key) {
             let mut c = Vec::new();
-            c.extend(joystick.controls.keys().cloned());
+            c.extend(dm.controls.keys().cloned());
             c.extend(self.predef_controls.hid_controls.keys().cloned());
             c.sort();
             c.dedup();
@@ -233,7 +230,7 @@ impl Config {
         let mut tmp = self.devices.hid.clone();
         for (device_matcher_key, device_matcher_cfg) in &mut tmp {
             self.resolve_hid(device_matcher_key, device_matcher_cfg)
-                .with_context(|| format!("Failed to resolve Joystick device '{}'", device_matcher_key))?;
+                .with_context(|| format!("Failed to resolve HID '{}'", device_matcher_key))?;
             device_matcher_cfg.add_special_force_feedback_controls();
         }
         self.devices.hid = tmp;
@@ -318,16 +315,13 @@ impl Config {
                 );
             }
         } else if entry.midi_message.r#type == Default::default() {
-            bail!(
-                "MIDI control has neither 'midi_message' nor valid 'predefined_type': {:?}",
-                entry
-            );
+            bail!("MIDI control has neither 'midi_message' nor valid 'predefined_type': {entry:?}",);
         }
 
         Ok(())
     }
 
-    fn resolve_jk_control(&self, _device_matcher_key: &str, entry: &mut HidControlMatcherCfg) -> Result<()> {
+    fn resolve_hid_control(&self, _device_matcher_key: &str, entry: &mut HidControlMatcherCfg) -> Result<()> {
         if !entry.from_predefined.is_empty() {
             if let Some(predefined_control) = self.predef_controls.hid_controls.get(&entry.from_predefined) {
                 entry.r#type = predefined_control.r#type;
@@ -339,25 +333,22 @@ impl Config {
                 }
             } else {
                 bail!(
-                    "Unknown predefined Joystick control '{}'. Available: {:?}",
+                    "Unknown predefined HID control '{}'. Available: {:?}",
                     entry.from_predefined,
                     self.predef_controls.hid_controls.keys().collect::<Vec<_>>()
                 );
             }
         } else if entry.r#type == Default::default() {
-            bail!("Joystick control has undefined type and no valid 'predefined' control found: {entry:#?}");
+            bail!("HID control has undefined type and no valid 'predefined' control found: {entry:#?}");
         }
-
-        entry.set_last_known_io(entry.initial_value as BaseNumT);
-        entry.set_numeric_value(entry.initial_value as BaseNumT);
 
         Ok(())
     }
 
     pub(crate) fn resolve_hid(&self, device_matcher_key: &str, device: &mut HidDeviceCfg) -> Result<()> {
         for (control_name, control_entry) in &mut device.controls {
-            self.resolve_jk_control(device_matcher_key, control_entry)
-                .with_context(|| format!("Failed to expand Joystick control '{}'", control_name))?;
+            self.resolve_hid_control(device_matcher_key, control_entry)
+                .with_context(|| format!("Failed to expand HID control '{}'", control_name))?;
         }
         device.update_classification();
         Ok(())
@@ -382,11 +373,11 @@ impl Config {
                         .get_mut(&d.device_matcher_key)
                         .ok_or_else(|| anyhow::anyhow!("Device with key {} not found!", d.device_matcher_key))?
                         .clone();
-                    if let Some(vjk_control) = device.controls.get(&d.control_key) {
+                    if let Some(hid_control) = device.controls.get(&d.control_key) {
                         return Ok(DynValueRefs::DeviceControlMatcher(DeviceControlMatcherRef {
                             device_matcher_key: d.device_matcher_key.clone(),
                             control_key: d.control_key.clone(),
-                            control_matcher: ControlMatchers::Hid(vjk_control.clone()),
+                            control_matcher: ControlMatchers::Hid(hid_control.clone()),
                         }));
                     }
 
@@ -418,7 +409,7 @@ impl Config {
                         "Control '{}' not found in device '{}'. Available controls (including predefined): {}",
                         d.control_key,
                         d.device_matcher_key,
-                        self.list_available_hid_control_keys(&d.device_matcher_key)
+                        self.get_hid_control_keys(&d.device_matcher_key)
                             .context("Couldn't resolve controls for device.")?
                             .join(", ")
                     );
@@ -679,14 +670,14 @@ hid_controls:
     range: [ -32768, 32767 ]
     properties: { resolution: 1, fuzz: 0, flat: 0 }
     initial_value: 0
-    description: "Special, fake, control to expose force feedback X component coming from device. Currently R/O, write ignored (could reuse it to inject Constant force on unowned joystick devices though)."
+    description: "Special, fake, control to expose force feedback X component coming from device. Currently R/O, write ignored (could reuse it to inject Constant force on unowned HID though)."
 
   FORCE_FEEDBACK_Y:
     type: FORCE_FEEDBACK_Y
     range: [ -32768, 32767 ]
     properties: { resolution: 1, fuzz: 0, flat: 0 }
     initial_value: 0
-    description: "Special, fake, control to expose force feedback Y component coming from device. Currently R/O, write ignored (could reuse it to inject Constant force on unowned joystick devices though)."
+    description: "Special, fake, control to expose force feedback Y component coming from device. Currently R/O, write ignored (could reuse it to inject Constant force on unowned HID though)."
 
   ABS_X:
     type: ABS_X
