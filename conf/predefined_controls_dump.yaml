@@ -636,7 +636,7 @@ hid_controls:
     description: >-
       Special, fake, control to expose force feedback X component coming from device.
       Currently R/O, write ignored (could reuse it to inject Constant force on unowned
-      joystick devices though).
+      HID though).
   FORCE_FEEDBACK_Y:
     type: FORCE_FEEDBACK_Y
     range:
@@ -650,7 +650,7 @@ hid_controls:
     description: >-
       Special, fake, control to expose force feedback Y component coming from device.
       Currently R/O, write ignored (could reuse it to inject Constant force on unowned
-      joystick devices though).
+      HID though).
   KEY_0:
     type: KEY_0
     range:
