@@ -101,7 +101,6 @@ impl ControlMatchers {
         }
     }
 
-    #[allow(dead_code)]
     pub(crate) fn get_interval(&self) -> NumInterval<BaseNumT> {
         match &self {
             #[cfg(feature = "midi")]
@@ -110,37 +109,11 @@ impl ControlMatchers {
         }
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn get_type(&self) -> MappedCtls {
+    pub(crate) fn _get_type(&self) -> MappedCtls {
         match self {
             #[cfg(feature = "midi")]
             ControlMatchers::Midi(cm) => cm.midi_message.r#type.into(),
             ControlMatchers::Hid(cm) => cm.r#type,
         }
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn is_joystick_control(&self) -> bool {
-        if let Self::Hid(..) = self {
-            return true;
-        }
-        false
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn is_mouse_control(&self) -> bool {
-        if let Self::Hid(..) = self {
-            return true;
-        }
-        false
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn is_midi_control(&self) -> bool {
-        #[cfg(feature = "midi")]
-        if let Self::Midi(..) = self {
-            return true;
-        }
-        false
     }
 }
