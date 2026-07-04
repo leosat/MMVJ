@@ -512,11 +512,11 @@ impl<T: NumIntervalValue> NumInterval<T> {
         )
     }
 
-    pub(crate) fn intersects(&self, other: Self) -> bool {
+    pub(crate) fn _intersects(&self, other: Self) -> bool {
         self.from <= other.to && self.to >= other.from
     }
 
-    pub(crate) fn contains_interval(&self, other: Self) -> bool {
+    pub(crate) fn _contains_interval(&self, other: Self) -> bool {
         other.from >= self.from && other.to <= self.to
     }
 
@@ -594,16 +594,16 @@ mod tests {
 
     #[test]
     fn contains_interval() {
-        assert!(NumInterval::new(0.0, 1.0).contains_interval(NumInterval::new(0.0, 1.0)));
-        assert!(NumInterval::new(0.0, 1.0).contains_interval(NumInterval::new(0.3, 0.6)));
-        assert!(!NumInterval::new(0.0, 1.0).contains_interval(NumInterval::new(0.3, 1.2)));
+        assert!(NumInterval::new(0.0, 1.0)._contains_interval(NumInterval::new(0.0, 1.0)));
+        assert!(NumInterval::new(0.0, 1.0)._contains_interval(NumInterval::new(0.3, 0.6)));
+        assert!(!NumInterval::new(0.0, 1.0)._contains_interval(NumInterval::new(0.3, 1.2)));
     }
 
     #[test]
     fn intersects() {
-        assert!(NumInterval::new(0.0, 1.0).intersects(NumInterval::new(0.0, 1.0)));
-        assert!(NumInterval::new(0.0, 1.0).intersects(NumInterval::new(0.3, 1.6)));
-        assert!(!NumInterval::new(0.0, 1.0).intersects(NumInterval::new(1.1, 1.2)));
+        assert!(NumInterval::new(0.0, 1.0)._intersects(NumInterval::new(0.0, 1.0)));
+        assert!(NumInterval::new(0.0, 1.0)._intersects(NumInterval::new(0.3, 1.6)));
+        assert!(!NumInterval::new(0.0, 1.0)._intersects(NumInterval::new(1.1, 1.2)));
     }
 
     #[test]

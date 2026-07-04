@@ -461,29 +461,12 @@ impl WithSanitize for ClampCfg {
         let mut clamping_interval = self.get_clamping_interval();
         let in_interval = self.get_in_interval();
         let clamping_interval_saved = clamping_interval;
-        if !in_interval.contains_interval(clamping_interval) {
-            if !clamping_interval.intersects(in_interval) {
-                if clamping_interval.from > in_interval.from {
-                    clamping_interval.from = in_interval.to;
-                    clamping_interval.to = in_interval.to;
-                } else {
-                    clamping_interval.from = in_interval.from;
-                    clamping_interval.to = in_interval.from;
-                }
-            } else {
-                if in_interval.from > clamping_interval.from {
-                    clamping_interval.from = in_interval.from;
-                }
-                if in_interval.to < clamping_interval.to {
-                    clamping_interval.to = in_interval.to;
-                }
-            }
-        }
+        clamping_interval.from = in_interval.clamp(clamping_interval.from);
+        clamping_interval.to = in_interval.clamp(clamping_interval.to);
         if clamping_interval_saved != clamping_interval {
             log::warn!(
-                "Sanitizing clamp transform: \n
-clamping interval{clamping_interval_saved:?} was not fully contained within input interval {in_interval:?},
-converted it to {clamping_interval:?}"
+                "Sanitizing clamp transform: clamping interval {clamping_interval_saved:?} \
+                was not fully contained within input interval {in_interval:?}, converted it to {clamping_interval:?}"
             );
             self.range = clamping_interval;
         }
