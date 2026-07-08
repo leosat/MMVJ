@@ -17,7 +17,7 @@ use crossbeam_utils::CachePadded;
 use doc_for::*;
 use evdev::FFEffectCode;
 use garde::Validate;
-use serde::{Deserialize, Deserializer, Serialize, de::IntoDeserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::{
     collections::BTreeMap,
     sync::{
@@ -102,37 +102,25 @@ pub(crate) struct HidVirtualParamsCfg {
     pub(crate) force_feedback: Option<HIDDeviceForceFeedbackCfg>,
 }
 
-#[derive(Debug, Clone, Serialize, TraversableMut, Traversable, JsonSchema, PartialEq)]
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    TraversableMut,
+    deserialize_untagged_verbose_error::DeserializeUntaggedVerboseError,
+    Traversable,
+    JsonSchema,
+    PartialEq,
+)]
 #[serde(untagged)]
 pub(crate) enum HidVirtualOrMatcherParamsCfg {
-    Matcher(HidMatcherParamsCfg),
-    Virtual(HidVirtualParamsCfg),
-}
-
-impl<'de> Deserialize<'de> for HidVirtualOrMatcherParamsCfg {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        use serde::de::Error;
-        let value: serde_value::Value = Deserialize::deserialize(deserializer)?;
-        //let tmp = HidVirtualOrMatcherParamsCfg::deserialize(value.clone().into_deserializer());
-        match HidVirtualParamsCfg::deserialize(value.clone().into_deserializer()) {
-            Ok(v) => Ok(Self::Virtual(v)),
-            Err(err1) => match HidMatcherParamsCfg::deserialize(value.into_deserializer()) {
-                Ok(v) => Ok(Self::Matcher(v)),
-                Err(err2) => Err(D::Error::custom(format!(
-                    "Configuration parse error.\nIf virtual device config: {}\nIf device matcher config: {}\n",
-                    err1, err2
-                ))),
-            },
-        }
-    }
+    DeviceMatcher(HidMatcherParamsCfg),
+    VirtualDevice(HidVirtualParamsCfg),
 }
 
 impl Default for HidVirtualOrMatcherParamsCfg {
     fn default() -> Self {
-        Self::Matcher(Default::default())
+        Self::DeviceMatcher(Default::default())
     }
 }
 
@@ -160,14 +148,14 @@ pub(crate) struct HidDeviceCfg {
 impl HidDeviceCfg {
     pub(crate) fn new_matcher() -> Self {
         Self {
-            params__: HidVirtualOrMatcherParamsCfg::Matcher(HidMatcherParamsCfg::default()),
+            params__: HidVirtualOrMatcherParamsCfg::DeviceMatcher(HidMatcherParamsCfg::default()),
             ..Default::default()
         }
     }
 
     pub(crate) fn new_virtual(name: &str) -> Self {
         Self {
-            params__: HidVirtualOrMatcherParamsCfg::Virtual(HidVirtualParamsCfg {
+            params__: HidVirtualOrMatcherParamsCfg::VirtualDevice(HidVirtualParamsCfg {
                 name: name.to_string(),
                 persistent: false,
                 bus: Some(Default::default()),
@@ -184,15 +172,15 @@ impl HidDeviceCfg {
 
     pub(crate) fn is_persistent(&self) -> bool {
         match self.params__ {
-            HidVirtualOrMatcherParamsCfg::Virtual(ref p) => p.persistent,
-            HidVirtualOrMatcherParamsCfg::Matcher(_) => false,
+            HidVirtualOrMatcherParamsCfg::VirtualDevice(ref p) => p.persistent,
+            HidVirtualOrMatcherParamsCfg::DeviceMatcher(_) => false,
         }
     }
 
     pub(crate) fn virtual_device_persistent_mut(&mut self) -> Option<&mut bool> {
         match self.params__ {
-            HidVirtualOrMatcherParamsCfg::Virtual(ref mut p) => Some(&mut p.persistent),
-            HidVirtualOrMatcherParamsCfg::Matcher(_) => {
+            HidVirtualOrMatcherParamsCfg::VirtualDevice(ref mut p) => Some(&mut p.persistent),
+            HidVirtualOrMatcherParamsCfg::DeviceMatcher(_) => {
                 // log::error!("Persistency parameter is only available for virtual device config  {self:?}.");
                 None
             }
@@ -206,8 +194,8 @@ impl HidDeviceCfg {
 
     pub(crate) fn virtual_device_name_ref(&self) -> Option<&str> {
         match self.params__ {
-            HidVirtualOrMatcherParamsCfg::Virtual(ref p) => Some(&p.name),
-            HidVirtualOrMatcherParamsCfg::Matcher(_) => {
+            HidVirtualOrMatcherParamsCfg::VirtualDevice(ref p) => Some(&p.name),
+            HidVirtualOrMatcherParamsCfg::DeviceMatcher(_) => {
                 // log::error!(
                 //     "Name parameter is only available for virtual device config, calling it on device matcher config {self:#?}."
                 // );
@@ -218,8 +206,8 @@ impl HidDeviceCfg {
 
     pub(crate) fn virtual_device_name_mut(&mut self) -> Option<&mut String> {
         match self.params__ {
-            HidVirtualOrMatcherParamsCfg::Virtual(ref mut p) => Some(&mut p.name),
-            HidVirtualOrMatcherParamsCfg::Matcher(_) => {
+            HidVirtualOrMatcherParamsCfg::VirtualDevice(ref mut p) => Some(&mut p.name),
+            HidVirtualOrMatcherParamsCfg::DeviceMatcher(_) => {
                 // log::error!(
                 //     "Name parameter is only available for virtual device config, calling it on device matcher config {self:#?}"
                 // );
@@ -230,32 +218,32 @@ impl HidDeviceCfg {
 
     pub(crate) fn matcher_name_regex_mut(&mut self) -> Option<&mut regex::Regex> {
         match self.params__ {
-            HidVirtualOrMatcherParamsCfg::Virtual(_) => {
+            HidVirtualOrMatcherParamsCfg::VirtualDevice(_) => {
                 // log::error!(
                 //     "Name regex is only available for device matcher config, calling it on virtual device config {self:#?}"
                 // );
                 None
             }
-            HidVirtualOrMatcherParamsCfg::Matcher(ref mut p) => Some(&mut p.match_name_regex),
+            HidVirtualOrMatcherParamsCfg::DeviceMatcher(ref mut p) => Some(&mut p.match_name_regex),
         }
     }
 
     pub(crate) fn matcher_name_regex_ref(&self) -> Option<&regex::Regex> {
         match self.params__ {
-            HidVirtualOrMatcherParamsCfg::Virtual(_) => {
+            HidVirtualOrMatcherParamsCfg::VirtualDevice(_) => {
                 // log::error!(
                 //     "Name regex is only available for device matcher config, calling it on virtual device config {self:#?}"
                 // );
                 None
             }
-            HidVirtualOrMatcherParamsCfg::Matcher(ref p) => Some(&p.match_name_regex),
+            HidVirtualOrMatcherParamsCfg::DeviceMatcher(ref p) => Some(&p.match_name_regex),
         }
     }
 
     pub(crate) fn virtual_device_bus_info_ref(&self) -> Option<&HidDeviceBusSpecCfg> {
         match self.params__ {
-            HidVirtualOrMatcherParamsCfg::Virtual(ref p) => p.bus.as_ref(),
-            HidVirtualOrMatcherParamsCfg::Matcher(_) => {
+            HidVirtualOrMatcherParamsCfg::VirtualDevice(ref p) => p.bus.as_ref(),
+            HidVirtualOrMatcherParamsCfg::DeviceMatcher(_) => {
                 // log::error!(
                 //     "Bus info parameters are only available for virtual device config, calling it on device matcher config {self:#?}"
                 // );
@@ -266,8 +254,8 @@ impl HidDeviceCfg {
 
     pub(crate) fn virtual_device_bus_info_mut(&mut self) -> Option<&mut HidDeviceBusSpecCfg> {
         match self.params__ {
-            HidVirtualOrMatcherParamsCfg::Virtual(ref mut p) => p.bus.as_mut(),
-            HidVirtualOrMatcherParamsCfg::Matcher(_) => {
+            HidVirtualOrMatcherParamsCfg::VirtualDevice(ref mut p) => p.bus.as_mut(),
+            HidVirtualOrMatcherParamsCfg::DeviceMatcher(_) => {
                 log::error!(
                     "Bus info parameters are only only available for virtual device config, calling it on device matcher config {self:#?}"
                 );
@@ -278,8 +266,8 @@ impl HidDeviceCfg {
 
     pub(crate) fn virtual_device_force_feedback_info_ref(&self) -> Option<&HIDDeviceForceFeedbackCfg> {
         match self.params__ {
-            HidVirtualOrMatcherParamsCfg::Virtual(ref p) => p.force_feedback.as_ref(),
-            HidVirtualOrMatcherParamsCfg::Matcher(_) => {
+            HidVirtualOrMatcherParamsCfg::VirtualDevice(ref p) => p.force_feedback.as_ref(),
+            HidVirtualOrMatcherParamsCfg::DeviceMatcher(_) => {
                 log::error!(
                     "Force feedback parameters are only available for virtual device config, calling it on device matcher config {self:#?}"
                 );
@@ -290,10 +278,10 @@ impl HidDeviceCfg {
 
     pub(crate) fn add_virtual_device_force_feedback_params(&mut self) {
         match self.params__ {
-            HidVirtualOrMatcherParamsCfg::Virtual(ref mut p) => {
+            HidVirtualOrMatcherParamsCfg::VirtualDevice(ref mut p) => {
                 p.force_feedback = Some(Default::default());
             }
-            HidVirtualOrMatcherParamsCfg::Matcher(_) => {
+            HidVirtualOrMatcherParamsCfg::DeviceMatcher(_) => {
                 log::error!(
                     "Force feedback parameters are only available for virtual device config, calling it on device matcher config {self:#?}"
                 );
@@ -303,8 +291,8 @@ impl HidDeviceCfg {
 
     pub(crate) fn virtual_device_force_feedback_info_mut(&mut self) -> Option<&mut HIDDeviceForceFeedbackCfg> {
         match self.params__ {
-            HidVirtualOrMatcherParamsCfg::Virtual(ref mut p) => p.force_feedback.as_mut(),
-            HidVirtualOrMatcherParamsCfg::Matcher(_) => {
+            HidVirtualOrMatcherParamsCfg::VirtualDevice(ref mut p) => p.force_feedback.as_mut(),
+            HidVirtualOrMatcherParamsCfg::DeviceMatcher(_) => {
                 log::error!(
                     "Name parameter is only available for virtual device config, calling it on device matcher config {self:#?}"
                 );

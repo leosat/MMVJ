@@ -8,11 +8,11 @@ use crate::schemas_predefined::ControlsPredefinedCfg;
 use crate::schemas_ui::UiCfg;
 use crate::schemas_value::VariableState;
 use anyhow::Result;
+use deserialize_untagged_verbose_error::DeserializeUntaggedVerboseError;
 use doc_for::*;
 use garde::Validate;
 use schemars::JsonSchema;
-use serde::de::IntoDeserializer;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use traversable::{Traversable, TraversableMut};
@@ -20,6 +20,7 @@ use traversable::{Traversable, TraversableMut};
 #[derive(
     Debug, Clone, Default, Serialize, Deserialize, TraversableMut, Traversable, JsonSchema, Validate, PartialEq,
 )]
+#[serde(deny_unknown_fields)]
 pub(crate) struct DevicesCfgLegacy {
     #[cfg(feature = "midi")]
     #[serde(rename = "midi_devices")]
@@ -41,6 +42,7 @@ pub(crate) struct DevicesCfgLegacy {
 #[derive(
     Debug, Clone, Default, Serialize, Deserialize, TraversableMut, Traversable, JsonSchema, Validate, PartialEq,
 )]
+#[serde(deny_unknown_fields)]
 pub(crate) struct DevicesCfgNew {
     #[cfg(feature = "midi")]
     #[serde(default)]
@@ -53,32 +55,12 @@ pub(crate) struct DevicesCfgNew {
     pub(crate) hid: BTreeMap<String, HidDeviceCfg>,
 }
 
-#[derive(Debug, Clone, Serialize, TraversableMut, Traversable, JsonSchema)]
+#[derive(Debug, Clone, Serialize, DeserializeUntaggedVerboseError, TraversableMut, Traversable, JsonSchema)]
 #[serde(untagged)]
 #[serde(deny_unknown_fields)]
 enum ConfigVariants {
-    New(ConfigNew),
-    Old(ConfigOld),
-}
-
-impl<'de> Deserialize<'de> for ConfigVariants {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        use serde::de::Error;
-        let value: serde_value::Value = Deserialize::deserialize(deserializer)?;
-        match ConfigNew::deserialize(value.clone().into_deserializer()) {
-            Ok(new_cfg) => Ok(ConfigVariants::New(new_cfg)),
-            Err(new_err) => match ConfigOld::deserialize(value.into_deserializer()) {
-                Ok(old_cfg) => Ok(ConfigVariants::Old(old_cfg)),
-                Err(old_err) => Err(D::Error::custom(format!(
-                    "Configuration parse error.\nIf using new format: {}\nIf using old format: {}\n",
-                    new_err, old_err
-                ))),
-            },
-        }
-    }
+    ConfigNewFormat(ConfigNew),
+    ConfigOldFormat(ConfigOld),
 }
 
 impl From<DevicesCfgLegacy> for DevicesCfgNew {
@@ -119,7 +101,7 @@ impl From<DevicesCfgNew> for DevicesCfgLegacy {
 impl From<ConfigVariants> for Config {
     fn from(value: ConfigVariants) -> Self {
         match value {
-            ConfigVariants::Old(c) => Self {
+            ConfigVariants::ConfigOldFormat(c) => Self {
                 cfg_file: c.cfg_file,
                 description: c.description,
                 predef_controls: c.predef_controls,
@@ -129,7 +111,7 @@ impl From<ConfigVariants> for Config {
                 mappings: c.mappings,
                 ui: Default::default(),
             },
-            ConfigVariants::New(c) => Self {
+            ConfigVariants::ConfigNewFormat(c) => Self {
                 cfg_file: c.cfg_file,
                 description: c.description,
                 predef_controls: c.predef_controls,
@@ -162,7 +144,7 @@ macro_rules! config_struct_tpl {
         #[serde(default)]
         #[garde(skip)]
         pub(crate) description: String,
-        #[serde(skip_serializing)]
+        #[serde(skip)]
         #[traverse(skip)]
         #[serde(default = "crate::config::load_predefined_controls")]
         #[garde(skip)]

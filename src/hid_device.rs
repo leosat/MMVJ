@@ -685,7 +685,7 @@ fn test_virtual_joystick_internal(with_ff: bool) {
                     controls
                 },
                 classification: Some(HidDeviceClassificationCfg(BitFlags::from_flag(HidDeviceKind::Joystick))),
-                params__: crate::schemas_hid::HidVirtualOrMatcherParamsCfg::Virtual(HidVirtualParamsCfg {
+                params__: crate::schemas_hid::HidVirtualOrMatcherParamsCfg::VirtualDevice(HidVirtualParamsCfg {
                     persistent: true,
                     name: "MMVJ Test Virtual Joystick".to_string(),
                     bus: Default::default(),
