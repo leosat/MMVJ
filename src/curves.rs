@@ -69,14 +69,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_linear_interpolation() {
+    fn test_linear() {
         assert_eq!(Curves::linear(0.1, 1., 0., 0.), 0.1);
         assert_eq!(Curves::linear(0.5, 1., 0., 0.), 0.5);
         assert_eq!(Curves::linear(1., 1., 0., 0.), 1.);
     }
 
     #[test]
-    fn test_smoothstep_interpolation() {
+    fn test_smoothstep() {
         let result = Curves::smoothstep(0.5);
         assert!((result - 0.5).abs() < 0.001);
     }
