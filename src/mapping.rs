@@ -1,4 +1,4 @@
-use crate::common::{BaseNumT, DeviceManager, get_debug_level, get_interned_str, intern_str};
+use crate::common::{BaseNumT, CommonDeviceManager, get_debug_level, get_interned_str, intern_str};
 use crate::config::DebugLevel;
 use crate::hid_device::HidDeviceKind;
 use crate::hid_manager::{HidManager, WithDeviceClassification};
