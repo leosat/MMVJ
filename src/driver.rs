@@ -1,4 +1,4 @@
-use crate::common::DeviceManager;
+use crate::common::CommonDeviceManager;
 use crate::config::DebugLevel;
 use crate::config::MORE_DEBUG;
 use crate::hid_manager::{HidManager, WithDeviceClassification};

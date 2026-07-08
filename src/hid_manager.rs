@@ -1,4 +1,4 @@
-use crate::common::{BaseNumT, DeviceManager, OpenedDeviceInfo, get_interned_str};
+use crate::common::{BaseNumT, CommonDeviceManager, OpenedDeviceInfo, get_interned_str};
 use crate::config::DebugLevel;
 use crate::hid_device::{HidDevice, HidDeviceKind, HidVirtualDeviceCreationSpec};
 use crate::hid_owned_and_ffb::{X_AXIS_IDX, Y_AXIS_IDX};
@@ -143,6 +143,65 @@ impl HidManager {
         } else {
             0.0
         }
+    }
+
+    pub(crate) fn create_virtual_device(
+        &self,
+        device_key: &str,
+        device_cfg: &HidDeviceCfg,
+        is_persistent: bool,
+    ) -> Result<()> {
+        if let Some(existing) = self.device_key_to_devices.borrow_mut().get_mut(device_key)
+            && !existing.is_empty()
+        {
+            if existing[0].0.borrow().is_persistent() != is_persistent {
+                log::info!(
+                    "Updating persistence for virtual device '{}': {} -> {}",
+                    device_key,
+                    existing[0].0.borrow().is_persistent(),
+                    is_persistent
+                );
+                existing[0].0.borrow_mut().set_persistent(is_persistent);
+            }
+            log::info!("Virtual device '{}' already exists, skipping creation.", device_key);
+            return Ok(());
+        }
+
+        let mut d = HidDevice::create_virtual_device(
+            device_key,
+            HidVirtualDeviceCreationSpec {
+                cfg_spec: device_cfg.clone(),
+                debug: self.debug,
+                debug_ff: self.debug_ff,
+                is_persistent,
+                device_kind: HidDeviceKind::Joystick,
+            },
+            self.debug.is_on(),
+        )?;
+
+        d.set_external_notification(Some(self.per_device_event_notification_tx.clone()));
+
+        self.device_key_to_devices
+            .borrow_mut()
+            .entry(device_key.to_string())
+            .or_default()
+            .push((Rc::new(UncheckedRefCell::new(d)), device_cfg.clone()));
+
+        Ok(())
+    }
+
+    pub(crate) fn destroy_virtual_device_if_exists(&self, device_key: &str) {
+        self.device_key_to_devices.borrow_mut().retain(|_, device| {
+            if !device.is_empty() {
+                if device_key != device[0].0.borrow().get_cfg_key() {
+                    return true;
+                }
+                if let Err(e) = device[0].0.borrow().close() {
+                    log::error!("Error while closing a virtual device {device_key}: {e}");
+                };
+            }
+            false
+        });
     }
 }
 
@@ -349,7 +408,7 @@ impl WithDeviceClassification for evdev::Device {
     }
 }
 
-impl DeviceManager for HidManager {
+impl CommonDeviceManager for HidManager {
     type AvailableDeviceInfo = AvailableHIDDeviceInfo;
     type DeviceCfg = HidDeviceCfg;
 
@@ -414,60 +473,6 @@ impl DeviceManager for HidManager {
         } else {
             bail!("Can't open device {device_info:?}")
         }
-    }
-
-    fn create_virtual_device(&self, device_key: &str, device_cfg: &HidDeviceCfg, is_persistent: bool) -> Result<()> {
-        if let Some(existing) = self.device_key_to_devices.borrow_mut().get_mut(device_key)
-            && !existing.is_empty()
-        {
-            if existing[0].0.borrow().is_persistent() != is_persistent {
-                log::info!(
-                    "Updating persistence for virtual device '{}': {} -> {}",
-                    device_key,
-                    existing[0].0.borrow().is_persistent(),
-                    is_persistent
-                );
-                existing[0].0.borrow_mut().set_persistent(is_persistent);
-            }
-            log::info!("Virtual device '{}' already exists, skipping creation.", device_key);
-            return Ok(());
-        }
-
-        let mut d = HidDevice::create_virtual_device(
-            device_key,
-            HidVirtualDeviceCreationSpec {
-                cfg_spec: device_cfg.clone(),
-                debug: self.debug,
-                debug_ff: self.debug_ff,
-                is_persistent,
-                device_kind: HidDeviceKind::Joystick,
-            },
-            self.debug.is_on(),
-        )?;
-
-        d.set_external_notification(Some(self.per_device_event_notification_tx.clone()));
-
-        self.device_key_to_devices
-            .borrow_mut()
-            .entry(device_key.to_string())
-            .or_default()
-            .push((Rc::new(UncheckedRefCell::new(d)), device_cfg.clone()));
-
-        Ok(())
-    }
-
-    fn destroy_virtual_device_if_exists(&self, device_key: &str) {
-        self.device_key_to_devices.borrow_mut().retain(|_, device| {
-            if !device.is_empty() {
-                if device_key != device[0].0.borrow().get_cfg_key() {
-                    return true;
-                }
-                if let Err(e) = device[0].0.borrow().close() {
-                    log::error!("Error while closing a virtual device {device_key}: {e}");
-                };
-            }
-            false
-        });
     }
 
     async fn consume_any_opened_device_event(&self) -> Option<MappedDeviceEvent> {

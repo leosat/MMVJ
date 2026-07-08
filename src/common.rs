@@ -2,7 +2,6 @@ use crate::config::DebugLevel;
 use crate::hid_device::HidDeviceKind;
 use crate::mapped_device::MappedDeviceEvent;
 use crate::schemas_common::ObjId;
-use crate::schemas_hid::HidDeviceCfg;
 use crate::schemas_mapping::Mapping;
 use crate::{num_interval::NumInterval, schemas_cfg::Config};
 use atomic_float::AtomicF32;
@@ -88,7 +87,7 @@ pub(crate) struct OpenedDeviceInfo<AvailableDeviceInfoT> {
     pub(crate) id: ObjId,
     pub(crate) info: AvailableDeviceInfoT,
 }
-pub(crate) trait DeviceManager {
+pub(crate) trait CommonDeviceManager {
     type AvailableDeviceInfo;
     type DeviceCfg;
     fn open(
@@ -97,24 +96,19 @@ pub(crate) trait DeviceManager {
         device_matcher_key: &str,
         device_cfg: &Self::DeviceCfg,
     ) -> anyhow::Result<OpenedDeviceInfo<Self::AvailableDeviceInfo>>;
-    fn create_virtual_device(
-        &self,
-        device_key: &str,
-        device_cfg: &HidDeviceCfg,
-        is_persistent: bool,
-    ) -> anyhow::Result<()>;
-    fn destroy_virtual_device_if_exists(&self, device_key: &str);
     // NB/TODO: API: this consumes any message and that's it... which suggests one consumer.
     // NB/TODO: API: but if one consumer, why to keep the rx channel end, maybe just make an API
     // NB/TODO: API: to attach any external channel and not bother about serving rx end from here.
     // NB/TODO: API: this API is not mut for interior mutability, any impl. must be clever
     //          to keep borrows etc across await points...
+    // https://github.com/leosat/MMVJ/issues/72
     async fn consume_any_opened_device_event(&self) -> Option<MappedDeviceEvent>;
     async fn monitor(
         &self,
         match_name_regex: &regex::Regex,
         filter: Option<BitFlags<HidDeviceKind>>,
     ) -> anyhow::Result<()>;
+    #[allow(unused)] // TODO: https://github.com/leosat/MMVJ/issues/72
     fn set_events_listenter(&self, tx: tokio::sync::mpsc::UnboundedSender<MappedDeviceEvent>);
     fn enumerate_available_devices(&self, filter: Option<BitFlags<HidDeviceKind>>) -> Vec<Self::AvailableDeviceInfo>;
     // fn set_control_value(&self, device_key: &str, ctl_key: &str, value: BaseNumericT, _silent: bool);

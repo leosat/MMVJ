@@ -1,4 +1,4 @@
-use crate::common::{DeviceManager, DriverCmd};
+use crate::common::{CommonDeviceManager, DriverCmd};
 use crate::config::DebugLevel;
 use crate::config::MORE_DEBUG;
 use crate::gui_common::{
