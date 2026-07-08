@@ -102,8 +102,8 @@ pub(crate) enum MidiNumberSpecial {
 #[serde(untagged)]
 #[serde(deny_unknown_fields)]
 pub(crate) enum MidiNumberCfg {
-    Single(u8),
-    Multiple(Vec<u8>),
+    Single(u16),
+    Multiple(Vec<u16>),
     Special(MidiNumberSpecial),
 }
 

@@ -352,7 +352,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     msg.matches_control_matcher(cm)
                 })
                 .for_each(|(cm_idx, cm)| {
-                    cm.set_numeric_value(msg.get_value());
+                    cm.set_numeric_value(msg.get_operational_value());
                     if mappings.len() > 0 {
                         self.router_buff_mappings_to_execute.extend(&mappings[cm_idx]);
                     }

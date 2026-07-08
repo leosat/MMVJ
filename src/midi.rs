@@ -25,11 +25,20 @@ pub(crate) struct MappedMidiMessage {
     pub(crate) device_id: ObjId,
     pub(crate) message_type: MidiMessageType,
     pub(crate) channel: u8,
-    pub(crate) note: Option<u8>,
-    pub(crate) velocity: Option<u8>,
-    pub(crate) control: Option<u8>,
-    pub(crate) value: Option<u8>,
-    pub(crate) pitch: Option<i16>,
+    pub(crate) value: MappedMidiMessageValue,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum MappedMidiMessageValue {
+    Value(u8),
+    KnobNumAndOperationalValue(u8, u8),
+    Pitch(i16),
+}
+
+impl Default for MappedMidiMessageValue {
+    fn default() -> Self {
+        Self::Value(Default::default())
+    }
 }
 
 impl MappedMidiMessage {
@@ -46,20 +55,18 @@ impl MappedMidiMessage {
 
         let mut m = Self {
             device_id: device_id,
-            message_type: MidiMessageType::ProgramChange, /* overriden below */
             channel,
-            note: None,
-            velocity: None,
-            control: None,
-            value: None,
-            pitch: None,
+            /* overriden below */
+            message_type: Default::default(),
+            value: Default::default(),
         };
 
         match (type_code, data1, data2) {
-            (0x80, Some(note), Some(velocity)) => {
+            (0x80, Some(note), Some(_value)) => {
                 m.message_type = MidiMessageType::NoteOff;
-                m.note = Some(note);
-                m.velocity = Some(velocity);
+                // NB: for note-off messages, the operational value is set to 0, ignoring the "note off velocity" value.
+                // NB: alternative interpretations are possible, but, for now, not considered feasible for our purpose.
+                m.value = MappedMidiMessageValue::KnobNumAndOperationalValue(note, 0);
             }
             (0x90, Some(note), Some(velocity)) => {
                 m.message_type = if velocity == 0 {
@@ -67,31 +74,28 @@ impl MappedMidiMessage {
                 } else {
                     MidiMessageType::NoteOn
                 };
-                m.note = Some(note);
-                m.velocity = Some(velocity);
+                m.value = MappedMidiMessageValue::KnobNumAndOperationalValue(note, velocity);
             }
             (0x0B0, Some(control), Some(value)) => {
                 m.message_type = MidiMessageType::ControlChange;
-                m.control = Some(control);
-                m.value = Some(value);
+                m.value = MappedMidiMessageValue::KnobNumAndOperationalValue(control, value);
             }
             (0x0E0, Some(lsb), Some(msb)) => {
                 m.message_type = MidiMessageType::PitchWheel;
                 let value = ((msb as i16) << 7) | (lsb as i16);
-                m.pitch = Some(value - 8192); // Centered at 0
+                m.value = MappedMidiMessageValue::Pitch(value - 8192); // Centered at 0
             }
             (0x0A0, Some(note), Some(pressure)) => {
                 m.message_type = MidiMessageType::PolyAftertouch;
-                m.note = Some(note);
-                m.value = Some(pressure);
+                m.value = MappedMidiMessageValue::KnobNumAndOperationalValue(note, pressure);
             }
             (0x0D0, Some(value), None | Some(_)) => {
                 m.message_type = MidiMessageType::Aftertouch;
-                m.value = Some(value);
+                m.value = MappedMidiMessageValue::Value(value);
             }
             (0x0C0, Some(value), None | Some(_)) => {
                 m.message_type = MidiMessageType::ProgramChange;
-                m.value = Some(value);
+                m.value = MappedMidiMessageValue::Value(value);
             }
             _ => {
                 if debug.is_on() {
@@ -111,15 +115,12 @@ impl MappedMidiMessage {
                 MidiChannelCfg::Number(n) => self.channel == n,
             }
             && (control_matcher.midi_message.r#type == MappedCtlsMidi::PitchWheel || {
-                if let Some(number) = match self.message_type {
-                    MidiMessageType::NoteOn | MidiMessageType::NoteOff => self.note,
-                    MidiMessageType::ControlChange => self.control,
-                    MidiMessageType::ProgramChange => self.value,
-                    _ => None,
-                } {
+                if let Some(number) = self.get_knob_number() {
                     match &control_matcher.midi_message.number {
-                        MidiNumberCfg::Single(control_matcher_number) => number == *control_matcher_number,
-                        MidiNumberCfg::Multiple(control_matcher_numbers) => control_matcher_numbers.contains(&number),
+                        MidiNumberCfg::Single(control_matcher_number) => number as u16 == *control_matcher_number,
+                        MidiNumberCfg::Multiple(control_matcher_numbers) => {
+                            control_matcher_numbers.contains(&(number as u16))
+                        }
                         MidiNumberCfg::Special(control_matcher_special) => {
                             *control_matcher_special == MidiNumberSpecial::Any
                         }
@@ -130,15 +131,19 @@ impl MappedMidiMessage {
             })
     }
 
-    pub(crate) fn get_value(&self) -> BaseNumT {
-        match self.message_type {
-            MidiMessageType::PitchWheel => self.pitch.unwrap_or(0) as BaseNumT,
-            MidiMessageType::ControlChange => self.value.unwrap_or(0) as BaseNumT,
-            MidiMessageType::NoteOn => self.velocity.unwrap_or(0) as BaseNumT,
-            MidiMessageType::NoteOff => 0.0,
-            MidiMessageType::Aftertouch => self.value.unwrap_or(0) as BaseNumT,
-            MidiMessageType::PolyAftertouch => self.value.unwrap_or(0) as BaseNumT,
-            MidiMessageType::ProgramChange => self.value.unwrap_or(0) as BaseNumT,
+    pub(crate) fn get_operational_value(&self) -> BaseNumT {
+        match self.value {
+            MappedMidiMessageValue::Value(v) => v as BaseNumT,
+            MappedMidiMessageValue::KnobNumAndOperationalValue(_, v) => v as BaseNumT,
+            MappedMidiMessageValue::Pitch(v) => v as BaseNumT,
+        }
+    }
+
+    pub(crate) fn get_knob_number(&self) -> Option<u8> {
+        match self.value {
+            MappedMidiMessageValue::Value(_) => None,
+            MappedMidiMessageValue::KnobNumAndOperationalValue(c, _) => Some(c),
+            MappedMidiMessageValue::Pitch(_) => None,
         }
     }
 
@@ -152,13 +157,16 @@ impl MappedMidiMessage {
 
     pub(crate) fn pretty_print(&self, device_name: Option<&str>) {
         let timestamp = chrono::Local::now().format("%H:%M:%S%.3f");
+        let knob_num = self.get_knob_number().unwrap();
+        let variable_value = self.get_operational_value();
+        let cc_name = Self::get_cc_name(knob_num);
 
         match self.message_type {
             MidiMessageType::NoteOn | MidiMessageType::NoteOff => {
                 let note_names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-                if let Some(note) = self.note {
-                    let note_name = note_names[(note % 12) as usize];
-                    let octave = (note / 12) as i8 - 1;
+                {
+                    let note_name = note_names[(knob_num % 12) as usize];
+                    let octave = (knob_num / 12) as i8 - 1;
                     let on_off = if self.message_type == MidiMessageType::NoteOn {
                         "ON"
                     } else {
@@ -173,65 +181,54 @@ impl MappedMidiMessage {
                         on_off,
                         note_name,
                         octave,
-                        note,
-                        self.velocity.unwrap_or(0),
+                        knob_num,
+                        variable_value,
                         self.channel
                     );
                 }
             }
             MidiMessageType::ControlChange => {
-                if let (Some(control), Some(value)) = (self.control, self.value) {
-                    let cc_name = Self::get_cc_name(control);
-                    info!(
-                        "[{}][{}] CC: {} (cc={}, val={}, ch={})",
-                        timestamp, self.device_id, cc_name, control, value, self.channel
-                    );
-                }
+                info!(
+                    "[{}][{}] CC: {} (cc={}, val={}, ch={})",
+                    timestamp, self.device_id, cc_name, knob_num, variable_value, self.channel
+                );
             }
             MidiMessageType::PitchWheel => {
-                if let Some(pitch) = self.pitch {
-                    info!(
-                        "[{}][{}] Pitch Wheel: {} (ch={})",
-                        timestamp,
-                        device_name.unwrap_or_default(),
-                        pitch,
-                        self.channel
-                    );
-                }
+                info!(
+                    "[{}][{}] Pitch Wheel: {} (ch={})",
+                    timestamp,
+                    device_name.unwrap_or_default(),
+                    self.get_operational_value(),
+                    self.channel
+                );
             }
             MidiMessageType::Aftertouch => {
-                if let Some(value) = self.value {
-                    info!(
-                        "[{}][{}] Aftertouch: {} (ch={})",
-                        timestamp,
-                        device_name.unwrap_or_default(),
-                        value,
-                        self.channel
-                    );
-                }
+                info!(
+                    "[{}][{}] Aftertouch: {} (ch={})",
+                    timestamp,
+                    device_name.unwrap_or_default(),
+                    variable_value,
+                    self.channel
+                );
             }
             MidiMessageType::PolyAftertouch => {
-                if let Some(value) = self.value {
-                    info!(
-                        "[{}][{}] PolyAfterTouch: {} (note={} ch={})",
-                        timestamp,
-                        device_name.unwrap_or_default(),
-                        value,
-                        self.note.unwrap_or(u8::MAX),
-                        self.channel
-                    );
-                }
+                info!(
+                    "[{}][{}] PolyAfterTouch: {} (note={} ch={})",
+                    timestamp,
+                    device_name.unwrap_or_default(),
+                    variable_value,
+                    knob_num,
+                    self.channel
+                );
             }
             MidiMessageType::ProgramChange => {
-                if let Some(value) = self.value {
-                    info!(
-                        "[{}][{}] Program Change: {} (ch={})",
-                        timestamp,
-                        device_name.unwrap_or_default(),
-                        value,
-                        self.channel
-                    );
-                }
+                info!(
+                    "[{}][{}] Program Change: {} (ch={})",
+                    timestamp,
+                    device_name.unwrap_or_default(),
+                    variable_value,
+                    self.channel
+                );
             }
         }
     }
@@ -364,18 +361,16 @@ impl MidiManager {
     pub(crate) async fn consume_any_opened_device_message(&mut self) -> Option<MappedMidiMessage> {
         if let Some(msg) = self.all_devices_rx.recv().await {
             if msg.message_type == MidiMessageType::NoteOn {
-                if let Some(note) = msg.note {
-                    if let Some(val) = self.note_states.get_mut(&msg.device_id) {
-                        val.insert(note);
-                    } else {
-                        self.note_states.entry(msg.device_id).or_default().insert(note);
-                    }
+                let note = msg.get_knob_number().unwrap();
+                if let Some(val) = self.note_states.get_mut(&msg.device_id) {
+                    val.insert(note);
+                } else {
+                    self.note_states.entry(msg.device_id).or_default().insert(note);
                 }
             } else if msg.message_type == MidiMessageType::NoteOff
-                && let Some(note) = msg.note
                 && let Some(notes) = self.note_states.get_mut(&msg.device_id)
             {
-                notes.remove(&note);
+                notes.remove(&msg.get_knob_number().unwrap());
             }
 
             return Some(msg);
@@ -475,22 +470,15 @@ impl MidiLearnMode {
 
         let control_str = match msg.message_type {
             MidiMessageType::NoteOn => {
-                if let Some(note) = msg.note {
-                    format!("Note number {}", note)
-                } else {
-                    return;
-                }
+                format!("Note number {}", msg.get_knob_number().unwrap())
             }
             MidiMessageType::NoteOff => return,
             MidiMessageType::ControlChange => {
-                if let Some(control) = msg.control {
-                    if control == 1 {
-                        format!("Control Change, Modulation Wheel, control number {}", control)
-                    } else {
-                        format!("Control Change, control number {}", control)
-                    }
+                let control = msg.get_knob_number().unwrap();
+                if control == 1 {
+                    format!("Control Change, Modulation Wheel, control number {}", control)
                 } else {
-                    format!("Unknown control change {:?}", msg.message_type)
+                    format!("Control Change, control number {}", control)
                 }
             }
             _ => msg.message_type.to_string(),
