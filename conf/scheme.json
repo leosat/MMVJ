@@ -17,10 +17,6 @@
           "type": "string",
           "default": ""
         },
-        "predef_controls": {
-          "$ref": "#/$defs/ControlsPredefinedCfg",
-          "writeOnly": true
-        },
         "global": {
           "$ref": "#/$defs/GlobalSettingsCfg"
         },
@@ -52,27 +48,67 @@
         "devices"
       ]
     },
-    "ControlsPredefinedCfg": {
+    "GlobalSettingsCfg": {
       "type": "object",
       "properties": {
-        "midi_controls": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/MidiControlPredefined"
-          },
-          "default": {}
+        "idle_tick_rate": {
+          "description": "The program will run idle tick with this rate in Hz.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 10,
+          "default": 200
         },
-        "hid_controls": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/HidControlPredefined"
-          },
-          "default": {}
+        "persistent_joysticks": {
+          "description": "If true, all virtual joysticks will be persistent (not destroyed on hot-reload) by default.",
+          "type": "boolean",
+          "default": false
         }
       },
       "additionalProperties": false
     },
-    "MidiControlPredefined": {
+    "DevicesCfgNew": {
+      "type": "object",
+      "properties": {
+        "midi": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/MidiMatcherCfg"
+          }
+        },
+        "hid": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/HidDeviceCfg"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "MidiMatcherCfg": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "match_name_regex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "controls": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/MidiControlMatcherCfg"
+          },
+          "default": {}
+        }
+      },
+      "required": [
+        "enabled"
+      ]
+    },
+    "MidiControlMatcherCfg": {
       "type": "object",
       "properties": {
         "midi_message": {
@@ -82,14 +118,16 @@
           "$ref": "#/$defs/NumInterval"
         },
         "description": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false,
       "required": [
         "midi_message",
-        "range",
-        "description"
+        "range"
       ]
     },
     "MidiMessageCfg": {
@@ -193,7 +231,173 @@
       "minItems": 2,
       "maxItems": 2
     },
-    "HidControlPredefined": {
+    "HidDeviceCfg": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string",
+          "default": ""
+        },
+        "controls": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/HidControlMatcherCfg"
+          },
+          "default": {}
+        }
+      },
+      "required": [
+        "enabled"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/HidMatcherParamsCfg"
+        },
+        {
+          "$ref": "#/$defs/HidVirtualParamsCfg"
+        }
+      ]
+    },
+    "HidMatcherParamsCfg": {
+      "type": "object",
+      "properties": {
+        "match_name_regex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "HidVirtualParamsCfg": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "default": ""
+        },
+        "persistent": {
+          "type": "boolean",
+          "default": false
+        },
+        "bus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HidDeviceBusSpecCfg"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "force_feedback": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HIDDeviceForceFeedbackCfg"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "HidDeviceBusSpecCfg": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/HidDeviceBusType",
+          "default": "Virtual"
+        },
+        "vendor_id": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0,
+          "maximum": 65535,
+          "default": 4660
+        },
+        "product_id": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0,
+          "maximum": 65535,
+          "default": 22136
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0,
+          "maximum": 65535,
+          "default": 256
+        }
+      },
+      "additionalProperties": false
+    },
+    "HidDeviceBusType": {
+      "type": "string",
+      "enum": [
+        "Virtual",
+        "Usb",
+        "IsaPnp",
+        "Isa",
+        "Gameport"
+      ]
+    },
+    "HIDDeviceForceFeedbackCfg": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HidFfEffect"
+          },
+          "default": []
+        },
+        "max_effects": {
+          "description": "Must support at least 1 effect if enabled",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 1,
+          "default": 16
+        },
+        "fake_accepting_all_effects": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "HidFfEffect": {
+      "type": "string",
+      "enum": [
+        "Constant",
+        "Periodic",
+        "Rumble",
+        "Spring",
+        "Friction",
+        "Damper",
+        "Intertia",
+        "Ramp",
+        "Square",
+        "Triangle",
+        "Sine",
+        "SawUp",
+        "SawDown",
+        "Custom",
+        "Gain",
+        "Autocenter"
+      ]
+    },
+    "HidControlMatcherCfg": {
       "type": "object",
       "properties": {
         "type": {
@@ -210,20 +414,13 @@
             {
               "type": "null"
             }
-          ],
-          "default": null
+          ]
         },
         "initial_value": {
           "type": "number",
-          "format": "float",
-          "default": 0.0
-        },
-        "description": {
-          "type": "string",
-          "default": ""
+          "format": "float"
         }
       },
-      "additionalProperties": false,
       "required": [
         "type",
         "range"
@@ -938,282 +1135,6 @@
           "default": 0.0
         }
       }
-    },
-    "GlobalSettingsCfg": {
-      "type": "object",
-      "properties": {
-        "idle_tick_rate": {
-          "description": "The program will run idle tick with this rate in Hz.",
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 10,
-          "default": 200
-        },
-        "persistent_joysticks": {
-          "description": "If true, all virtual joysticks will be persistent (not destroyed on hot-reload) by default.",
-          "type": "boolean",
-          "default": false
-        }
-      },
-      "additionalProperties": false
-    },
-    "DevicesCfgNew": {
-      "type": "object",
-      "properties": {
-        "midi": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/MidiMatcherCfg"
-          }
-        },
-        "hid": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/HidDeviceCfg"
-          }
-        }
-      }
-    },
-    "MidiMatcherCfg": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "match_name_regex": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "controls": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/MidiControlMatcherCfg"
-          },
-          "default": {}
-        }
-      },
-      "required": [
-        "enabled"
-      ]
-    },
-    "MidiControlMatcherCfg": {
-      "type": "object",
-      "properties": {
-        "midi_message": {
-          "$ref": "#/$defs/MidiMessageCfg"
-        },
-        "range": {
-          "$ref": "#/$defs/NumInterval"
-        },
-        "description": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "midi_message",
-        "range"
-      ]
-    },
-    "HidDeviceCfg": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "description": {
-          "type": "string",
-          "default": ""
-        },
-        "controls": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/HidControlMatcherCfg"
-          },
-          "default": {}
-        }
-      },
-      "required": [
-        "enabled"
-      ],
-      "anyOf": [
-        {
-          "$ref": "#/$defs/HidMatcherParamsCfg"
-        },
-        {
-          "$ref": "#/$defs/HidVirtualParamsCfg"
-        }
-      ]
-    },
-    "HidMatcherParamsCfg": {
-      "type": "object",
-      "properties": {
-        "match_name_regex": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "additionalProperties": false
-    },
-    "HidVirtualParamsCfg": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string",
-          "default": ""
-        },
-        "persistent": {
-          "type": "boolean",
-          "default": false
-        },
-        "bus": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/HidDeviceBusSpecCfg"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "force_feedback": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/HIDDeviceForceFeedbackCfg"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "additionalProperties": false
-    },
-    "HidDeviceBusSpecCfg": {
-      "type": "object",
-      "properties": {
-        "type": {
-          "$ref": "#/$defs/HidDeviceBusType",
-          "default": "Virtual"
-        },
-        "vendor_id": {
-          "type": "integer",
-          "format": "uint16",
-          "minimum": 0,
-          "maximum": 65535,
-          "default": 4660
-        },
-        "product_id": {
-          "type": "integer",
-          "format": "uint16",
-          "minimum": 0,
-          "maximum": 65535,
-          "default": 22136
-        },
-        "version": {
-          "type": "integer",
-          "format": "uint16",
-          "minimum": 0,
-          "maximum": 65535,
-          "default": 256
-        }
-      },
-      "additionalProperties": false
-    },
-    "HidDeviceBusType": {
-      "type": "string",
-      "enum": [
-        "Virtual",
-        "Usb",
-        "IsaPnp",
-        "Isa",
-        "Gameport"
-      ]
-    },
-    "HIDDeviceForceFeedbackCfg": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": false
-        },
-        "effects": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/HidFfEffect"
-          },
-          "default": []
-        },
-        "max_effects": {
-          "description": "Must support at least 1 effect if enabled",
-          "type": "integer",
-          "format": "uint",
-          "minimum": 1,
-          "default": 16
-        },
-        "fake_accepting_all_effects": {
-          "type": "boolean"
-        }
-      },
-      "additionalProperties": false
-    },
-    "HidFfEffect": {
-      "type": "string",
-      "enum": [
-        "Constant",
-        "Periodic",
-        "Rumble",
-        "Spring",
-        "Friction",
-        "Damper",
-        "Intertia",
-        "Ramp",
-        "Square",
-        "Triangle",
-        "Sine",
-        "SawUp",
-        "SawDown",
-        "Custom",
-        "Gain",
-        "Autocenter"
-      ]
-    },
-    "HidControlMatcherCfg": {
-      "type": "object",
-      "properties": {
-        "type": {
-          "$ref": "#/$defs/MappedCtls"
-        },
-        "range": {
-          "$ref": "#/$defs/NumInterval"
-        },
-        "properties": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/AxisProperties"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "initial_value": {
-          "type": "number",
-          "format": "float"
-        }
-      },
-      "required": [
-        "type",
-        "range"
-      ]
     },
     "VariableState": {
       "type": "object",
@@ -2269,10 +2190,6 @@
         "description": {
           "type": "string",
           "default": ""
-        },
-        "predef_controls": {
-          "$ref": "#/$defs/ControlsPredefinedCfg",
-          "writeOnly": true
         },
         "global": {
           "$ref": "#/$defs/GlobalSettingsCfg"

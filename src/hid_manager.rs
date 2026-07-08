@@ -250,8 +250,8 @@ impl WithDeviceClassification for HidDeviceCfg {
 
     fn is_a_virtual(&self) -> bool {
         match self.params__ {
-            HidVirtualOrMatcherParamsCfg::Matcher(_) => false,
-            HidVirtualOrMatcherParamsCfg::Virtual(_) => true,
+            HidVirtualOrMatcherParamsCfg::DeviceMatcher(_) => false,
+            HidVirtualOrMatcherParamsCfg::VirtualDevice(_) => true,
         }
     }
 

@@ -1,4 +1,5 @@
-use serde::{Deserialize, Serialize};
+use deserialize_untagged_verbose_error::DeserializeUntaggedVerboseError;
+use serde::Serialize;
 use std::sync::atomic::AtomicBool;
 use traversable::{Traversable, TraversableMut};
 
@@ -13,7 +14,7 @@ use crate::{
     schemas_value::{WithLastKnownIO, WithLastKnownIOSettable, WithNumericValue, WithNumericValueSettable},
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TraversableMut, Traversable)]
+#[derive(Debug, Clone, Serialize, DeserializeUntaggedVerboseError, PartialEq, TraversableMut, Traversable)]
 #[serde(untagged)]
 pub(crate) enum ControlMatchers {
     #[cfg(feature = "midi")]

@@ -7,6 +7,7 @@ use std::{
     },
 };
 
+use deserialize_untagged_verbose_error::DeserializeUntaggedVerboseError;
 use num_traits::Zero;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -123,11 +124,11 @@ pub(crate) trait MarkedAsFromPredefinedControl {
     fn set_from_predefined_control_marker(&mut self, v: String);
 }
 
-#[derive(JsonSchema, Deserialize)]
+#[derive(JsonSchema, DeserializeUntaggedVerboseError)]
 #[serde(untagged)]
-enum Variations<T> {
-    V(T),
-    S(String),
+enum DeviceControlCfgVariations<T> {
+    FullSpec(T),
+    PredefinedControlRef(String),
 }
 pub(crate) fn deserialize_device_controls<
     'de,
@@ -140,10 +141,10 @@ pub(crate) fn deserialize_device_controls<
     let mut res: BTreeMap<String, T> = Default::default();
     for v in tmp {
         match v.1 {
-            Variations::V(cm) => {
+            DeviceControlCfgVariations::FullSpec(cm) => {
                 let _ = res.insert(v.0, cm);
             }
-            Variations::S(s) => {
+            DeviceControlCfgVariations::PredefinedControlRef(s) => {
                 let mut cm = T::default();
                 cm.set_from_predefined_control_marker(s);
                 let _ = res.insert(v.0, cm);
