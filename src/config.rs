@@ -564,7 +564,6 @@ impl ConfigManager {
         let txt = fs::read_to_string(&self.cfg_file_path_canon).context("Failed to read config file")?;
         let parse_res: Result<Config, serde_saphyr::Error> = serde_saphyr::from_str(&txt);
 
-        // dbg!(&parse_res);
         match parse_res {
             Ok(cfg) => self.cfg = cfg,
             Err(e) => {
