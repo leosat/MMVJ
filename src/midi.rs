@@ -198,7 +198,7 @@ impl MappedMidiMessage {
                     "[{}][{}] Pitch Wheel: {} (ch={})",
                     timestamp,
                     device_name.unwrap_or_default(),
-                    self.get_operational_value(),
+                    variable_value,
                     self.channel
                 );
             }
