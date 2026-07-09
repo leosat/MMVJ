@@ -44,6 +44,7 @@ pub(crate) struct MappingEngine<'driver_loop> {
     // ---
     //  Mapping router algorithm index and runtime buffer.
     // ---
+    #[allow(clippy::type_complexity)]
     router_index_sysdev_and_ctl_type_to_cms_and_mappings:
         HashMap<(ObjId, MappedCtls), (Vec<ControlMatchers>, Vec<Vec<usize>>)>,
     router_buff_mappings_to_execute: Vec<usize>,

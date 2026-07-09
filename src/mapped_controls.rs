@@ -745,27 +745,27 @@ impl MappedCtls {
     }
 
     pub(crate) fn is_a_midi_control(&self) -> bool {
-        match self {
+        matches!(
+            self,
             MappedCtls::PitchWheel
-            | MappedCtls::Note
-            | MappedCtls::ControlChange
-            | MappedCtls::ProgramChange
-            | MappedCtls::Aftertouch
-            | MappedCtls::PolyAftertouch => true,
-            _ => false,
-        }
+                | MappedCtls::Note
+                | MappedCtls::ControlChange
+                | MappedCtls::ProgramChange
+                | MappedCtls::Aftertouch
+                | MappedCtls::PolyAftertouch
+        )
     }
 
     pub(crate) fn is_a_mouse_control(&self) -> bool {
         self.is_relative()
-            || match self {
+            || matches!(
+                self,
                 MappedCtls::BtnLeft
-                | MappedCtls::BtnRight
-                | MappedCtls::BtnMiddle
-                | MappedCtls::BtnSide
-                | MappedCtls::BtnExtra => true,
-                _ => false,
-            }
+                    | MappedCtls::BtnRight
+                    | MappedCtls::BtnMiddle
+                    | MappedCtls::BtnSide
+                    | MappedCtls::BtnExtra
+            )
     }
 
     pub(crate) fn is_a_keyboard_control(&self) -> bool {
@@ -776,10 +776,7 @@ impl MappedCtls {
         self.is_absolute()
             || self.is_special_force_feedback_x()
             || self.is_special_force_feedback_y()
-            || match self {
-                MappedCtls::BtnJoystick | MappedCtls::BtnTrigger => true,
-                _ => false,
-            }
+            || matches!(self, MappedCtls::BtnJoystick | MappedCtls::BtnTrigger)
     }
 
     pub(crate) fn is_a_gamepad_control(&self) -> bool {
