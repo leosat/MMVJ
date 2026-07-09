@@ -386,15 +386,15 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     }
                 });
 
+                let cms_ptr = cms as *const Vec<ControlMatchers>;
+
                 self.run_mappings__(device_id);
 
-                // NB/TODO: for Rel controls in proposed "stable mode": zero-out.
-                if control_type.is_relative()
-                    && let Some((cms, _)) = self
-                        .router_index_sysdev_and_ctl_type_to_cms_and_mappings
-                        .get_mut(&(device_id, control_type))
-                {
-                    cms.iter_mut().for_each(|cm| cm.set_numeric_value(0.0));
+                if control_type.is_relative() {
+                    // SAFETY: we do not modify router indexes in any way during mappings processing.
+                    // TODO/NB: refactor run_mappings__ to separately borrow mapping engine members (like "views") and make borrow checker happy to
+                    // TODO/NB: directly use cms reference here, without having to use the pointer.
+                    unsafe { &*cms_ptr }.iter().for_each(|cm| cm.set_numeric_value(0.0));
                 }
             }
         }
