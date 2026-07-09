@@ -129,7 +129,7 @@ impl GuiGraphState {
                 - (interval.map_to_unit::<f32>(0.0 as BaseNumT, OutOfRangePolicy::WarnAndClamp) * rect.height());
             painter.line_segment(
                 [egui::pos2(rect.min.x, zero_y), egui::pos2(rect.max.x, zero_y)],
-                Stroke::new(1.0, Color32::from_white_alpha(180)),
+                Stroke::new(1.0_f32, Color32::from_white_alpha(180)),
             );
         }
 

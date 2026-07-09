@@ -266,7 +266,7 @@ pub fn get_visuals_w95_1() -> egui::Visuals {
     visuals.dark_mode = false;
     visuals.window_fill = w95_gray;
     visuals.panel_fill = w95_gray;
-    visuals.window_stroke = Stroke::new(1.0, black);
+    visuals.window_stroke = Stroke::new(1.0_f32, black);
     visuals.window_shadow = Shadow::NONE;
     visuals.window_corner_radius = 0.0.into();
     visuals.menu_corner_radius = 0.0.into();
@@ -274,20 +274,20 @@ pub fn get_visuals_w95_1() -> egui::Visuals {
     visuals.override_text_color = Some(black);
 
     visuals.widgets.noninteractive.bg_fill = w95_gray;
-    visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, dark_gray);
-    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, black);
+    visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, dark_gray);
+    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, black);
 
     visuals.widgets.inactive.bg_fill = w95_gray;
-    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, dark_gray);
-    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, black);
+    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, dark_gray);
+    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, black);
 
     visuals.widgets.hovered.bg_fill = w95_gray;
-    visuals.widgets.hovered.bg_stroke = Stroke::new(1.1, black);
-    visuals.widgets.hovered.fg_stroke = Stroke::new(1.2, black);
+    visuals.widgets.hovered.bg_stroke = Stroke::new(1.1_f32, black);
+    visuals.widgets.hovered.fg_stroke = Stroke::new(1.2_f32, black);
 
     visuals.widgets.active.bg_fill = w95_gray;
-    visuals.widgets.active.bg_stroke = Stroke::new(1.0, black);
-    visuals.widgets.active.fg_stroke = Stroke::new(1.0, black);
+    visuals.widgets.active.bg_stroke = Stroke::new(1.0_f32, black);
+    visuals.widgets.active.fg_stroke = Stroke::new(1.0_f32, black);
 
     visuals
 }
