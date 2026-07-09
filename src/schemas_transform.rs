@@ -931,7 +931,7 @@ impl TfmSeqCfg {
     }
 
     pub(crate) fn recompute_metadata_with_known_inputs(&mut self) {
-        self.recompute_metadata(self.in_meta.clone());
+        self.recompute_metadata(self.in_meta);
     }
 
     pub(crate) fn recompute_metadata(&mut self, input: AutoOrManual<InputValueMetadata<BaseNumT>>) {

@@ -414,7 +414,7 @@ impl<T: NumIntervalValue> NumInterval<T> {
     }
 
     pub(crate) fn is_symm_unit(&self) -> bool {
-        self.to == T::one() && T::from_i32(-1).map_or(false, |neg_one| self.from == neg_one)
+        self.to == T::one() && (T::from_i32(-1) == Some(self.from))
     }
 
     pub(crate) fn map_from_unit<InputT: NumIntervalValue + Float>(

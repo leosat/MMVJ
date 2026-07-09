@@ -498,8 +498,7 @@ impl eframe::App for GuiMain {
                 });
                 ui.separator();
                 ui.label(format!(" Config: {}", &self.cfg.cfg_file.to_string_lossy()));
-            })
-            .inner;
+            });
 
         egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.horizontal(|ui| {
@@ -531,7 +530,7 @@ impl eframe::App for GuiMain {
                 ui.selectable_value(
                     &mut self.current_opened_tab,
                     GuiMainTabs::RuntimeConfigState,
-                    format!("{}", egui_phosphor::fill::BUG),
+                    egui_phosphor::fill::BUG.to_string(),
                 )
                 .on_hover_text("Runtime debug info. User, do not enter :)!");
             });
@@ -727,15 +726,11 @@ impl GuiMain {
                     }
                 }
                 let _ = self.cfg.traverse_mut(cmd);
-                if let Err(e) = self.execute_gui_command(GuiCmd::ConfigChangeSimple) {
-                    return Err(e);
-                }
+                self.execute_gui_command(GuiCmd::ConfigChangeSimple)?;
                 if cmd.is_virtual {
-                    if let Err(e) = self.execute_gui_command(GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
+                    self.execute_gui_command(GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
                         restart_persistent: true,
-                    })) {
-                        return Err(e);
-                    };
+                    }))?;
                 }
             }
             GuiCmd::DeviceMatcherRemove(cmd) => {
@@ -749,15 +744,11 @@ impl GuiMain {
                 #[cfg(feature = "midi")]
                 self.cfg.devices.midi.remove(&cmd.device_key);
                 self.cfg.recompute_mappings_metadata();
-                if let Err(e) = self.execute_gui_command(GuiCmd::ConfigChangeSimple) {
-                    return Err(e);
-                };
+                self.execute_gui_command(GuiCmd::ConfigChangeSimple)?;
                 if cmd.is_virtual {
-                    if let Err(e) = self.execute_gui_command(GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
+                    self.execute_gui_command(GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
                         restart_persistent: true,
-                    })) {
-                        return Err(e);
-                    };
+                    }))?;
                 }
             }
             GuiCmd::ControlMatcherChange(cmd) => {
@@ -814,9 +805,7 @@ impl GuiMain {
             }),
             GuiCmd::ConfigChangeSimple => self.send_driver_cmd(DriverCmd::ChangeConfigSimple { cfg: self.cfg.clone() }),
             GuiCmd::ConfigChangeDriverRestart => {
-                if let Err(e) = self.execute_gui_command(GuiCmd::ConfigChangeSimple) {
-                    return Err(e);
-                };
+                self.execute_gui_command(GuiCmd::ConfigChangeSimple)?;
                 self.send_driver_cmd(DriverCmd::Reload);
             }
             GuiCmd::DragAndDrop(_) | GuiCmd::LocalItemRemove(_) => {
@@ -923,8 +912,7 @@ impl GuiMain {
             }
         }
 
-        self.pending_cmds
-            .dedup_by(|next, prev| if &*next == &*prev { true } else { false });
+        self.pending_cmds.dedup_by(|next, prev| *next == *prev);
 
         let mut res = None;
         for cmd in self.pending_cmds.clone().drain(..) {
@@ -945,7 +933,7 @@ impl GuiMain {
         let is_editing = self.transient_states_device_key_edit.contains_key(dmk);
         if !is_editing {
             if ui
-                .button(format!("{}", egui_phosphor::fill::IDENTIFICATION_BADGE))
+                .button(egui_phosphor::fill::IDENTIFICATION_BADGE.to_string())
                 .on_hover_text("Edit config key name")
                 .clicked()
             {
@@ -956,7 +944,7 @@ impl GuiMain {
             let new_key = self.transient_states_device_key_edit.get_mut(dmk).unwrap();
 
             ui.horizontal(|ui| {
-                if ui.button(format!("{}", egui_phosphor::bold::CHECK_FAT)).clicked() {
+                if ui.button(egui_phosphor::bold::CHECK_FAT.to_string()).clicked() {
                     pending_change_to_submit = Some(GuiCmdDeviceKeyRename {
                         old_key: dmk.clone(),
                         new_key: new_key.clone(),
@@ -977,7 +965,7 @@ impl GuiMain {
 
     fn draw_device_remove_button(&mut self, ui: &mut egui::Ui, dmk: &String, is_virtual: bool) {
         if ui
-            .small_button(format!("{}", egui_phosphor::fill::TRASH))
+            .small_button(egui_phosphor::fill::TRASH.to_string())
             .on_hover_text("Try to remove (will be removed if not referenced)")
             .clicked()
         {
@@ -1001,7 +989,7 @@ impl GuiMain {
                 if let Some(ref mut list) = self.available_midi {
                     for (ad_idx, ad) in list.iter_mut().enumerate() {
                         ui.separator();
-                        ui.collapsing(&format!("({}) {}", ad_idx, ad.name), |ui| {
+                        ui.collapsing(format!("({}) {}", ad_idx, ad.name), |ui| {
                             ad.egui((), ui);
                         });
                     }
@@ -1014,7 +1002,7 @@ impl GuiMain {
         draw_collapsing_ui(ui, None::<()>, Some("Matchers"), |ui| {
             ui.separator();
             if ui
-                .button(format!("{}", egui_phosphor::bold::LIST_PLUS))
+                .button(egui_phosphor::bold::LIST_PLUS.to_string())
                 .on_hover_text("add midi matcher")
                 .clicked()
             {
@@ -1066,7 +1054,7 @@ impl GuiMain {
             if let Some(ref mut list) = self.available_hid {
                 for (ad_idx, ad) in list.iter_mut().enumerate() {
                     ui.separator();
-                    ui.collapsing(&format!("({}) {}", ad_idx, ad.name), |ui| {
+                    ui.collapsing(format!("({}) {}", ad_idx, ad.name), |ui| {
                         ad.egui((), ui);
                     });
                 }
@@ -1081,7 +1069,7 @@ impl GuiMain {
         draw_collapsing_ui(ui, None::<()>, Some("Virtual"), |ui| {
             ui.separator();
             if ui
-                .button(format!("{}", egui_phosphor::bold::LIST_PLUS))
+                .button(egui_phosphor::bold::LIST_PLUS.to_string())
                 .on_hover_text("add virtual device")
                 .clicked()
             {
@@ -1140,7 +1128,7 @@ impl GuiMain {
         draw_collapsing_ui(ui, None::<()>, Some("Matchers"), |ui| {
             ui.separator();
             if ui
-                .button(format!("{}", egui_phosphor::bold::LIST_PLUS))
+                .button(egui_phosphor::bold::LIST_PLUS.to_string())
                 .on_hover_text("add device matcher")
                 .clicked()
             {
@@ -1175,18 +1163,15 @@ impl GuiMain {
                             let dm = self.cfg.devices.hid.get_mut(&dmk).unwrap();
                             ui.separator();
                             ui.label(format!("Matcher classification: {}", dm.get_classification()));
-                            match dm.egui(
+                            if let Some(cmd) = dm.egui(
                                 GuiInDeviceCfg::Edit {
                                     cfg_predef_controls: &self.cfg.predef_controls,
                                     device_key: &dmk,
                                 },
                                 ui,
                             ) {
-                                Some(cmd) => {
-                                    dm.update_classification();
-                                    hid_matcher_update_cmd = Some(cmd);
-                                }
-                                _ => (),
+                                dm.update_classification();
+                                hid_matcher_update_cmd = Some(cmd);
                             }
                         });
                     }
@@ -1211,7 +1196,7 @@ impl GuiMain {
         let mut variable_edit_to_submit = None;
         let mut variable_remove_to_submit = None;
         if ui
-            .button(format!("{}", egui_phosphor::bold::LIST_PLUS))
+            .button(egui_phosphor::bold::LIST_PLUS.to_string())
             .on_hover_text("add variable")
             .clicked()
         {
@@ -1230,7 +1215,7 @@ impl GuiMain {
                     if self.transient_states_variable_edit.contains_key(v.0) {
                         let data = self.transient_states_variable_edit.get_mut(v.0).unwrap();
                         if ui
-                            .button(format!("{}", egui_phosphor::bold::CHECK_FAT))
+                            .button(egui_phosphor::bold::CHECK_FAT.to_string())
                             .on_hover_text("Submit")
                             .clicked()
                         {
@@ -1245,7 +1230,7 @@ impl GuiMain {
                         data.edited_definition.egui(GuiInKinds::Edit, ui);
                     } else {
                         if ui
-                            .button(format!("{}", egui_phosphor::bold::PENCIL))
+                            .button(egui_phosphor::bold::PENCIL.to_string())
                             .on_hover_text("Edit")
                             .clicked()
                         {
@@ -1264,7 +1249,7 @@ impl GuiMain {
                     }
                     ui.separator();
                     if ui
-                        .button(format!("{}", egui_phosphor::bold::TRASH))
+                        .button(egui_phosphor::bold::TRASH.to_string())
                         .on_hover_text("Remove (will not apply if referenced in mappings)")
                         .clicked()
                     {

@@ -31,7 +31,7 @@ impl<'s> DrawEgui<'s> for HIDDeviceForceFeedbackCfg {
         ui.separator();
         ui.collapsing("Effects", |ui| {
             let mut selected_effect: Option<crate::schemas_hid::HidFfEffect> = None;
-            egui::ComboBox::from_label(format!("{}", egui_phosphor::bold::MAGIC_WAND))
+            egui::ComboBox::from_label(egui_phosphor::bold::MAGIC_WAND.to_string())
                 .selected_text("Add effect...")
                 .show_ui(ui, |ui| {
                     for effect in crate::schemas_hid::HidFfEffect::iter() {
@@ -56,7 +56,7 @@ impl<'s> DrawEgui<'s> for HIDDeviceForceFeedbackCfg {
                     ui.label(effect.to_string());
                     ui.add_space(4.0);
                     if ui
-                        .button(format!("{}", egui_phosphor::bold::TRASH))
+                        .button(egui_phosphor::bold::TRASH.to_string())
                         .on_hover_text("Remove effect")
                         .clicked()
                     {
@@ -276,7 +276,7 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                             }
                             ui.separator();
                             if ui
-                                .small_button(format!("{}", egui_phosphor::fill::TRASH))
+                                .small_button(egui_phosphor::fill::TRASH.to_string())
                                 .on_hover_text("Remove control (will be removed if not referenced)")
                                 .clicked()
                             {

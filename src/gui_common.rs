@@ -80,11 +80,10 @@ pub(crate) struct GuiCmdDeviceKeyRename {
 impl traversable::VisitorMut for GuiCmdDeviceKeyRename {
     type Break = ();
     fn enter_mut(&mut self, node: &mut dyn Any) -> std::ops::ControlFlow<Self::Break, Self::Break> {
-        if let Some(dcm) = node.downcast_mut::<DeviceControlMatcherRef>() {
-            if dcm.device_matcher_key == self.old_key {
+        if let Some(dcm) = node.downcast_mut::<DeviceControlMatcherRef>()
+            && dcm.device_matcher_key == self.old_key {
                 dcm.device_matcher_key = self.new_key.clone();
             }
-        }
         std::ops::ControlFlow::Continue(())
     }
 }
@@ -104,11 +103,10 @@ pub(crate) struct GuiCmdDeviceMatcherRemove {
 impl traversable::VisitorMut for GuiCmdControlMatcherRemove {
     type Break = ();
     fn enter_mut(&mut self, node: &mut dyn std::any::Any) -> std::ops::ControlFlow<Self::Break> {
-        if let Some(dcr) = node.downcast_mut::<DeviceControlMatcherRef>() {
-            if dcr.device_matcher_key == self.device_key && dcr.control_key == self.control_key {
+        if let Some(dcr) = node.downcast_mut::<DeviceControlMatcherRef>()
+            && dcr.device_matcher_key == self.device_key && dcr.control_key == self.control_key {
                 return std::ops::ControlFlow::Break(());
             }
-        }
         std::ops::ControlFlow::Continue(())
     }
 }
@@ -116,11 +114,10 @@ impl traversable::VisitorMut for GuiCmdControlMatcherRemove {
 impl traversable::VisitorMut for GuiCmdDeviceMatcherRemove {
     type Break = ();
     fn enter_mut(&mut self, node: &mut dyn std::any::Any) -> std::ops::ControlFlow<Self::Break> {
-        if let Some(dcr) = node.downcast_mut::<DeviceControlMatcherRef>() {
-            if dcr.device_matcher_key == self.device_key {
+        if let Some(dcr) = node.downcast_mut::<DeviceControlMatcherRef>()
+            && dcr.device_matcher_key == self.device_key {
                 return std::ops::ControlFlow::Break(());
             }
-        }
         std::ops::ControlFlow::Continue(())
     }
 }
@@ -133,11 +130,10 @@ pub(crate) struct GuiCmdVariableRemove {
 impl traversable::VisitorMut for GuiCmdVariableRemove {
     type Break = ();
     fn enter_mut(&mut self, node: &mut dyn std::any::Any) -> std::ops::ControlFlow<Self::Break> {
-        if let Some(var_ref) = node.downcast_mut::<VariableRef>() {
-            if var_ref.variable_key == self.variable_key {
+        if let Some(var_ref) = node.downcast_mut::<VariableRef>()
+            && var_ref.variable_key == self.variable_key {
                 return std::ops::ControlFlow::Break(());
             }
-        }
         std::ops::ControlFlow::Continue(())
     }
 }
@@ -194,9 +190,9 @@ pub(crate) struct GuiCmdScriptAuxRename {
 impl traversable::VisitorMut for GuiCmdScriptAuxRename {
     type Break = ();
     fn enter_mut(&mut self, this: &mut dyn std::any::Any) -> std::ops::ControlFlow<Self::Break> {
-        if let Some(step) = this.downcast_mut::<TfmStepCfg>() {
-            if step.get_id() == self.tfm_step_id {
-                if let TfmStepCfg::Script(script) = step {
+        if let Some(step) = this.downcast_mut::<TfmStepCfg>()
+            && step.get_id() == self.tfm_step_id
+                && let TfmStepCfg::Script(script) = step {
                     match self.kind {
                         ScriptAuxKind::Source => {
                             if script.aux_srcs.contains_key(&self.new_key) {
@@ -224,8 +220,6 @@ impl traversable::VisitorMut for GuiCmdScriptAuxRename {
                         }
                     }
                 }
-            }
-        }
         std::ops::ControlFlow::Continue(())
     }
 }

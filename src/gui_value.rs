@@ -330,7 +330,7 @@ impl<'s> DrawEgui<'s> for VariableState {
                             }
                             ui.separator();
                             if ui
-                                .button(format!("{}", egui_phosphor::bold::ROBOT))
+                                .button(egui_phosphor::bold::ROBOT.to_string())
                                 .on_hover_text(
                                     "Convert to runtime variable (if clicked, will NOT be saved or restored from config)",
                                 )
@@ -344,7 +344,7 @@ impl<'s> DrawEgui<'s> for VariableState {
                             ui.label(egui::RichText::new(format!("{value:+11.4}")).monospace().strong());
                             ui.separator();
                             if ui
-                                .button(format!("{}", egui_phosphor::bold::HAND_TAP))
+                                .button(egui_phosphor::bold::HAND_TAP.to_string())
                                 .on_hover_text(
                                     "Convert to manually-set param (if clicked, WILL be saved and restored from config) \
                                     (WARNING: it can still be dynamically overridden from mappings)",
@@ -517,7 +517,7 @@ pub(crate) fn draw_value_choice_iface(
         if choose_ctl_window_opened {
             ui.label("selecting...");
         } else if ui
-            .button(format!("{}", egui_phosphor::regular::LIST_MAGNIFYING_GLASS))
+            .button(egui_phosphor::regular::LIST_MAGNIFYING_GLASS.to_string())
             .on_hover_text(match choice_context {
                 ValueRefChoiceContext::MappingSrc => "Select main src",
                 ValueRefChoiceContext::MappingDst => "Select main dst",

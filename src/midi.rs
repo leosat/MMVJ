@@ -54,7 +54,7 @@ impl MappedMidiMessage {
         let type_code = status & 0xF0;
 
         let mut m = Self {
-            device_id: device_id,
+            device_id,
             channel,
             /* overriden below */
             message_type: Default::default(),
@@ -109,7 +109,7 @@ impl MappedMidiMessage {
     }
 
     pub(crate) fn matches_control_matcher(&self, control_matcher: &MidiControlMatcherCfg) -> bool {
-        control_matcher.midi_message.r#type == self.message_type.clone().into()
+        control_matcher.midi_message.r#type == self.message_type.into()
             && match control_matcher.midi_message.channel {
                 MidiChannelCfg::Any => true,
                 MidiChannelCfg::Number(n) => self.channel == n,
