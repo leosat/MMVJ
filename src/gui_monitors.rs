@@ -24,20 +24,20 @@ impl<'s> DrawEgui<'s> for UiAxisMonitorCfg {
             let painter = ui.painter();
             let center_x = rect.center().x;
 
-            let border_stroke = egui::Stroke::new(5.0, egui::Color32::WHITE);
+            let border_stroke = egui::Stroke::new(5.0_f32, egui::Color32::WHITE);
             painter.line_segment([rect.left_top(), rect.left_bottom()], border_stroke);
             painter.line_segment([rect.right_top(), rect.right_bottom()], border_stroke);
 
             painter.line_segment(
                 [egui::pos2(center_x, rect.min.y), egui::pos2(center_x, rect.max.y)],
-                egui::Stroke::new(1.0, egui::Color32::WHITE),
+                egui::Stroke::new(1.0_f32, egui::Color32::WHITE),
             );
 
             let quarter_offset = rect.width() / 4.0;
             let marker_height = rect.height() * 0.5;
             let marker_y_top = rect.center().y - (marker_height / 2.0);
             let marker_y_bottom = rect.center().y + (marker_height / 2.0);
-            let marker_stroke = egui::Stroke::new(2.0, egui::Color32::GOLD);
+            let marker_stroke = egui::Stroke::new(2.0_f32, egui::Color32::GOLD);
 
             for x in [center_x - quarter_offset, center_x + quarter_offset] {
                 painter.line_segment(
@@ -94,7 +94,7 @@ impl<'s> DrawEgui<'s> for UiAxisMonitorCfg {
             painter.rect_stroke(
                 cursor_rect,
                 0.0,
-                egui::Stroke::new(6.0, egui::Color32::WHITE),
+                egui::Stroke::new(6.0_f32, egui::Color32::WHITE),
                 egui::StrokeKind::Middle,
             );
 
