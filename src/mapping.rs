@@ -170,8 +170,11 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     // TODO: logic for matching available devices with device matchers
                     // TODO: will go to a reusable routine for reuse in other parts, e.g. in Gui.
                     v.is_enabled()
-                        && v.matcher_name_regex_ref().map(|r| r.is_match(&available_hid_device_info.name))
-                            .or(v.virtual_device_name_ref().map(|n| crate::hid_device::sanitize_hid_name(n) == available_hid_device_info.name))
+                        && v.matcher_name_regex_ref()
+                            .map(|r| r.is_match(&available_hid_device_info.name))
+                            .or(v
+                                .virtual_device_name_ref()
+                                .map(|n| crate::hid_device::sanitize_hid_name(n) == available_hid_device_info.name))
                             .unwrap_or_default()
                         && v.get_classification()
                             .intersects(available_hid_device_info.classification)
@@ -367,29 +370,29 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             && let Some((cms, mappings)) = self
                 .router_index_sysdev_and_ctl_type_to_cms_and_mappings
                 .get(&(device_id, control_type))
-            {
-                cms.iter().enumerate().for_each(|(cm_idx, cm)| {
-                    cm.set_last_known_io(value);
-                    cm.set_numeric_value(
-                        value, /* NB/TODO: for Rel controls in proposed "stable mode": value + cm.get_numeric_value())
-                              and safe ptr to the control to zero-out after mappings run complete*/
-                    );
-                    if !mappings.is_empty() {
-                        self.router_buff_mappings_to_execute.extend(&mappings[cm_idx]);
-                    }
-                });
-
-                let cms_ptr = cms as *const Vec<ControlMatchers>;
-
-                self.run_mappings__(device_id);
-
-                if control_type.is_relative() {
-                    // SAFETY: we do not modify router indexes in any way during mappings processing.
-                    // TODO/NB: refactor run_mappings__ to separately borrow mapping engine members (like "views") and make borrow checker happy to
-                    // TODO/NB: directly use cms reference here, without having to use the pointer.
-                    unsafe { &*cms_ptr }.iter().for_each(|cm| cm.set_numeric_value(0.0));
+        {
+            cms.iter().enumerate().for_each(|(cm_idx, cm)| {
+                cm.set_last_known_io(value);
+                cm.set_numeric_value(
+                    value, /* NB/TODO: for Rel controls in proposed "stable mode": value + cm.get_numeric_value())
+                          and safe ptr to the control to zero-out after mappings run complete*/
+                );
+                if !mappings.is_empty() {
+                    self.router_buff_mappings_to_execute.extend(&mappings[cm_idx]);
                 }
+            });
+
+            let cms_ptr = cms as *const Vec<ControlMatchers>;
+
+            self.run_mappings__(device_id);
+
+            if control_type.is_relative() {
+                // SAFETY: we do not modify router indexes in any way during mappings processing.
+                // TODO/NB: refactor run_mappings__ to separately borrow mapping engine members (like "views") and make borrow checker happy to
+                // TODO/NB: directly use cms reference here, without having to use the pointer.
+                unsafe { &*cms_ptr }.iter().for_each(|cm| cm.set_numeric_value(0.0));
             }
+        }
     }
 
     fn run_mappings__(&mut self, triggering_device_id: ObjId) {

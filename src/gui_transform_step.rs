@@ -159,6 +159,7 @@ pub(crate) enum GuiInTfmStepsSeq<'g> {
         graph_states: &'g UncheckedRefCell<GuiTelemetryGraphStates>,
         cfg_devices: &'g DevicesCfgNew,
         cfg_variables: &'g VariablesCfg,
+        #[allow(clippy::all)]
         transient_script_aux_edits: &'g UncheckedRefCell<HashMap<(ObjId, ScriptAuxKind), (String, String)>>,
         hier: Vec<usize>,
     },
@@ -1384,14 +1385,15 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                                                 );
                                             }
                                             ScriptAuxKind::Transformation => {
-                                                let mut new_tfm_seq = TfmSeqCfg::default();
-                                                new_tfm_seq.in_meta = AutoOrManual::Manual(Default::default());
                                                 self.aux_transformations.insert(
                                                     get_item_name_with_random_suffix(
                                                         "Tfm",
                                                         self.aux_transformations.len() + 1,
                                                     ),
-                                                    new_tfm_seq,
+                                                    TfmSeqCfg {
+                                                        in_meta: AutoOrManual::Manual(Default::default()),
+                                                        ..Default::default()
+                                                    },
                                                 );
                                             }
                                         };
