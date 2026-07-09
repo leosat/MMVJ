@@ -244,7 +244,7 @@ impl<'s> DrawEgui<'s> for MidiMatcherCfg {
                             ui.add(egui::Slider::new(&mut val, c.range.into()).show_value(false));
                             ui.separator();
                             if ui
-                                .small_button(format!("{}", egui_phosphor::fill::TRASH))
+                                .small_button(egui_phosphor::fill::TRASH.to_string())
                                 .on_hover_text("Remove (will be removed if not referenced)")
                                 .clicked()
                             {

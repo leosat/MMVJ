@@ -148,6 +148,7 @@ impl WithTfmExec for OneEuroFilterCfg {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Default)]
 pub(crate) struct RaiseFallExeState {
     pub(crate) prev_out: BaseNumT,
     pub(crate) last_target: BaseNumT,
@@ -155,16 +156,6 @@ pub(crate) struct RaiseFallExeState {
     pub(crate) prev_user_input_time: Option<Instant>,
 }
 
-impl Default for RaiseFallExeState {
-    fn default() -> Self {
-        Self {
-            prev_out: Default::default(),
-            last_target: Default::default(),
-            prev_out_time: Default::default(),
-            prev_user_input_time: Default::default(),
-        }
-    }
-}
 
 impl TfmExeState for RaiseFallCfg {
     type StateMutT<'a>
@@ -293,7 +284,7 @@ impl WithTfmExec for EmaFilterCfg {
 
 impl WithTfmExec for TfmStepCfg {
     fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
-        self.common_state_ref().last_in.store(input.value as f32, Relaxed);
+        self.common_state_ref().last_in.store(input.value, Relaxed);
         #[cfg(feature = "gui")]
         self.common_state_ref()
             .gui_trace(TfmStepTraceStage::In, &input, Instant::now());
@@ -317,7 +308,7 @@ impl WithTfmExec for TfmStepCfg {
             TfmStepCfg::_ForceFeedback(_) => input,
         };
 
-        self.common_state_ref().last_out.store(input.value as f32, Relaxed);
+        self.common_state_ref().last_out.store(input.value, Relaxed);
         #[cfg(feature = "gui")]
         self.common_state_ref()
             .gui_trace(TfmStepTraceStage::Out, &input, Instant::now());
@@ -500,7 +491,7 @@ impl TfmExeState for ScriptCfg {
 
         // COMPAT
         let aux_tfm_idx = state.lua.create_table().unwrap();
-        for (_idx, (name, _)) in self.aux_transformations.iter().enumerate() {
+        for (name, _) in self.aux_transformations.iter() {
             let _ = aux_tfm_idx.set(name.as_str(), name.to_string());
         }
         let _ = state
@@ -890,7 +881,7 @@ impl WithTfmExec for SteeringCfg {
                     TfmStepTraceStage::Custom(
                         GraphDisplayStyle::default()
                             .with_color(
-                                Color32::GREEN.gamma_multiply((1.0 as BaseNumT - hold_factor_unit).max(0.4) as f32),
+                                Color32::GREEN.gamma_multiply((1.0 as BaseNumT - hold_factor_unit).max(0.4)),
                             )
                             .with_width(1.7),
                     ),
@@ -936,7 +927,7 @@ impl WithTfmExec for SteeringCfg {
 
         if let Some(acc) = &self.accumulator {
             ctx.set_dyn_value(
-                &acc,
+                acc,
                 acc.get_interval()
                     .map_from_symm_unit(state.pre_filter, OutOfRangePolicy::Clamp),
             );

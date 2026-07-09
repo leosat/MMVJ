@@ -370,9 +370,9 @@ impl<'de> Deserialize<'de> for DynValueRefs {
         use serde::de::IntoDeserializer;
         let raw: serde_value::Value = Deserialize::deserialize(deserializer)?;
         match DeviceControlMatcherRef::deserialize(raw.clone().into_deserializer()) {
-            Ok(matcher) => return Ok(DynValueRefs::DeviceControlMatcher(matcher)),
+            Ok(matcher) => Ok(DynValueRefs::DeviceControlMatcher(matcher)),
             Err(err_matcher) => match VariableRef::deserialize(raw.clone().into_deserializer()) {
-                Ok(variable) => return Ok(DynValueRefs::Variable(variable)),
+                Ok(variable) => Ok(DynValueRefs::Variable(variable)),
                 Err(err_variable) => Err(D::Error::custom(format!(
                     "Dynamic value ref config error.\n\
                         Expected either a DeviceControlMatcher or a Variable reference.\n\n\
@@ -579,7 +579,7 @@ where
     S: Serializer,
 {
     match v {
-        ValueSrcs::Static(v) => serializer.serialize_f32(v.value as f32),
+        ValueSrcs::Static(v) => serializer.serialize_f32(v.value),
         ValueSrcs::Dynamic(v) => v.serialize(serializer),
     }
 }
@@ -716,7 +716,7 @@ impl<'de> Deserialize<'de> for ValueDsts {
         use serde::de::Error;
         let raw: serde_value::Value = Deserialize::deserialize(deserializer)?;
         match DynValueRefs::deserialize(raw.clone().into_deserializer()) {
-            Ok(dynamic) => return Ok(ValueDsts::Dynamic(dynamic)),
+            Ok(dynamic) => Ok(ValueDsts::Dynamic(dynamic)),
             Err(dynamic_err) => {
                 let is_void = match <()>::deserialize(raw.clone().into_deserializer()) {
                     Ok(()) => true,

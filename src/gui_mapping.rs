@@ -300,9 +300,9 @@ impl crate::gui_main::GuiMain {
             )),
             |ui| {
                 ui.horizontal(|ui| {
-                    if self.cfg.mappings.iter().any(|v| v.enabled) {
-                        if ui
-                            .button(format!("{}", egui_phosphor::bold::STOP))
+                    if self.cfg.mappings.iter().any(|v| v.enabled)
+                        && ui
+                            .button(egui_phosphor::bold::STOP.to_string())
                             .on_hover_text("Disable all mappings")
                             .clicked()
                         {
@@ -311,10 +311,9 @@ impl crate::gui_main::GuiMain {
                                 *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
                             }
                         };
-                    }
-                    if !self.cfg.mappings.iter().all(|v| v.enabled) {
-                        if ui
-                            .button(format!("{}", egui_phosphor::bold::PLAY))
+                    if !self.cfg.mappings.iter().all(|v| v.enabled)
+                        && ui
+                            .button(egui_phosphor::bold::PLAY.to_string())
                             .on_hover_text("Enable all mappings")
                             .clicked()
                         {
@@ -323,11 +322,10 @@ impl crate::gui_main::GuiMain {
                                 *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
                             }
                         };
-                    }
 
                     ui.separator();
                     if ui
-                        .button(format!("{}", egui_phosphor::bold::PLUS))
+                        .button(egui_phosphor::bold::PLUS.to_string())
                         .on_hover_text("Create new mapping")
                         .clicked()
                     {
@@ -340,13 +338,13 @@ impl crate::gui_main::GuiMain {
         .body(|ui| {
             for (mapping_idx, mapping) in &mut self.cfg.mappings.iter_mut().enumerate() {
                 ui.separator();
-                ui.push_id(mapping_idx.clone(), |ui| {
+                ui.push_id(mapping_idx, |ui| {
                     ui.horizontal(|ui| {
                         {
                             let (label, on_hover_text) = if mapping.enabled {
-                                (format!("{}", egui_phosphor::bold::STOP), "Disable")
+                                (egui_phosphor::bold::STOP.to_string(), "Disable")
                             } else {
-                                (format!("{}", egui_phosphor::bold::PLAY), "Enable")
+                                (egui_phosphor::bold::PLAY.to_string(), "Enable")
                             };
                             if ui.button(label).on_hover_text(on_hover_text).clicked() {
                                 mapping.enabled = !mapping.enabled;
@@ -370,7 +368,7 @@ impl crate::gui_main::GuiMain {
                         ui.separator();
 
                         if ui
-                            .button(format!("{}", egui_phosphor::bold::TRASH))
+                            .button(egui_phosphor::bold::TRASH.to_string())
                             .on_hover_text("Remove mapping")
                             .clicked()
                         {

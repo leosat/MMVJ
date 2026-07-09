@@ -79,7 +79,7 @@ impl PartialEq for HidMatcherParamsCfg {
 impl Default for HidMatcherParamsCfg {
     fn default() -> Self {
         Self {
-            match_name_regex: regex::Regex::new(&".*").unwrap(),
+            match_name_regex: regex::Regex::new(".*").unwrap(),
         }
     }
 }

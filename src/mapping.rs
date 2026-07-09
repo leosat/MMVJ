@@ -170,14 +170,8 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     // TODO: logic for matching available devices with device matchers
                     // TODO: will go to a reusable routine for reuse in other parts, e.g. in Gui.
                     v.is_enabled()
-                        && v.matcher_name_regex_ref()
-                            .and_then(|r| Some(r.is_match(&available_hid_device_info.name)))
-                            .or(v.virtual_device_name_ref().and_then(|n| {
-                                Some(
-                                    /*TODO: configuration sanitization and validation with garde*/
-                                    crate::hid_device::sanitize_hid_name(n) == available_hid_device_info.name,
-                                )
-                            }))
+                        && v.matcher_name_regex_ref().map(|r| r.is_match(&available_hid_device_info.name))
+                            .or(v.virtual_device_name_ref().map(|n| crate::hid_device::sanitize_hid_name(n) == available_hid_device_info.name))
                             .unwrap_or_default()
                         && v.get_classification()
                             .intersects(available_hid_device_info.classification)
@@ -187,7 +181,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                 let opened_device_info = self.hid_mgr.open(available_hid_device_info.clone(), dmk, dm)?;
                 let opened_device_id = opened_device_info.id;
 
-                for (_, cm) in &dm.controls {
+                for cm in dm.controls.values() {
                     let (cms, mappings) = self
                         .router_index_sysdev_and_ctl_type_to_cms_and_mappings
                         .entry((opened_device_id, cm.r#type))
@@ -218,7 +212,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             {
                 let opened_device_id = self.midi_mgr.open(&available_midi_device_info.name)?;
 
-                for (_, cm) in &dm.controls {
+                for cm in dm.controls.values() {
                     let (cms, mappings) = self
                         .router_index_sysdev_and_ctl_type_to_cms_and_mappings
                         .entry((opened_device_id, cm.midi_message.r#type.into()))
@@ -353,7 +347,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                 })
                 .for_each(|(cm_idx, cm)| {
                     cm.set_numeric_value(msg.get_operational_value());
-                    if mappings.len() > 0 {
+                    if !mappings.is_empty() {
                         self.router_buff_mappings_to_execute.extend(&mappings[cm_idx]);
                     }
                 });
@@ -370,8 +364,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             device_id,
             event: MappedEvents::Hid(MappedHidEvent { control_type, value }),
         } = event
-        {
-            if let Some((cms, mappings)) = self
+            && let Some((cms, mappings)) = self
                 .router_index_sysdev_and_ctl_type_to_cms_and_mappings
                 .get(&(device_id, control_type))
             {
@@ -381,7 +374,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                         value, /* NB/TODO: for Rel controls in proposed "stable mode": value + cm.get_numeric_value())
                               and safe ptr to the control to zero-out after mappings run complete*/
                     );
-                    if mappings.len() > 0 {
+                    if !mappings.is_empty() {
                         self.router_buff_mappings_to_execute.extend(&mappings[cm_idx]);
                     }
                 });
@@ -397,7 +390,6 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     unsafe { &*cms_ptr }.iter().for_each(|cm| cm.set_numeric_value(0.0));
                 }
             }
-        }
     }
 
     fn run_mappings__(&mut self, triggering_device_id: ObjId) {
@@ -497,7 +489,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
 
         vd = mapping.transformation.exec(
             vd,
-            &mut MappingTfmExecCtx {
+            &MappingTfmExecCtx {
                 mapping_engine: self,
                 current_mapping_src: &mapping.src,
                 current_mapping_dst: &mapping.dst,
@@ -532,7 +524,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     }
                 }
             }
-            DynValueRefs::Variable(v) => v.variable.value.store(v.variable.interval.clamp(val) as f32, Relaxed),
+            DynValueRefs::Variable(v) => v.variable.value.store(v.variable.interval.clamp(val), Relaxed),
         }
     }
 }

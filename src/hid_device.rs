@@ -241,7 +241,7 @@ impl HidDevice {
             .cfg_spec
             .virtual_device_bus_info_ref()
             .or(Some(&HidDeviceBusSpecCfg::default()))
-            .and_then(|businfo| {
+            .map(|businfo| {
                 evdev_builder = evdev_builder.input_id(evdev::InputId::new(
                     match businfo.r#type {
                         HidDeviceBusType::Virtual => evdev::BusType::BUS_VIRTUAL,
@@ -254,7 +254,7 @@ impl HidDevice {
                     businfo.product_id,
                     businfo.version,
                 ));
-                Some(evdev_builder)
+                evdev_builder
             })
             .unwrap();
 
@@ -601,7 +601,7 @@ impl HidDevice {
                         event: MappedEvents::Hid(MappedHidEvent { control_type, value }),
                     }) = event
                     {
-                        ctl_states[control_type as usize].store(value as f32, std::sync::atomic::Ordering::Relaxed);
+                        ctl_states[control_type as usize].store(value, std::sync::atomic::Ordering::Relaxed);
 
                         if let Some(external_notification_tx) = &external_notification_tx
                             && let Err(e) = external_notification_tx.send(event.unwrap())
@@ -752,7 +752,7 @@ impl HidDevice {
     }
 
     pub(crate) fn set_control_value(&mut self, control: MappedCtls, value: BaseNumT) {
-        self.ctl_states[control as usize].store(value as f32, std::sync::atomic::Ordering::Relaxed);
+        self.ctl_states[control as usize].store(value, std::sync::atomic::Ordering::Relaxed);
 
         if branches::likely(self.is_owning()) {
             if let Some(owned_device) = &mut self.owned_virtual_device {

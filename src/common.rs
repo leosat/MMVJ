@@ -47,8 +47,8 @@ pub(crate) fn set_debug_level__(debug: DebugLevel) {
 
 use lasso::{Key, ThreadedRodeo};
 static INTERNER: LazyLock<Arc<ThreadedRodeo>> = LazyLock::new(|| {
-    let interner = Default::default();
-    interner
+    
+    Default::default()
 });
 
 pub(crate) fn get_interned_str(id: usize) -> Option<&'static str> {
@@ -224,9 +224,7 @@ pub(crate) enum DriverCmd {
 
 impl PartialEq for DriverCmd {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
-        }
+        core::mem::discriminant(self) == core::mem::discriminant(other)
     }
 }
 

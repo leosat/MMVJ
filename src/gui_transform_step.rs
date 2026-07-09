@@ -127,7 +127,7 @@ fn draw_graph_docked_or_windowed(
                     .clicked();
                 if !was_graph_window_opened
                     && ui
-                        .button(format!("{}", egui_phosphor::bold::APP_WINDOW))
+                        .button(egui_phosphor::bold::APP_WINDOW.to_string())
                         .on_hover_text("Open graph in a separate window")
                         .clicked()
                 {
@@ -181,7 +181,7 @@ impl<'g> Clone for GuiInTfmStepsSeq<'g> {
                 cfg_devices,
                 hier: hier.clone(),
                 cfg_variables,
-                transient_script_aux_edits: transient_script_aux_edits,
+                transient_script_aux_edits,
             },
             Self::Display => Self::Display,
         }
@@ -527,10 +527,10 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                     let mut gui_out = bool_to_simple_change_gui_cmd(
                                         ui.checkbox(self.get_enabled_ref_mut(), enable_disable_text).changed(),
                                     );
-                                    draw_step_in_out(ui, &self.common_state_ref(), is_enabled);
+                                    draw_step_in_out(ui, self.common_state_ref(), is_enabled);
                                     ui.separator();
                                     if ui
-                                        .button(format!("{}", egui_phosphor::bold::TRASH))
+                                        .button(egui_phosphor::bold::TRASH.to_string())
                                         .on_hover_text("Remove step")
                                         .clicked()
                                     {
@@ -1362,7 +1362,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                                 |ui| {
                                     ui.separator();
                                     if ui
-                                        .button(format!("{}", egui_phosphor::bold::LIST_PLUS))
+                                        .button(egui_phosphor::bold::LIST_PLUS.to_string())
                                         .on_hover_text(match aux_kind {
                                             ScriptAuxKind::Source => "add source",
                                             ScriptAuxKind::Destination => "add destination",
@@ -1417,7 +1417,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                                             let is_editing = transient_script_aux_edits.borrow().contains_key(&key);
                                             if !is_editing {
                                                 if ui
-                                                    .button(format!("{}", egui_phosphor::bold::IDENTIFICATION_BADGE,))
+                                                    .button(egui_phosphor::bold::IDENTIFICATION_BADGE.to_string())
                                                     .on_hover_text("Click to rename")
                                                     .clicked()
                                                 {
@@ -1451,7 +1451,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                                         }
                                         ui.separator();
                                         let remove = ui
-                                            .button(format!("{}", egui_phosphor::bold::TRASH))
+                                            .button(egui_phosphor::bold::TRASH.to_string())
                                             .on_hover_text("Remove")
                                             .clicked();
                                         match aux_kind {
@@ -1673,7 +1673,7 @@ fn draw_egui_script_src_or_dest<'s>(
                                             ui,
                                         );
                                         if ui
-                                            .button(format!("{}", egui_phosphor::bold::TRASH))
+                                            .button(egui_phosphor::bold::TRASH.to_string())
                                             .on_hover_text("Remove remapping range")
                                             .clicked()
                                         {
