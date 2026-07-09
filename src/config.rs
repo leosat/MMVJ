@@ -77,24 +77,15 @@ impl From<bool> for DebugLevel {
 
 impl DebugLevel {
     pub fn is_on(&self) -> bool {
-        match self {
-            Self::Off => false,
-            _ => true,
-        }
+        !matches!(self, Self::Off)
     }
 
     pub fn is_mid_or_above(&self) -> bool {
-        match self {
-            Self::Hi | Self::Mid => true,
-            _ => false,
-        }
+        matches!(self, Self::Hi | Self::Mid)
     }
 
     pub fn is_hi(&self) -> bool {
-        match self {
-            Self::Hi => true,
-            _ => false,
-        }
+        matches!(self, Self::Hi)
     }
 }
 

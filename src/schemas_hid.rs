@@ -443,17 +443,17 @@ pub(crate) enum HidFfEffect {
 
 impl HidFfEffect {
     pub(crate) fn is_periodic(&self) -> bool {
-        match self {
+        matches!(
+            self,
             HidFfEffect::Periodic
-            | HidFfEffect::Rumble
-            | HidFfEffect::Square
-            | HidFfEffect::Triangle
-            | HidFfEffect::Sine
-            | HidFfEffect::SawUp
-            | HidFfEffect::SawDown
-            | HidFfEffect::Custom => true,
-            _ => false,
-        }
+                | HidFfEffect::Rumble
+                | HidFfEffect::Square
+                | HidFfEffect::Triangle
+                | HidFfEffect::Sine
+                | HidFfEffect::SawUp
+                | HidFfEffect::SawDown
+                | HidFfEffect::Custom
+        )
     }
 }
 

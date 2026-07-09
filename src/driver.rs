@@ -366,6 +366,7 @@ pub async fn run(
                         (DriverMainLoopAction::Continue,_) => {},
                         (DriverMainLoopAction::Halt,_) => {
                             #[cfg(feature = "gui")]
+                            #[allow(clippy::option_map_unit_fn)]
                             if let Some(gui_thread_handle) = gui_thread_handle {
                                 gui_thread_handle.join().ok().map(|v|
                                     log::info!("Gui thread finitied with status {v:?}, \
