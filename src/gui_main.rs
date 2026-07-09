@@ -146,7 +146,7 @@ pub(crate) fn run(
                     if let Some(saved) = saved {
                         // dbg!(&saved);
                         log::info!("Restoring Gui state ... ");
-                        app.from_saved_state(&saved);
+                        app.fill_saved_state(&saved);
                         log::info!("Done restoring Gui state ... ");
                     }
                 } else {
@@ -654,7 +654,7 @@ impl eframe::App for GuiMain {
 // ================================================================================
 
 impl GuiMain {
-    pub(crate) fn from_saved_state(&mut self, saved: &GuiMainSavedState) {
+    pub(crate) fn fill_saved_state(&mut self, saved: &GuiMainSavedState) {
         self.current_opened_tab = saved.current_opened_tab;
         self.gui_tab_mappings_current_opened_mapping_idx = saved.gui_tab_mappings_current_opened_mapping_idx;
         self.show_monitors = saved.show_monitors;
@@ -963,14 +963,14 @@ impl GuiMain {
         }
     }
 
-    fn draw_device_remove_button(&mut self, ui: &mut egui::Ui, dmk: &String, is_virtual: bool) {
+    fn draw_device_remove_button(&mut self, ui: &mut egui::Ui, dmk: &str, is_virtual: bool) {
         if ui
             .small_button(egui_phosphor::fill::TRASH.to_string())
             .on_hover_text("Try to remove (will be removed if not referenced)")
             .clicked()
         {
             self.submit_post_draw_cmd(GuiCmd::DeviceMatcherRemove(GuiCmdDeviceMatcherRemove {
-                device_key: dmk.clone(),
+                device_key: dmk.to_owned(),
                 is_virtual,
             }));
         }

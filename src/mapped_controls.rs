@@ -707,9 +707,7 @@ impl MappedCtls {
             use crate::midi::MIDIv1_CONTROL_INTERVAL;
 
             let mut mc = MidiControlMatcherCfg::default();
-            mc.midi_message.r#type = (*self)
-                .try_into()
-                .expect("Only MIDI control types are expected here.");
+            mc.midi_message.r#type = (*self).try_into().expect("Only MIDI control types are expected here.");
             mc.from_predefined = "_ Generated _ ".to_string();
             mc.range = MIDIv1_CONTROL_INTERVAL;
             match mc.midi_message.r#type {

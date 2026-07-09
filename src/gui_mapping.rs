@@ -32,6 +32,7 @@ pub(crate) enum GuiInMapping<'s> {
         graph_states: &'s UncheckedRefCell<GuiTelemetryGraphStates>,
         cfg_devices: &'s DevicesCfgNew,
         cfg_variables: &'s VariablesCfg,
+        #[allow(clippy::type_complexity)]
         transient_script_aux_edits: &'s UncheckedRefCell<HashMap<(ObjId, ScriptAuxKind), (String, String)>>,
     },
 }
@@ -305,23 +306,23 @@ impl crate::gui_main::GuiMain {
                             .button(egui_phosphor::bold::STOP.to_string())
                             .on_hover_text("Disable all mappings")
                             .clicked()
-                        {
-                            for m in &mut *self.cfg.mappings {
-                                m.enabled = false;
-                                *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
-                            }
-                        };
+                    {
+                        for m in &mut *self.cfg.mappings {
+                            m.enabled = false;
+                            *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
+                        }
+                    };
                     if !self.cfg.mappings.iter().all(|v| v.enabled)
                         && ui
                             .button(egui_phosphor::bold::PLAY.to_string())
                             .on_hover_text("Enable all mappings")
                             .clicked()
-                        {
-                            for m in &mut *self.cfg.mappings {
-                                m.enabled = true;
-                                *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
-                            }
-                        };
+                    {
+                        for m in &mut *self.cfg.mappings {
+                            m.enabled = true;
+                            *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
+                        }
+                    };
 
                     ui.separator();
                     if ui
@@ -426,6 +427,7 @@ struct DndJobMoveTfmStep_Visitor {
 impl traversable::VisitorMut for DndJobMoveTfmStep_Visitor {
     type Break = ();
 
+    #[allow(clippy::all)]
     fn enter_mut(&mut self, node: &mut dyn Any) -> std::ops::ControlFlow<Self::Break> {
         if let Some(tfm_seq) = node.downcast_mut::<TfmSeqCfg>() {
             if MORE_DEBUG {

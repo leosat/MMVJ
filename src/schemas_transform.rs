@@ -287,7 +287,7 @@ pub(crate) enum TfmStepCfg {
     _HighPass(#[garde(skip)] HighPassCfg),
     #[strum(disabled)]
     #[traverse(skip)]
-    _ForceFeedback(#[garde(skip)] ForceFeedbackCfg),
+    _ForceFeedback(#[garde(skip)] Box<ForceFeedbackCfg>),
 }
 
 impl TfmStepCfg {
@@ -375,23 +375,23 @@ pub(crate) struct ForceFeedbackCfg {
     #[serde(default)]
     #[garde(skip)]
     pub(crate) transformation: TfmSeqCfg,
-    #[serde(default)]
-    #[serde(skip_serializing_if = "is_false")]
-    #[garde(skip)]
-    pub(crate) external_gain_control_enabled: bool,
-    #[serde(default)]
-    #[serde(skip_serializing_if = "is_false")]
-    #[garde(skip)]
-    pub(crate) external_autocentering_control_enabled: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[garde(skip)]
-    pub(crate) constant: Option<Box<ForceFeedbackCfg>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[garde(skip)]
-    pub(crate) spring: Option<Box<ForceFeedbackCfg>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[garde(skip)]
-    pub(crate) friction: Option<Box<ForceFeedbackCfg>>,
+    // #[serde(default)]
+    // #[serde(skip_serializing_if = "is_false")]
+    // #[garde(skip)]
+    // pub(crate) external_gain_control_enabled: bool,
+    // #[serde(default)]
+    // #[serde(skip_serializing_if = "is_false")]
+    // #[garde(skip)]
+    // pub(crate) external_autocentering_control_enabled: bool,
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    // #[garde(skip)]
+    // pub(crate) constant: Option<Box<ForceFeedbackCfg>>,
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    // #[garde(skip)]
+    // pub(crate) spring: Option<Box<ForceFeedbackCfg>>,
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    // #[garde(skip)]
+    // pub(crate) friction: Option<Box<ForceFeedbackCfg>>,
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     #[garde(skip)]
@@ -1193,8 +1193,9 @@ impl<T: Copy + Default> Copy for AutoOrManual<T> {}
 
 impl<T: Default> AutoOrManual<T> {
     pub(crate) fn is_auto(&self) -> bool {
-        if let Self::Auto(_) = self { true } else { false }
+        matches!(self, Self::Auto(_))
     }
+
     pub(crate) fn _set(&mut self, other: T) {
         match self {
             AutoOrManual::Manual(v) => *v = other,
@@ -1314,6 +1315,7 @@ macro_rules! impl_with_common_state {
 
 impl_with_common_state!(
     ForceFeedbackCfg,
+    Box<ForceFeedbackCfg>,
     ClampCfg,
     NopCfg,
     InvertCfg,

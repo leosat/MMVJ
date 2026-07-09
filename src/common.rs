@@ -46,10 +46,7 @@ pub(crate) fn set_debug_level__(debug: DebugLevel) {
 // ================================================
 
 use lasso::{Key, ThreadedRodeo};
-static INTERNER: LazyLock<Arc<ThreadedRodeo>> = LazyLock::new(|| {
-    
-    Default::default()
-});
+static INTERNER: LazyLock<Arc<ThreadedRodeo>> = LazyLock::new(Default::default);
 
 pub(crate) fn get_interned_str(id: usize) -> Option<&'static str> {
     let key = lasso::Spur::try_from_usize(id).unwrap_or_default();

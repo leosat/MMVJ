@@ -47,6 +47,7 @@ impl<T> ThreadLocalState<T> {
         unsafe { &*self.inner.get() }
     }
 
+    #[allow(clippy::mut_from_ref)]
     fn get_mut(&self) -> &mut T {
         unsafe { &mut *self.inner.get() }
     }
@@ -147,15 +148,13 @@ impl WithTfmExec for OneEuroFilterCfg {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-#[derive(Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub(crate) struct RaiseFallExeState {
     pub(crate) prev_out: BaseNumT,
     pub(crate) last_target: BaseNumT,
     pub(crate) prev_out_time: Option<Instant>,
     pub(crate) prev_user_input_time: Option<Instant>,
 }
-
 
 impl TfmExeState for RaiseFallCfg {
     type StateMutT<'a>
@@ -880,9 +879,7 @@ impl WithTfmExec for SteeringCfg {
                 self.common_state_ref().gui_trace(
                     TfmStepTraceStage::Custom(
                         GraphDisplayStyle::default()
-                            .with_color(
-                                Color32::GREEN.gamma_multiply((1.0 as BaseNumT - hold_factor_unit).max(0.4)),
-                            )
+                            .with_color(Color32::GREEN.gamma_multiply((1.0 as BaseNumT - hold_factor_unit).max(0.4)))
                             .with_width(1.7),
                     ),
                     &MappedValue::<BaseNumT> {

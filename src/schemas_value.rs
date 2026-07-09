@@ -6,7 +6,7 @@
 // 3. VarRef(Dynamic) or DeviceControlMatcher(Dynamic)
 
 use std::{
-    fmt::Display,
+    // fmt::Display,
     ops::{Deref, DerefMut},
     sync::{
         Arc,
@@ -242,11 +242,11 @@ impl WithRuntimeId for VariableState {
     }
 }
 
-impl Display for VariableState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.to_string())
-    }
-}
+// impl Display for VariableState {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         f.write_str(&self.to_string())
+//     }
+// }
 
 impl WithNumericValue for VariableState {
     fn get_numeric_value(&self) -> BaseNumT {
@@ -386,6 +386,7 @@ impl<'de> Deserialize<'de> for DynValueRefs {
     }
 }
 
+#[allow(clippy::to_string_trait_impl)] // TODO: impl. Display
 impl ToString for &DynValueRefs {
     fn to_string(&self) -> String {
         match self {

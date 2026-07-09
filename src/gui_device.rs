@@ -37,6 +37,7 @@ pub(crate) fn draw_create_control_matcher_gui(
                     ui.label(format!("Current device matcher classification is: {}", classif_filter));
                     ui.separator();
 
+                    #[allow(clippy::type_complexity)]
                     let controls: [(&str, fn((&String, &HidControlPredefined)) -> bool); _] = [
                         ("\"Joystick\"", |cm| cm.1.r#type.is_a_joystick_control()),
                         ("\"Gamepad\"", |cm| cm.1.r#type.is_a_gamepad_control()),
