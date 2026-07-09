@@ -373,9 +373,9 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         {
             if let Some((cms, mappings)) = self
                 .router_index_sysdev_and_ctl_type_to_cms_and_mappings
-                .get_mut(&(device_id, control_type))
+                .get(&(device_id, control_type))
             {
-                cms.iter_mut().enumerate().for_each(|(cm_idx, cm)| {
+                cms.iter().enumerate().for_each(|(cm_idx, cm)| {
                     cm.set_last_known_io(value);
                     cm.set_numeric_value(
                         value, /* NB/TODO: for Rel controls in proposed "stable mode": value + cm.get_numeric_value())
