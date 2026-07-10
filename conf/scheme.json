@@ -1617,42 +1617,6 @@
           "$ref": "#/$defs/TfmSeqCfg",
           "default": []
         },
-        "external_gain_control_enabled": {
-          "type": "boolean"
-        },
-        "external_autocentering_control_enabled": {
-          "type": "boolean"
-        },
-        "constant": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ForceFeedbackCfg"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "spring": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ForceFeedbackCfg"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "friction": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ForceFeedbackCfg"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
         "custom_source": {
           "anyOf": [
             {
