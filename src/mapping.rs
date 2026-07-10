@@ -255,6 +255,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         self.router_buff_mappings_to_execute
             .extend(self.cfg.mappings.iter().enumerate().map(|(i, _)| i).collect::<Vec<_>>());
         self.run_mappings__(ObjId::from(intern_str("Init")));
+        self.router_buff_mappings_to_execute.clear();
 
         Ok(())
     }
@@ -356,7 +357,13 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     }
                 });
 
+            if cms.len() > 1 && self.router_buff_mappings_to_execute.len() > 1 {
+                self.router_buff_mappings_to_execute.sort();
+                self.router_buff_mappings_to_execute.dedup();
+                self.router_buff_mappings_to_execute.shuffle(&mut rand::rng());
+            }
             self.run_mappings__(msg.device_id);
+            self.router_buff_mappings_to_execute.clear();
         }
     }
 
@@ -383,31 +390,25 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                 }
             });
 
-            let cms_ptr = cms as *const Vec<ControlMatchers>;
-
+            if cms.len() > 1 && self.router_buff_mappings_to_execute.len() > 1 {
+                self.router_buff_mappings_to_execute.sort();
+                self.router_buff_mappings_to_execute.dedup();
+                self.router_buff_mappings_to_execute.shuffle(&mut rand::rng());
+            }
             self.run_mappings__(device_id);
+            self.router_buff_mappings_to_execute.clear();
 
             if control_type.is_relative() {
-                // SAFETY: we do not modify router indexes in any way during mappings processing.
-                // TODO/NB: refactor run_mappings__ to separately borrow mapping engine members (like "views") and make borrow checker happy to
-                // TODO/NB: directly use cms reference here, without having to use the pointer.
-                unsafe { &*cms_ptr }.iter().for_each(|cm| cm.set_numeric_value(0.0));
+                cms.iter().for_each(|cm| cm.set_numeric_value(0.0));
             }
         }
     }
 
-    fn run_mappings__(&mut self, triggering_device_id: ObjId) {
-        if self.router_buff_mappings_to_execute.len() > 1 {
-            self.router_buff_mappings_to_execute.sort();
-            self.router_buff_mappings_to_execute.dedup();
-            self.router_buff_mappings_to_execute.shuffle(&mut rand::rng());
-        }
+    fn run_mappings__(&self, triggering_device_id: ObjId) {
         for mapping_idx in self.router_buff_mappings_to_execute.iter() {
             let mapping = &self.cfg.mappings[*mapping_idx];
             self.execute_mapping_on_active_input(triggering_device_id, mapping, mapping.src.get_numeric_value());
         }
-        self.router_buff_mappings_to_execute.clear();
-        // NB/TODO: for Rel controls in proposed "stable mode": zero out value caches for all the updated ones.
     }
 
     fn execute_mapping_on_active_input(
