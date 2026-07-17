@@ -92,7 +92,7 @@ impl GuiGraphState {
     }
 
     pub(crate) fn draw_gui(&mut self, ui: &mut egui::Ui) {
-        let (rect, _response) = ui.allocate_at_least(egui::vec2(ui.available_width(), 150.0), egui::Sense::hover());
+        let (rect, _response) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 150.0), egui::Sense::hover());
 
         self.set_resolution_state(rect.width().abs().trunc());
 

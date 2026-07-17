@@ -102,21 +102,6 @@ pub(crate) trait WithSanitize {
     }
 }
 
-// -------------------------------------------------------
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            cfg_file: Default::default(),
-            description: Default::default(),
-            global: Default::default(),
-            devices: Default::default(),
-            variables: Default::default(),
-            mappings: Default::default(),
-            ui: Default::default(),
-        }
-    }
-}
-
 impl Config {
     fn new(cfg_file: PathBuf) -> Self {
         Self {

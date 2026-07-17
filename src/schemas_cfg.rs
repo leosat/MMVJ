@@ -130,7 +130,7 @@ macro_rules! config_struct_tpl {
     config_struct_tpl!(, $( $devices_meta )?, $n, $devices);
   };
   ($( $m:meta )*, $( $devices_meta:meta )?, $n:ident, $devices:ident) => {
-    #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, TraversableMut, Traversable, JsonSchema, Validate)]
+    #[derive(Default, PartialEq, Debug, Clone, Serialize, Deserialize, TraversableMut, Traversable, JsonSchema, Validate)]
     $( #[$m] )*
     #[serde(deny_unknown_fields)]
     pub(crate) struct $n {

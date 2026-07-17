@@ -63,92 +63,96 @@ fn draw_graph_docked_or_windowed(
 
     // ui.label(state.0.read().get_state_id().to_string());
 
-    // ---------------------------------------
-    if tfm_step.common_state_ref().trace_channel.is_none() {
-        let (trace_graph_handle, gui_graph_state) = make_trace_graph_2d(
-            &tfm_step.get_graph_hash_key_string(),
-            &tfm_step.get_graph_legend(),
-            Some(SYMM_UNIT_INTERVAL),
-        );
+    ui.vertical(|ui| {
+        // ---------------------------------------
+        if tfm_step.common_state_ref().trace_channel.is_none() {
+            let (trace_graph_handle, gui_graph_state) = make_trace_graph_2d(
+                &tfm_step.get_graph_hash_key_string(),
+                &tfm_step.get_graph_legend(),
+                Some(SYMM_UNIT_INTERVAL),
+            );
 
-        tfm_step.common_state_mut().trace_channel = Some(Arc::new(crate::tracing::make_trace_channel(vec![
-            crate::tracing::TraceTarget::Graph(trace_graph_handle),
-        ])));
+            tfm_step.common_state_mut().trace_channel = Some(Arc::new(crate::tracing::make_trace_channel(vec![
+                crate::tracing::TraceTarget::Graph(trace_graph_handle),
+            ])));
 
-        gui_graphs
-            .borrow_mut()
-            .insert(tfm_step.get_graph_hash_key_string(), gui_graph_state);
+            gui_graphs
+                .borrow_mut()
+                .insert(tfm_step.get_graph_hash_key_string(), gui_graph_state);
 
-        changed = true; // to signal sync channels from gui cache to operational struct (when cache is implemented).
-    }
+            changed = true; // to signal sync channels from gui cache to operational struct (when cache is implemented).
+        }
 
-    let mut graph_displayed = false;
-    let mut display_graph = |ui: &mut egui::Ui| {
-        if let Some(gui_graph) = gui_graphs.borrow_mut().get_mut(&tfm_step.get_graph_hash_key_string()) {
+        let mut graph_displayed = false;
+        let mut display_graph = |ui: &mut egui::Ui| {
+            if let Some(gui_graph) = gui_graphs.borrow_mut().get_mut(&tfm_step.get_graph_hash_key_string()) {
+                if !tfm_step.common_state_ref().is_gui_tracing_enabled() {
+                    tfm_step.common_state_ref().enable_gui_tracing();
+                    changed = true;
+                }
+                graph_displayed = true;
+                if gui_graph._in_interval != tfm_step.common_state_ref().get_in_interval() {
+                    gui_graph.legend = tfm_step.get_graph_legend();
+                }
+                gui_graph.consume_input_queue_and_draw_gui(ui);
+            };
+        };
+
+        if *egui_state_is_graph_window_opened {
+            egui::Window::new(format!("{} transform input-output monitor.", tfm_step))
+                .id(is_graph_window_opened_egui_id.with(42))
+                .open(egui_state_is_graph_window_opened)
+                .resizable(true)
+                .order(egui::Order::TOP)
+                .show(ui.ctx(), move |ui| {
+                    display_graph(ui);
+                })
+                .map(|r| r.inner.unwrap_or_default())
+                .unwrap_or_default();
             if !tfm_step.common_state_ref().is_gui_tracing_enabled() {
                 tfm_step.common_state_ref().enable_gui_tracing();
                 changed = true;
             }
-            graph_displayed = true;
-            if gui_graph._in_interval != tfm_step.common_state_ref().get_in_interval() {
-                gui_graph.legend = tfm_step.get_graph_legend();
-            }
-            gui_graph.consume_input_queue_and_draw_gui(ui);
-        };
-    };
+            ui.label("... live monitor graph window opened ... ");
+        } else {
+            let c = egui::collapsing_header::CollapsingState::load_with_default_open(
+                ui.ctx(),
+                ui.id().with("collapsing"),
+                false,
+            );
 
-    if *egui_state_is_graph_window_opened {
-        egui::Window::new(format!("{} transform input-output monitor.", tfm_step))
-            .id(is_graph_window_opened_egui_id.with(42))
-            .open(egui_state_is_graph_window_opened)
-            .resizable(true)
-            .order(egui::Order::TOP)
-            .show(ui.ctx(), move |ui| {
-                display_graph(ui);
-            })
-            .map(|r| r.inner.unwrap_or_default())
-            .unwrap_or_default();
-        if !tfm_step.common_state_ref().is_gui_tracing_enabled() {
-            tfm_step.common_state_ref().enable_gui_tracing();
+            {
+                let mut header_clicked = false;
+                let mut r = c.show_header(ui, |ui| {
+                    header_clicked = ui
+                        .add(egui::Label::new("live monitor graph.").sense(egui::Sense::click()))
+                        .clicked();
+                    if !was_graph_window_opened
+                        && ui
+                            .button(egui_phosphor::bold::APP_WINDOW.to_string())
+                            .on_hover_text("Open graph in a separate window")
+                            .clicked()
+                    {
+                        *egui_state_is_graph_window_opened = true;
+                    }
+                });
+                r.set_open(r.is_open() ^ header_clicked);
+                r.body(|ui| {
+                    display_graph(ui);
+                });
+            }
+        }
+
+        ui.data_mut(|d| d.insert_temp(is_graph_window_opened_egui_id, *egui_state_is_graph_window_opened));
+
+        if !graph_displayed && tfm_step.common_state_ref().is_gui_tracing_enabled() {
+            tfm_step.common_state_ref().disable_gui_tracing();
             changed = true;
         }
-        ui.label("... live monitor graph window opened ... ");
-    } else {
-        let c = egui::collapsing_header::CollapsingState::load_with_default_open(
-            ui.ctx(),
-            ui.id().with("collapsing"),
-            false,
-        );
-        {
-            let mut header_clicked = false;
-            let mut r = c.show_header(ui, |ui| {
-                header_clicked = ui
-                    .add(egui::Label::new("live monitor graph.").sense(egui::Sense::click()))
-                    .clicked();
-                if !was_graph_window_opened
-                    && ui
-                        .button(egui_phosphor::bold::APP_WINDOW.to_string())
-                        .on_hover_text("Open graph in a separate window")
-                        .clicked()
-                {
-                    *egui_state_is_graph_window_opened = true;
-                }
-            });
-            r.set_open(r.is_open() ^ header_clicked);
-            r.body(|ui| {
-                display_graph(ui);
-            });
-        }
-    }
 
-    ui.data_mut(|d| d.insert_temp(is_graph_window_opened_egui_id, *egui_state_is_graph_window_opened));
-
-    if !graph_displayed && tfm_step.common_state_ref().is_gui_tracing_enabled() {
-        tfm_step.common_state_ref().disable_gui_tracing();
-        changed = true;
-    }
-
-    changed
+        changed
+    })
+    .inner
 }
 
 // ---------------------------------
@@ -489,7 +493,6 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                     }
                     heading
                 };
-
                 ui.scope_builder(
                     egui::UiBuilder::new().id(egui::Id::new(container_id).with(state_id)),
                     |ui| {
@@ -523,12 +526,35 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                             ui.label(heading);
                                         },
                                     );
+
+                                    let mut gui_out = None;
+
                                     ui.separator();
                                     let enable_disable_text = if is_enabled { "on" } else { "off" };
-                                    let mut gui_out = bool_to_simple_change_gui_cmd(
+                                    gui_out = gui_out.or(bool_to_simple_change_gui_cmd(
                                         ui.checkbox(self.get_enabled_ref_mut(), enable_disable_text).changed(),
-                                    );
+                                    ));
+
+                                    ui.separator();
+                                    ui.scope(|ui| {
+                                        ui.set_width(ui.available_width() * 0.6);
+                                        if draw_graph_docked_or_windowed(self, graph_states, ui) {
+                                            gui_out = Some(GuiCmd::ConfigChangeSimple);
+                                        }
+                                    });
+
+                                    if let Some(desc) = self.description_mut() {
+                                        ui.separator();
+
+                                        gui_out = gui_out.or(ui
+                                            .collapsing("Description", |ui| desc.egui(GuiInKinds::Edit, ui))
+                                            .body_returned
+                                            .unwrap_or_default());
+                                        ui.separator();
+                                    }
+
                                     draw_step_in_out(ui, self.common_state_ref(), is_enabled);
+
                                     ui.separator();
                                     if ui
                                         .button(egui_phosphor::bold::TRASH.to_string())
@@ -554,68 +580,50 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                 }
                                 ui.separator();
 
-                                let mut gui_out = None;
-
-                                if let Some(desc) = self.description_mut() {
-                                    gui_out = gui_out.or(ui
-                                        .collapsing("Description", |ui| desc.egui(GuiInKinds::Edit, ui))
-                                        .body_returned
-                                        .unwrap_or_default());
-                                    ui.separator();
-                                }
-
-                                let out = gui_out.or(ui
-                                    .collapsing(
-                                        "Parameters",
-                                        #[allow(unused)]
-                                        |ui| {
-                                            let label = self.to_string();
-                                            ui.separator();
-                                            let in_interval = self.common_state_ref().get_in_interval();
-                                            match self {
-                                                Self::Script(s) => s.egui(
-                                                    (
-                                                        step_id,
-                                                        gui_in.2.clone_and_push_hier(step_id),
-                                                        GuiInValue::Edit(GuiInValueEditParams {
-                                                            allow_interval_edit: true,
-                                                            slider_log_scale: false,
-                                                            cfg_variables,
-                                                            cfg_devices,
-                                                        }),
-                                                    ),
-                                                    ui,
+                                ui.scope(
+                                    // .collapsing(
+                                    //     "Parameters",
+                                    #[allow(unused)]
+                                    |ui| {
+                                        let label = self.to_string();
+                                        let in_interval = self.common_state_ref().get_in_interval();
+                                        match self {
+                                            Self::Script(s) => s.egui(
+                                                (
+                                                    step_id,
+                                                    gui_in.2.clone_and_push_hier(step_id),
+                                                    GuiInValue::Edit(GuiInValueEditParams {
+                                                        allow_interval_edit: true,
+                                                        slider_log_scale: false,
+                                                        cfg_variables,
+                                                        cfg_devices,
+                                                    }),
                                                 ),
-                                                Self::Nop(_) | Self::Invert(_) => None,
-                                                Self::Integrate(s) => s.egui(in_interval, ui),
-                                                Self::Steering(s) => {
-                                                    ui.push_id(state_id, |ui| {
-                                                        s.egui(gui_in.2.clone_and_push_hier(step_id), ui)
-                                                    })
-                                                    .inner
-                                                }
-                                                Self::Clamp(s) => s.egui(in_interval, ui),
-                                                Self::RaiseFall(s) => {
-                                                    s.egui((cfg_variables, cfg_devices, in_interval), ui)
-                                                }
-                                                Self::Ema(s) => s.egui(in_is_relative, ui),
-                                                Self::Linear(s) => s.egui(in_interval, ui),
-                                                Self::Smoothstep { .. } => None,
-                                                Self::SCurve(s) => s.egui((), ui),
-                                                Self::Exp(s) => s.egui((), ui),
-                                                Self::SignedPower(s) => s.egui((), ui),
-                                                Self::OneEuro(s) => s.egui(in_is_relative, ui),
-                                                Self::_HighPass(_) => None,
-                                                Self::_ForceFeedback(_) => None,
+                                                ui,
+                                            ),
+                                            Self::Nop(_) | Self::Invert(_) => None,
+                                            Self::Integrate(s) => s.egui(in_interval, ui),
+                                            Self::Steering(s) => {
+                                                ui.push_id(state_id, |ui| {
+                                                    s.egui(gui_in.2.clone_and_push_hier(step_id), ui)
+                                                })
+                                                .inner
                                             }
-                                        },
-                                    )
-                                    .body_returned
-                                    .unwrap_or_default());
-                                ui.separator();
-                                let changed = draw_graph_docked_or_windowed(self, graph_states, ui);
-                                ui.separator();
-                                out.or(bool_to_simple_change_gui_cmd(changed))
+                                            Self::Clamp(s) => s.egui(in_interval, ui),
+                                            Self::RaiseFall(s) => s.egui((cfg_variables, cfg_devices, in_interval), ui),
+                                            Self::Ema(s) => s.egui(in_is_relative, ui),
+                                            Self::Linear(s) => s.egui(in_interval, ui),
+                                            Self::Smoothstep { .. } => None,
+                                            Self::SCurve(s) => s.egui((), ui),
+                                            Self::Exp(s) => s.egui((), ui),
+                                            Self::SignedPower(s) => s.egui((), ui),
+                                            Self::OneEuro(s) => s.egui(in_is_relative, ui),
+                                            Self::_HighPass(_) => None,
+                                            Self::_ForceFeedback(_) => None,
+                                        }
+                                    },
+                                )
+                                .inner
                             });
 
                         header_response.1.inner.or(header_response.2.and_then(|v| v.inner))
