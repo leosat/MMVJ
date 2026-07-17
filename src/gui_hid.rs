@@ -81,10 +81,7 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
     type Out = Option<GuiCmd>;
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         match gui_in {
-            GuiInDeviceCfg::Edit {
-                cfg_predef_controls: cfg_predefined,
-                device_key,
-            } => {
+            GuiInDeviceCfg::Edit { device_key } => {
                 let mut changed = false;
                 let is_virtual = self.get_classification().is_a_virtual();
                 ui.separator();
@@ -300,11 +297,9 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                         });
                     }
 
-                    if let Some((n, ControlMatchers::Hid(cm))) = draw_create_control_matcher_gui(
-                        ui,
-                        MappedDeviceClassification::Hid(self.get_classification()),
-                        cfg_predefined,
-                    ) && self.controls.insert(n, cm).is_none()
+                    if let Some((n, ControlMatchers::Hid(cm))) =
+                        draw_create_control_matcher_gui(ui, MappedDeviceClassification::Hid(self.get_classification()))
+                        && self.controls.insert(n, cm).is_none()
                     {
                         update_classification = true;
                         changed = true;

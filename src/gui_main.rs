@@ -1026,13 +1026,14 @@ impl GuiMain {
                             self.draw_device_remove_button(ui, &dmk, false);
                         })
                         .body(|ui| {
-                            if let Some(cmd) = self.cfg.devices.midi.get_mut(&dmk).unwrap().egui(
-                                GuiInDeviceCfg::Edit {
-                                    cfg_predef_controls: &self.cfg.predef_controls,
-                                    device_key: &dmk,
-                                },
-                                ui,
-                            ) {
+                            if let Some(cmd) = self
+                                .cfg
+                                .devices
+                                .midi
+                                .get_mut(&dmk)
+                                .unwrap()
+                                .egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui)
+                            {
                                 // dbg!(&cmd);
                                 self.submit_post_draw_cmd(cmd);
                             }
@@ -1101,13 +1102,14 @@ impl GuiMain {
                             self.draw_device_remove_button(ui, &dmk, true);
                         })
                         .body(|ui| {
-                            if let Some(cmd) = self.cfg.devices.hid.get_mut(&dmk).unwrap().egui(
-                                GuiInDeviceCfg::Edit {
-                                    cfg_predef_controls: &self.cfg.predef_controls,
-                                    device_key: &dmk,
-                                },
-                                ui,
-                            ) {
+                            if let Some(cmd) = self
+                                .cfg
+                                .devices
+                                .hid
+                                .get_mut(&dmk)
+                                .unwrap()
+                                .egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui)
+                            {
                                 self.submit_post_draw_cmd(GuiCmd::CmdSeqence(vec![
                                     cmd,
                                     GuiCmd::BreakOnErr,
@@ -1163,13 +1165,7 @@ impl GuiMain {
                             let dm = self.cfg.devices.hid.get_mut(&dmk).unwrap();
                             ui.separator();
                             ui.label(format!("Matcher classification: {}", dm.get_classification()));
-                            if let Some(cmd) = dm.egui(
-                                GuiInDeviceCfg::Edit {
-                                    cfg_predef_controls: &self.cfg.predef_controls,
-                                    device_key: &dmk,
-                                },
-                                ui,
-                            ) {
+                            if let Some(cmd) = dm.egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui) {
                                 dm.update_classification();
                                 hid_matcher_update_cmd = Some(cmd);
                             }
@@ -1373,7 +1369,7 @@ impl GuiMain {
         ui.collapsing("Pre-configured (predefined) controls configuration (static):", |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.add(
-                    egui::TextEdit::multiline(&mut format!("{:#?}", self.cfg.predef_controls))
+                    egui::TextEdit::multiline(&mut format!("{:#?}", &crate::config::PREDEF_CONTROLS))
                         .font(egui::TextStyle::Monospace)
                         // .background_color(Color32::BLACK)
                         // .text_color(Color32::GRAY)
