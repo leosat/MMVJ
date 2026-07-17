@@ -103,18 +103,11 @@ pub(crate) trait WithSanitize {
 }
 
 // -------------------------------------------------------
-
-pub(crate) fn load_predefined_controls() -> ControlsPredefinedCfg {
-    serde_saphyr::from_str(&PREDEF_CONTROLS).expect("Can't parse internally defined predefined controls")
-}
-
 impl Default for Config {
     fn default() -> Self {
         Self {
             cfg_file: Default::default(),
             description: Default::default(),
-            predef_controls: serde_saphyr::from_str(&PREDEF_CONTROLS)
-                .expect("Can't parse internally defined predefined controls"),
             global: Default::default(),
             devices: Default::default(),
             variables: Default::default(),
@@ -175,11 +168,11 @@ impl Config {
     }
 
     #[cfg(feature = "midi")]
-    fn get_midi_control_keys(&self, device_matcher_key: &str) -> Result<Vec<String>> {
+    fn get_available_midi_control_matcher_keys(&self, device_matcher_key: &str) -> Result<Vec<String>> {
         if let Some(dm) = self.devices.midi.get(device_matcher_key) {
             let mut c = Vec::new();
             c.extend(dm.controls.keys().cloned());
-            c.extend(self.predef_controls.midi_controls.keys().cloned());
+            c.extend(PREDEF_CONTROLS.midi_controls.keys().cloned());
             c.sort();
             c.dedup();
             Ok(c)
@@ -188,11 +181,11 @@ impl Config {
         }
     }
 
-    fn get_hid_control_keys(&self, device_matcher_key: &str) -> Result<Vec<String>> {
+    fn get_availale_hid_control_matcher_keys(&self, device_matcher_key: &str) -> Result<Vec<String>> {
         if let Some(dm) = self.devices.hid.get(device_matcher_key) {
             let mut c = Vec::new();
             c.extend(dm.controls.keys().cloned());
-            c.extend(self.predef_controls.hid_controls.keys().cloned());
+            c.extend(PREDEF_CONTROLS.hid_controls.keys().cloned());
             c.sort();
             c.dedup();
             Ok(c)
@@ -287,7 +280,7 @@ impl Config {
     #[cfg(feature = "midi")]
     fn resolve_midi_control(&self, _device_matcher_key: &str, entry: &mut MidiControlMatcherCfg) -> Result<()> {
         if !entry.from_predefined.is_empty() {
-            if let Some(predefined_control) = self.predef_controls.midi_controls.get(&entry.from_predefined) {
+            if let Some(predefined_control) = PREDEF_CONTROLS.midi_controls.get(&entry.from_predefined) {
                 if entry.midi_message == Default::default() {
                     entry.midi_message = predefined_control.midi_message.clone();
                 }
@@ -302,7 +295,7 @@ impl Config {
                 bail!(
                     "Unknown predefined MIDI control '{}'. Available: {:?}",
                     entry.from_predefined,
-                    self.predef_controls.midi_controls.keys().collect::<Vec<_>>()
+                    PREDEF_CONTROLS.midi_controls.keys().collect::<Vec<_>>()
                 );
             }
         } else if entry.midi_message.r#type == Default::default() {
@@ -314,7 +307,7 @@ impl Config {
 
     fn resolve_hid_control(&self, _device_matcher_key: &str, entry: &mut HidControlMatcherCfg) -> Result<()> {
         if !entry.from_predefined.is_empty() {
-            if let Some(predefined_control) = self.predef_controls.hid_controls.get(&entry.from_predefined) {
+            if let Some(predefined_control) = PREDEF_CONTROLS.hid_controls.get(&entry.from_predefined) {
                 entry.r#type = predefined_control.r#type;
                 if entry.range == Default::default() {
                     entry.range = predefined_control.range;
@@ -326,7 +319,7 @@ impl Config {
                 bail!(
                     "Unknown predefined HID control '{}'. Available: {:?}",
                     entry.from_predefined,
-                    self.predef_controls.hid_controls.keys().collect::<Vec<_>>()
+                    PREDEF_CONTROLS.hid_controls.keys().collect::<Vec<_>>()
                 );
             }
         } else if entry.r#type == Default::default() {
@@ -372,7 +365,7 @@ impl Config {
                         }));
                     }
 
-                    if let Some(predef) = self.predef_controls.hid_controls.get(&d.control_key) {
+                    if let Some(predef) = PREDEF_CONTROLS.hid_controls.get(&d.control_key) {
                         let expanded_control_matcher: HidControlMatcherCfg = predef.clone().into();
 
                         log::warn!(
@@ -400,7 +393,7 @@ impl Config {
                         "Control '{}' not found in device '{}'. Available controls (including predefined): {}",
                         d.control_key,
                         d.device_matcher_key,
-                        self.get_hid_control_keys(&d.device_matcher_key)
+                        self.get_availale_hid_control_matcher_keys(&d.device_matcher_key)
                             .context("Couldn't resolve controls for device.")?
                             .join(", ")
                     );
@@ -425,7 +418,7 @@ impl Config {
                                 .get(&d.control_key)
                             {
                                 control.clone()
-                            } else if let Some(predef) = self.predef_controls.midi_controls.get(&d.control_key) {
+                            } else if let Some(predef) = PREDEF_CONTROLS.midi_controls.get(&d.control_key) {
                                 log::warn!(
                                     "Automatically back-filling predefined control {:?} into midi definition for {}, \
                                     where it was not found while being referenced in a mapping {}",
@@ -450,7 +443,7 @@ impl Config {
                                     "Control '{}' not found in device '{}'. Available controls (including predefined): {}",
                                     d.control_key,
                                     d.device_matcher_key,
-                                    self.get_midi_control_keys(&d.device_matcher_key)
+                                    self.get_available_midi_control_matcher_keys(&d.device_matcher_key)
                                         .context("Failed to get available controls for device.")?
                                         .join(", ")
                                 );
@@ -592,7 +585,7 @@ impl ConfigManager {
 
             if let Err(e) = fs::write(
                 predef_ctls_dump_path.as_path(),
-                serde_saphyr::to_string(&self.cfg.predef_controls)
+                serde_saphyr::to_string(&*PREDEF_CONTROLS)
                     .context("Failed to generate text YAML from predefined controls spec.")?,
             ) {
                 log::warn!(
@@ -649,8 +642,8 @@ impl ConfigManager {
 
 // ------------------------------------------------------------
 
-// TODO: generate from mapped controls macro (will need to add relevant range and properties info where appropriate).
-static PREDEF_CONTROLS: LazyLock<String> = LazyLock::new(|| {
+// TODO?: generate from mapped controls macro (will need to add relevant range and properties info where appropriate).
+pub(crate) static PREDEF_CONTROLS: LazyLock<ControlsPredefinedCfg> = LazyLock::new(|| {
     let mut s: String = r#"
 
 #############################################################################
@@ -1829,5 +1822,5 @@ midi_controls:
 "#;
     }
 
-    s
+    serde_saphyr::from_str(&s).expect("Failed to parse built-in predefined controls")
 });

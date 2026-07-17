@@ -209,10 +209,7 @@ impl<'s> DrawEgui<'s> for MidiMatcherCfg {
     type Out = Option<GuiCmd>;
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         match gui_in {
-            GuiInDeviceCfg::Edit {
-                cfg_predef_controls,
-                device_key,
-            } => {
+            GuiInDeviceCfg::Edit { device_key } => {
                 let mut changed = false;
                 ui.separator();
                 changed |= ui.checkbox(&mut self.enabled, "Enabled").changed();
@@ -267,7 +264,7 @@ impl<'s> DrawEgui<'s> for MidiMatcherCfg {
                     }
 
                     if let Some((n, ControlMatchers::Midi(cm))) =
-                        draw_create_control_matcher_gui(ui, MappedDeviceClassification::Midi, cfg_predef_controls)
+                        draw_create_control_matcher_gui(ui, MappedDeviceClassification::Midi)
                         && self.controls.insert(n, cm).is_none()
                     {
                         changed = true;

@@ -1,5 +1,5 @@
+use crate::schemas_control_matcher::ControlMatchers;
 use crate::{mapped_device::MappedDeviceClassification, schemas_predefined::HidControlPredefined};
-use crate::{schemas_control_matcher::ControlMatchers, schemas_predefined::ControlsPredefinedCfg};
 use eframe::egui;
 
 // --------------------------------------------------------
@@ -7,7 +7,6 @@ use eframe::egui;
 pub(crate) fn draw_create_control_matcher_gui(
     ui: &mut egui::Ui,
     device_type: MappedDeviceClassification,
-    controls_predefined: &ControlsPredefinedCfg,
 ) -> Option<(String, ControlMatchers)> {
     let is_win_opened_egui_id = ui.make_persistent_id("new control");
     let is_win_opened = &mut ui.data_mut(|d| d.get_temp::<bool>(is_win_opened_egui_id).unwrap_or(false));
@@ -26,7 +25,7 @@ pub(crate) fn draw_create_control_matcher_gui(
             match device_type {
                 #[cfg(feature = "midi")]
                 MappedDeviceClassification::Midi => {
-                    for c in &controls_predefined.midi_controls {
+                    for c in &crate::config::PREDEF_CONTROLS.midi_controls {
                         ui.separator();
                         if ui.button(c.0).clicked() {
                             control_to_add_opt = Some((c.0.to_string(), ControlMatchers::Midi(c.1.clone().into())));
@@ -50,7 +49,7 @@ pub(crate) fn draw_create_control_matcher_gui(
                         ui.separator();
                         ui.collapsing(title, |ui| {
                             egui::ScrollArea::vertical().max_height(400.0).show(ui, |ui| {
-                                controls_predefined
+                                crate::config::PREDEF_CONTROLS
                                     .hid_controls
                                     .iter()
                                     .filter(|args| predicate(*args))
@@ -74,8 +73,5 @@ pub(crate) fn draw_create_control_matcher_gui(
 }
 
 pub(crate) enum GuiInDeviceCfg<'s> {
-    Edit {
-        cfg_predef_controls: &'s ControlsPredefinedCfg,
-        device_key: &'s str,
-    },
+    Edit { device_key: &'s str },
 }

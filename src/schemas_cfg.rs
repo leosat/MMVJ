@@ -4,7 +4,6 @@ use crate::schemas_hid::HidDeviceCfg;
 use crate::schemas_mapping::Mapping;
 #[cfg(feature = "midi")]
 use crate::schemas_midi::MidiMatcherCfg;
-use crate::schemas_predefined::ControlsPredefinedCfg;
 use crate::schemas_ui::UiCfg;
 use crate::schemas_value::VariableState;
 use anyhow::Result;
@@ -104,7 +103,6 @@ impl From<ConfigVariants> for Config {
             ConfigVariants::ConfigOldFormat(c) => Self {
                 cfg_file: c.cfg_file,
                 description: c.description,
-                predef_controls: c.predef_controls,
                 global: c.global,
                 devices: c.devices.into(),
                 variables: c.variables,
@@ -114,7 +112,6 @@ impl From<ConfigVariants> for Config {
             ConfigVariants::ConfigNewFormat(c) => Self {
                 cfg_file: c.cfg_file,
                 description: c.description,
-                predef_controls: c.predef_controls,
                 global: c.global,
                 devices: c.devices,
                 variables: c.variables,
@@ -144,11 +141,6 @@ macro_rules! config_struct_tpl {
         #[serde(default)]
         #[garde(skip)]
         pub(crate) description: String,
-        #[serde(skip)]
-        #[traverse(skip)]
-        #[serde(default = "crate::config::load_predefined_controls")]
-        #[garde(skip)]
-        pub(crate) predef_controls: ControlsPredefinedCfg,
         #[traverse(skip)]
         #[garde(skip)]
         pub(crate) global: GlobalSettingsCfg,
