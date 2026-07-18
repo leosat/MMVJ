@@ -252,8 +252,15 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         }
 
         // Run all mappings once on init.
-        self.router_buff_mappings_to_execute
-            .extend(self.cfg.mappings.iter().enumerate().map(|(i, _)| i).collect::<Vec<_>>());
+        self.router_buff_mappings_to_execute.extend(
+            self.cfg
+                .mappings
+                .iter()
+                .enumerate()
+                .filter(|(_, m)| m.enabled)
+                .map(|(i, _)| i)
+                .collect::<Vec<_>>(),
+        );
         self.run_mappings__(ObjId::from(intern_str("Init")));
         self.router_buff_mappings_to_execute.clear();
 
