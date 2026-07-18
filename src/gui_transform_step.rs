@@ -1343,7 +1343,8 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
     type Out = Option<GuiCmd>;
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let tfm_step_id = gui_in.0;
-        let mut changed_settings = false;
+        let mut changed_settings_general = false;
+        let mut changed_settings_simple = false;
         let mut changed_script = false;
         let mut gui_out = None;
         let gui_out_mut = &mut gui_out;
@@ -1405,7 +1406,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                                                 );
                                             }
                                         };
-                                        changed_settings = true;
+                                        changed_settings_general = true;
                                     }
                                 },
                             )
@@ -1468,19 +1469,19 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                                             ScriptAuxKind::Source => {
                                                 if remove {
                                                     self.aux_srcs.remove(name);
-                                                    changed_settings = true;
+                                                    changed_settings_general = true;
                                                 }
                                             }
                                             ScriptAuxKind::Destination => {
                                                 if remove {
                                                     self.aux_dsts.remove(name);
-                                                    changed_settings = true;
+                                                    changed_settings_general = true;
                                                 }
                                             }
                                             ScriptAuxKind::Transformation => {
                                                 if remove {
                                                     self.aux_transformations.remove(name);
-                                                    changed_settings = true;
+                                                    changed_settings_general = true;
                                                 }
                                             }
                                         }
@@ -1553,7 +1554,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                 // -------------------------------------------------------
                 ui.separator();
                 let mut use_custom_interval = self.output_interval.is_some();
-                changed_settings |= ui
+                changed_settings_simple |= ui
                     .checkbox(&mut use_custom_interval, "Custom output interval")
                     .changed();
                 if use_custom_interval {
@@ -1561,10 +1562,10 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                     ui.horizontal(|ui| {
                         if self.output_interval.is_none() {
                             self.output_interval = Some(SYMM_UNIT_INTERVAL);
-                            changed_settings = true;
+                            changed_settings_simple = true;
                         }
                         if let Some(interval) = &mut self.output_interval {
-                            changed_settings |= interval.egui(
+                            changed_settings_simple |= interval.egui(
                                 GuiInInterval::Edit {
                                     max_range: HID_AXIS_MAX_RANGE,
                                     from_label: "From: ",
@@ -1582,7 +1583,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
 
                 ui.separator();
                 let mut use_custom_relativity = self.output_relativity.is_some();
-                changed_settings |= ui
+                changed_settings_simple |= ui
                     .checkbox(&mut use_custom_relativity, "Custom output relativity")
                     .changed();
                 if use_custom_relativity {
@@ -1590,12 +1591,12 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                     ui.horizontal(|ui| {
                         if self.output_relativity.is_none() {
                             self.output_relativity = Some(Relativity::Abs);
-                            changed_settings = true;
+                            changed_settings_simple = true;
                         }
                         if let Some(rel) = &mut self.output_relativity {
-                            changed_settings |= ui.radio_value(rel, Relativity::Abs, "Absolute").changed();
+                            changed_settings_simple |= ui.radio_value(rel, Relativity::Abs, "Absolute").changed();
                             ui.separator();
-                            changed_settings |= ui.radio_value(rel, Relativity::Rel, "Relative").changed();
+                            changed_settings_simple |= ui.radio_value(rel, Relativity::Rel, "Relative").changed();
                         }
                     });
                 } else {
@@ -1626,8 +1627,10 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                 ui.separator();
                 if changed_script {
                     gui_out = Some(GuiCmd::MappingChange(MappingEngineCmd::ResetScriptingCache))
-                } else if changed_settings {
+                } else if changed_settings_general {
                     gui_out = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter))
+                } else if changed_settings_simple {
+                    gui_out = Some(GuiCmd::ConfigChangeSimple)
                 }
             }
             GuiInTfmStepsSeq::Display => {}
