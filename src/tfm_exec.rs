@@ -543,7 +543,7 @@ impl WithTfmExec for ScriptCfg {
                     let mut input_val = src.source.get_numeric_value();
                     src.remap_to_interval.inspect(|to_interval| {
                         input_val =
-                            to_interval.map_from(input_val, &src.source.get_interval(), OutOfRangePolicy::WarnAndClamp)
+                            to_interval.map_from(input_val, &src.source.get_interval(), OutOfRangePolicy::Clamp)
                     });
 
                     let _ = exe_state
@@ -578,7 +578,7 @@ impl WithTfmExec for ScriptCfg {
                                             out = dst.destination.get_interval().map_from(
                                                 out,
                                                 &from_interval,
-                                                OutOfRangePolicy::WarnAndClamp,
+                                                OutOfRangePolicy::Clamp,
                                             );
                                         }
                                         ctx.set_dyn_value(dynamic_value_refs_rt, out);
