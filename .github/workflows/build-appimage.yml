@@ -1,11 +1,13 @@
 name: Build and Auto-Release AppImage
 
 on:
-  workflow_run:
-    workflows: ["Common testing"]
-    branches: ["main"]
-    types:
-      - completed
+  push:
+    branches: [ "main" ]
+    ##workflow_run:
+    ##workflows: ["Common testing"]
+    ##branches: ["main"]
+    ##types:
+    ##- completed
 
 permissions:
   contents: write
@@ -19,7 +21,7 @@ jobs:
   build-appimage:
     runs-on: ubuntu-22.04 
 
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    ##if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Checkout repository
@@ -70,8 +72,11 @@ jobs:
             libssl-dev \
             zip 
 
-      - name: Build 
+      - name: Build release build
         run: cargo build --release --features "gui midi"
+
+      - name: Test release build
+        run: cargo test --release
 
       - name: Prepare AppDir 
         run: |
