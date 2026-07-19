@@ -537,21 +537,11 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
 
                                     ui.separator();
                                     ui.scope(|ui| {
-                                        ui.set_width(ui.available_width() * 0.6);
+                                        ui.set_max_width(400.0);
                                         if draw_graph_docked_or_windowed(self, graph_states, ui) {
                                             gui_out = Some(GuiCmd::ConfigChangeSimple);
                                         }
                                     });
-
-                                    if let Some(desc) = self.description_mut() {
-                                        ui.separator();
-
-                                        gui_out = gui_out.or(ui
-                                            .collapsing("Description", |ui| desc.egui(GuiInKinds::Edit, ui))
-                                            .body_returned
-                                            .unwrap_or_default());
-                                        ui.separator();
-                                    }
 
                                     draw_step_in_out(ui, self.common_state_ref(), is_enabled);
 
@@ -578,6 +568,18 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                     // ui.set_style(style);
                                     ui.disable();
                                 }
+
+                                if let Some(desc) = self.description_mut() {
+                                    ui.separator();
+                                    if let Some(gui_out) = ui
+                                        .collapsing("Description", |ui| desc.egui(GuiInKinds::Edit, ui))
+                                        .body_returned
+                                        .unwrap_or_default()
+                                    {
+                                        return Some(gui_out);
+                                    }
+                                }
+
                                 ui.separator();
 
                                 ui.scope(
