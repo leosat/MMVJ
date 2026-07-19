@@ -19,10 +19,16 @@ env:
 
 jobs:
   build-appimage:
-    runs-on: ubuntu-22.04 
-
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            arch: x86_64
+          - os: ubuntu-22.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.os }}
     ##if: ${{ github.event.workflow_run.conclusion == 'success' }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -34,7 +40,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-          shared-key: "rust-cache-shared-release" 
+          shared-key: "rust-cache-shared-release-${{ matrix.arch }}"
 
       - name: Extract version from Cargo.toml
         run: |
@@ -45,18 +51,6 @@ jobs:
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "Extracted version: $VERSION"
-
-      - name: Check if release already exists
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if gh release view "v${{ env.VERSION }}" &> /dev/null; then
-            echo "Release v${{ env.VERSION }} already exists. Skipping release creation."
-            echo "RELEASE_EXISTS=true" >> $GITHUB_ENV
-          else
-            echo " Release v${{ env.VERSION }} does not exist. Will create it."
-            echo "RELEASE_EXISTS=false" >> $GITHUB_ENV
-          fi
 
       - name: Install system dependencies
         run: |
@@ -70,22 +64,20 @@ jobs:
             libx11-dev \
             libwayland-dev \
             libssl-dev \
-            zip 
+            zip
 
       - name: Build release build
-        run: cargo build --release --features "gui midi"
+        run: cargo build --release
 
       - name: Test release build
         run: cargo test --release
 
-      - name: Prepare AppDir 
+      - name: Prepare AppDir
         run: |
           mkdir -p AppDir/usr/bin
           mkdir -p AppDir/usr/share/mmvj
-          
           cp -a target/release/${{ env.APP_NAME }} AppDir/usr/bin/
           cp -r conf AppDir/usr/share/mmvj/conf
-
           ln -s AppDir/usr/share/mmvj/conf AppDir/conf
 
           cat <<EOF > AppDir/${{ env.APP_NAME }}.desktop
@@ -113,40 +105,37 @@ jobs:
 
           if [ ! -d "./conf" ]; then
             #echo "Default configuration directory './conf' not found in the current directory."
-            #   read -p "Do you want to extract the default configuration here? [y/N] " response
-            #   if [[ "$response" =~ ^[Yy]$ ]]; then
-            #     echo "Extracting default configuration to ./conf..."
-                  cp -r "$PACKAGED_CONF" ./conf
-            #     echo "Configuration extracted successfully."
-            #   else
-            #     echo "Skipping extraction. The application will run without a local config directory."
-            #   fi
+            # read -p "Do you want to extract the default configuration here? [y/N] " response
+            # if [[ "$response" =~ ^[Yy]$ ]]; then
+            # echo "Extracting default configuration to ./conf..."
+              cp -r "$PACKAGED_CONF" ./conf
+            # echo "Configuration extracted successfully."
+            # else
+            # echo "Skipping extraction. The application will run without a local config directory."
+            # fi
           fi
 
           if [ ! -t 0 ]; then
-              echo "Running in a non-interactive environment (or input is piped/redirected)... automatically adding --gui option to avoid silent run in background."
-              exec "$BINARY" --gui "$@"
+            echo "Running in a non-interactive environment (or input is piped/redirected)... automatically adding --gui option to avoid silent run in background."
+            exec "$BINARY" --gui "$@"
           else
-              exec "$BINARY" "$@"
+            exec "$BINARY" "$@"
           fi
-
           EOF
-          
           chmod +x AppDir/custom_apprun.sh
 
       - name: Download linuxdeploy
         run: |
-          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${{ matrix.arch }}.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-${{ matrix.arch }}.AppImage
           chmod +x linuxdeploy*.AppImage
 
       - name: Build AppImage
         env:
-          OUTPUT: ${{ env.APP_NAME }}-v${{ env.VERSION }}-x86_64.appimage
+          OUTPUT: ${{ env.APP_NAME }}-v${{ env.VERSION }}-${{ matrix.arch }}.appimage
         run: |
           echo "APPIMAGE_FILE=$OUTPUT" >> $GITHUB_ENV
-
-          ./linuxdeploy-x86_64.AppImage --appimage-extract-and-run \
+          ./linuxdeploy-${{ matrix.arch }}.AppImage --appimage-extract-and-run \
             --appdir AppDir \
             --desktop-file AppDir/${{ env.APP_NAME }}.desktop \
             --icon-file AppDir/${{ env.APP_NAME }}.svg \
@@ -155,25 +144,25 @@ jobs:
 
       - name: Prepare Release Archives
         run: |
-          STAGING_DIR="${{ env.APP_NAME }}-v${{ env.VERSION }}"
+          STAGING_DIR="${{ env.APP_NAME }}-v${{ env.VERSION }}-${{ matrix.arch }}"
           mkdir -p "$STAGING_DIR"
-          
+
           chmod +x "${{ env.APPIMAGE_FILE }}"
-          cp -a "${{ env.APPIMAGE_FILE }}"  "$STAGING_DIR/"
-          
+          cp -a "${{ env.APPIMAGE_FILE }}" "$STAGING_DIR/"
+
           if [ -d "conf" ]; then
             cp -r conf "$STAGING_DIR/"
           else
             echo "::error::The 'conf' directory was not found in the repository root!"
             exit 1
           fi
-          
-          TAR_ARCHIVE="${{ env.APP_NAME }}-v${{ env.VERSION }}-x86_64.tar.gz"
+
+          TAR_ARCHIVE="${{ env.APP_NAME }}-v${{ env.VERSION }}-${{ matrix.arch }}.tar.gz"
           tar -czvf "$TAR_ARCHIVE" "$STAGING_DIR"
-          
-          ZIP_ARCHIVE="${{ env.APP_NAME }}-v${{ env.VERSION }}-x86_64.zip"
+
+          ZIP_ARCHIVE="${{ env.APP_NAME }}-v${{ env.VERSION }}-${{ matrix.arch }}.zip"
           zip -r "$ZIP_ARCHIVE" "$STAGING_DIR"
-          
+
           echo "TAR_ARCHIVE=$TAR_ARCHIVE" >> $GITHUB_ENV
           echo "ZIP_ARCHIVE=$ZIP_ARCHIVE" >> $GITHUB_ENV
           echo "Created release archives: $TAR_ARCHIVE and $ZIP_ARCHIVE"
@@ -181,23 +170,58 @@ jobs:
       - name: Upload Artifacts (for PRs and main branch)
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.APP_NAME }}-bundle
+          name: ${{ env.APP_NAME }}-bundle-${{ matrix.arch }}
           path: |
             ${{ env.APPIMAGE_FILE }}
             ${{ env.TAR_ARCHIVE }}
             ${{ env.ZIP_ARCHIVE }}
           retention-days: 1
 
+  release:
+    needs: build-appimage
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract version from Cargo.toml
+        run: |
+          VERSION=$(grep -m 1 '^version =' Cargo.toml | cut -d '"' -f2)
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not find 'version' in Cargo.toml"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Extracted version: $VERSION"
+
+      - name: Check if release already exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "v${{ env.VERSION }}" &> /dev/null; then
+            echo "Release v${{ env.VERSION }} already exists. Skipping release creation."
+            echo "RELEASE_EXISTS=true" >> $GITHUB_ENV
+          else
+            echo "Release v${{ env.VERSION }} does not exist. Will create it."
+            echo "RELEASE_EXISTS=false" >> $GITHUB_ENV
+          fi
+
+      - name: Download all build artifacts
+        if: env.RELEASE_EXISTS == 'false'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ${{ env.APP_NAME }}-bundle-*
+          path: dist
+          merge-multiple: true
+
       - name: Publish to GitHub Releases
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.RELEASE_EXISTS == 'false'
+        if: env.RELEASE_EXISTS == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION }}
           name: MMVJ v${{ env.VERSION }}
-          files: |
-            ${{ env.APPIMAGE_FILE }}
-            ${{ env.TAR_ARCHIVE }}
-            ${{ env.ZIP_ARCHIVE }}
+          files: dist/*
           generate_release_notes: true
           draft: false
           prerelease: true
