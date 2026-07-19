@@ -1,0 +1,196 @@
+name: Build and Auto-Release AppImage
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  APP_NAME: mmvj
+  DISPLAY_NAME: MMVJ
+
+jobs:
+  build-appimage:
+    runs-on: ubuntu-22.04 
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          shared-key: "rust-cache-shared-release" 
+
+      - name: Extract version from Cargo.toml
+        run: |
+          VERSION=$(grep -m 1 '^version =' Cargo.toml | cut -d '"' -f2)
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not find 'version' in Cargo.toml"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Extracted version: $VERSION"
+
+      - name: Check if release already exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "v${{ env.VERSION }}" &> /dev/null; then
+            echo "Release v${{ env.VERSION }} already exists. Skipping release creation."
+            echo "RELEASE_EXISTS=true" >> $GITHUB_ENV
+          else
+            echo " Release v${{ env.VERSION }} does not exist. Will create it."
+            echo "RELEASE_EXISTS=false" >> $GITHUB_ENV
+          fi
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libasound2-dev \
+            libudev-dev \
+            libfontconfig1-dev \
+            libxcb1-dev \
+            libx11-dev \
+            libwayland-dev \
+            libssl-dev \
+            zip 
+
+      - name: Build 
+        run: cargo build --release --features "gui midi"
+
+      - name: Prepare AppDir 
+        run: |
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/mmvj
+          
+          cp -a target/release/${{ env.APP_NAME }} AppDir/usr/bin/
+          chmod +x AppDir/usr/bin/${{ env.APP_NAME }}
+          cp -r conf AppDir/usr/share/mmvj/conf
+
+          ln -s AppDir/usr/share/mmvj/conf AppDir/conf
+
+          cat <<EOF > AppDir/${{ env.APP_NAME }}.desktop
+          [Desktop Entry]
+          Name=${{ env.DISPLAY_NAME }}
+          Exec=${{ env.APP_NAME }}
+          Icon=${{ env.APP_NAME }}
+          Type=Application
+          Categories=Utility;Game;
+          Comment=HID and MIDI transforming I/O mapper and virtual HID manager
+          EOF
+
+          cat <<EOF > AppDir/${{ env.APP_NAME }}.svg
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+            <rect width="100" height="100" fill="#2d3748" rx="15"/>
+            <text x="50" y="68" font-size="55" text-anchor="middle" fill="#63b3ed" font-family="monospace" font-weight="bold">M</text>
+          </svg>
+          EOF
+
+          cat <<'EOF' > AppDir/custom_apprun.sh
+          #!/bin/bash
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          PACKAGED_CONF="$HERE/usr/share/mmvj/conf"
+          BINARY="$HERE/usr/bin/mmvj"
+
+          if [ ! -d "./conf" ]; then
+            #echo "Default configuration directory './conf' not found in the current directory."
+            #   read -p "Do you want to extract the default configuration here? [y/N] " response
+            #   if [[ "$response" =~ ^[Yy]$ ]]; then
+            #     echo "Extracting default configuration to ./conf..."
+                  cp -r "$PACKAGED_CONF" ./conf
+            #     echo "Configuration extracted successfully."
+            #   else
+            #     echo "Skipping extraction. The application will run without a local config directory."
+            #   fi
+          fi
+
+          if [ ! -t 0 ]; then
+              echo "Running in a non-interactive environment (or input is piped/redirected)... automatically adding --gui option to avoid silent run in background."
+              exec "$BINARY" --gui "$@"
+          else
+              exec "$BINARY" "$@"
+          fi
+
+          EOF
+          
+          chmod +x AppDir/custom_apprun.sh
+
+      - name: Download linuxdeploy
+        run: |
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
+          chmod +x linuxdeploy*.AppImage
+
+      - name: Build AppImage
+        env:
+          OUTPUT: ${{ env.APP_NAME }}-x86_64.AppImage
+        run: |
+          ./linuxdeploy-x86_64.AppImage --appimage-extract-and-run \
+            --appdir AppDir \
+            --desktop-file AppDir/${{ env.APP_NAME }}.desktop \
+            --icon-file AppDir/${{ env.APP_NAME }}.svg \
+            --custom-apprun AppDir/custom_apprun.sh \
+            --output appimage
+
+      - name: Prepare Release Archives
+        run: |
+          STAGING_DIR="${{ env.APP_NAME }}-v${{ env.VERSION }}"
+          mkdir -p "$STAGING_DIR"
+          
+          cp "${{ env.APP_NAME }}-x86_64.AppImage" "$STAGING_DIR/"
+          
+          if [ -d "conf" ]; then
+            cp -r conf "$STAGING_DIR/"
+          else
+            echo "::error::The 'conf' directory was not found in the repository root!"
+            exit 1
+          fi
+          
+          TAR_ARCHIVE="${{ env.APP_NAME }}-v${{ env.VERSION }}-x86_64.tar.gz"
+          tar -czvf "$TAR_ARCHIVE" "$STAGING_DIR"
+          
+          ZIP_ARCHIVE="${{ env.APP_NAME }}-v${{ env.VERSION }}-x86_64.zip"
+          zip -r "$ZIP_ARCHIVE" "$STAGING_DIR"
+          
+          echo "TAR_ARCHIVE=$TAR_ARCHIVE" >> $GITHUB_ENV
+          echo "ZIP_ARCHIVE=$ZIP_ARCHIVE" >> $GITHUB_ENV
+          echo "Created release archives: $TAR_ARCHIVE and $ZIP_ARCHIVE"
+
+      - name: Upload Artifacts (for PRs and main branch)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-bundle
+          path: |
+            ${{ env.APP_NAME }}-x86_64.AppImage
+            ${{ env.TAR_ARCHIVE }}
+            ${{ env.ZIP_ARCHIVE }}
+          retention-days: 1
+
+      - name: Publish to GitHub Releases
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.RELEASE_EXISTS == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: MMVJ v${{ env.VERSION }}
+          files: |
+            ${{ env.APP_NAME }}-x86_64.AppImage
+            ${{ env.TAR_ARCHIVE }}
+            ${{ env.ZIP_ARCHIVE }}
+          generate_release_notes: true
+          draft: false
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
