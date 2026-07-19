@@ -1,11 +1,11 @@
 name: Build and Auto-Release AppImage
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  workflow_dispatch:
+  workflow_run:
+    workflows: ["Common testing"]
+    branches: ["main"]
+    types:
+      - completed
 
 permissions:
   contents: write
@@ -18,7 +18,9 @@ env:
 jobs:
   build-appimage:
     runs-on: ubuntu-22.04 
-    
+
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
