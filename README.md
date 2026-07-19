@@ -1,9 +1,10 @@
-# MMVJ - force-feedback-enabled mouse steering and more: HID and MIDI transforming I/O mapper and virtual HID manager, for Linux. 
+# MMVJ - force-feedback-enabled mouse steering and more: HID and MIDI transforming I/O mapper and virtual HID manager, for Linux.
 
 [Skipto **Disclaimer/development notice**](#warning-disclaimer) ...  
 [Skipto **Features**](#high-level-features-overview) ...  
-[Skipto **Application glossary and arch overview**](#application-specific-glossary-and-high-level-arch-overview) ...  
+[Skipto **Application glossary**](#application-specific-glossary) ...  
 [Skipto **Configuration**](#configuration) ...  
+[Skipto **Installation (use appimage release)**](#installation) ...  
 [Skipto **Build from source**](#build-from-source) ...  
 [Skipto **Usage**](#usage) ...  
 [Goto **FAQ**](doc/FAQ.md) ...
@@ -19,17 +20,18 @@ NB 1: latest release, when built with "gui" feature (enabled by default), includ
 runtime option.
 
 ---
-![SS](https://raw.githubusercontent.com/leosat/MMVJ_assets/2281dd16f420d667c9cf057c34859f829b8e4179/Screenshot%20from%202026-05-30%2021-06-53.png)
----
-![SS](https://raw.githubusercontent.com/leosat/MMVJ_assets/2281dd16f420d667c9cf057c34859f829b8e4179/Screenshot%20from%202026-05-30%2021-07-36.png)
----
-![SS](https://raw.githubusercontent.com/leosat/MMVJ_assets/2281dd16f420d667c9cf057c34859f829b8e4179/Screenshot%20from%202026-05-30%2021-08-47.png)
----
 
-_The following image shows visual debugging of force feedback application (seen in green) with mouse to joystick steering transformation._
+## ![SS](https://raw.githubusercontent.com/leosat/MMVJ_assets/2281dd16f420d667c9cf057c34859f829b8e4179/Screenshot%20from%202026-05-30%2021-06-53.png)
+
+## ![SS](https://raw.githubusercontent.com/leosat/MMVJ_assets/2281dd16f420d667c9cf057c34859f829b8e4179/Screenshot%20from%202026-05-30%2021-07-36.png)
+
+## ![SS](https://raw.githubusercontent.com/leosat/MMVJ_assets/2281dd16f420d667c9cf057c34859f829b8e4179/Screenshot%20from%202026-05-30%2021-08-47.png)
+
+_The following image shows visual debugging of force feedback application (seen in green) with mouse to joystick steering transformation._  
 ![Force Feedback plotted (green)](https://raw.githubusercontent.com/leosat/MMVJ_assets/7087c3723a7ff30dccbcf36872015fa8b9f4532b/Screenshot%20from%202026-02-16%2016-59-16.png)
 
 ---
+
 ![SS](https://raw.githubusercontent.com/leosat/MMVJ_assets/refs/heads/main/Screenshot%20from%202026-04-07%2013-46-29.png)
 
 NB 2: Regarding steering emulation functionality in particular, force feedback works perfectly with "Richard Burns Rally" (tested the latest variations with NGP) and many other titles like "Euro truck sim", "Race Room", "Rush rally 3" which use **Constant force** effect to report already calculated forces to the steering wheel. Some of other effects like **Spring** (e.g. used in "Rfactor 1"), **Friction** and **Ramp** are also supported (including envelope (fade-in/fade-out) and delay/repeat, but not trigger (WIP)). Damper, Intertia and Periodic (waveforms generators) effects are not yet supported (WIP). Until then we just fake the support for all those "other" effects (with warning emitted) if user configures them as supported in config. Stay tuned. If seeing trouble with it in your particular case and wish to help, please run the program with **\--debug-ff** flag and [send me the the output](mailto:leonid.satanovsky@gmail.com).
@@ -50,29 +52,30 @@ Some early video demos of MMVJ being applied in raw rally simulation:
 
 ## High-level features overview.
 
-*   **Regex-based devices matching**.
-*   **Virtual HID devices creation**: configure any number of Virtual Joysticks, Gamepads, Mice or hybrid devices with any sets of controls.
-*   **Usage of MIDI and any HID (Mice/Keyboards/Joysticks (including force feedback readings from virtual ones)/etc) as inputs**: match multiple devices by name regex, use same config without changes in different HW configs \[1\].
-*   **Usage of any HID (Mice/Keyboards/Joysticks/etc) as outputs**: match multiple devices by name regex use same config without changes in different HW configs \[1\].
-*   **State Variables**: configure any number of variables with ranges metadata to use as intermediate inputs or outputs in mappings graph.
-*   **Configuration validation, hot-reloadig on file changes when in command line mode or direct manipulation and reload through Gui**, 
-*   **Virtual HID (e.g. Virtual Joysticks) persistence**: if set as persistent will not be respawned across configuration changes.
-*   **Mappings of many inputs to many outputs with advanced transformation steps applied such as curves, filters, intuitive steering wheel emulation, custom scripts and more**.
-    *   Combine those discrete steps arbitrarily to achieve desired effects.
-    *   A detail about steering transformation for use in simracing, flight and other simulator gaming:
+*   **Matches existing devices by name regex and control types.**
+*   **Creates virtual HID (Mice/Keyboards/Joysticks) devices**: configure any number of Virtual Joysticks, Gamepads, Mice or hybrid devices with any sets of controls.
+    *   **With virtual HID (e.g. Virtual Joysticks) persistence**: if set as persistent will not be respawned across configuration changes.
+*   **Remaps and transforms (advanced pipelines with shared and local state included) signals between different kinds of  devices** (e.g. \[1\])**:**
+    *   **Allowed inputs: Variables, MIDI and HID (Mice/Keyboards/Joysticks (including force feedback readings from virtual ones)).**
+    *   **Allowed outputs: Variables and HID (Mice/Keyboards/Joysticks).**
+*   **Supports shared state variables/manually configured params**: configure any number of variables with ranges metadata to use as intermediate inputs or outputs in mappings graph.
+*   **Allows runtime re-configuration and monitoring via Gui (including per-step runtime signal graphing and parameters tweaking).**
+*   **Performs configuration validation and hot-reloadig on configuration file changes when in command line mode.**
+*   **Mappings run advanced configurable signal transformation pipelines including steps implementing**  
+    **curves, filters, intuitive steering wheel emulation, custom scripts (Luau).**
+    *   Few details on **steering transformation** for use in simracing, flight and other simulator gaming:
         *   **Supports force feedback**: accepts **constant force and other effects (see the FAQ why this matters).**
         *   Supports configurable **autocentering (useful if no force feedback available or as an auxiliary behavior)**.
-        *   Supports intuitive emulation **of hands holding the steering wheel** with different force  **(a.k.a "hold factor")**    
-            affecting the two mentioned above.
-    *   **Allows scripting with Luau**: define scripted transformation steps having multiple optionally defined inputs or outputs (e.g. to use as hubs for smart signal routing).
-*   **Gui (see --gui command line option) mode, but also operates in command-line only mode as well**: visually configure mapped devices matchers, mappings of controls with arbitrary transformation pipelines, debug at runtime via telemetry graphs to see the effects of separate transformation steps like curves, filters, force feedback effects, etc.
-*   **Console-based monitoring mode for HID (Mice/Keyboard/Joysticks/etc) and MIDI devices.**
+        *   Supports intuitive emulation **of hands holding the steering wheel** with different force  **(a.k.a "hold factor" affecting the two mentioned above.
+    *   **Force feedback readings** from virtual HID (Virtual Joysticks) are also avaialbe as general readings on special internally-visible controls, enabling force feedback as input in arbitrary places of transformation pipelines (read and apply them from scripts or for ad-hoc parametrisation of transformation steps).
+    *   **Supports scripting with Luau**: define scripted transformation steps having multiple optionally defined inputs, outputs (e.g. to use as hubs for smart signal routing) or child transformation pipelines synchronously runnable from the script.
+*   **Console-based monitoring mode for HID and MIDI devices.**
 
 \[1\] One fancy example: using 2 mice devices, mapping one's X movement to steering, Y movement to "hold factor" and a button to handbreak, whereas Y movement of the second mouse mapped to two separate brake and throttle axis of a target virtual joystick (it's achievable by accumulating relative input and mapping upper subrange of the integrated value to throttle and lower subrange (inverted) to breaking ([**configuration examples using this technique are coming soon**](#configuration-file-reference)))
 
 ---
 
-## Application-specific glossary and high-level arch overview.
+## Application-specific glossary.
 
 ### Device Matchers.
 
@@ -170,7 +173,7 @@ Variables are named dynamically updatable and, optionally, manually-configurable
 
 A variable has associated value **range** metadata, variables currently are treated as Abs values. It's possible to specify and reference/use any number of variables. Variables can be used as intermediate storage to transfer data between mappings or for any other purposes.
 
-Variables marked as manually-configured have their values stored to config on config save or restored from config when it's loaded.
+Variables marked as manually-configured have their values stored to config on config save or restored from config when it's loaded.  
 Variables which do not have manually configured values do not load their values from config and do not have those stored in config.
 
 Example variable config:
@@ -247,16 +250,15 @@ Processing is happening either due to active user input (**event-driven, with th
 
 ### Ranges & relativity
 
-Each value within transformation pipeline is associated with numeric interval (range) and is marked as relative or absolute (relativity marker). Devices controls, variables, transformation steps outputs - all have both of those defined. 
+Each value within transformation pipeline is associated with numeric interval (range) and is marked as relative or absolute (relativity marker). Devices controls, variables, transformation steps outputs - all have both of those defined.
 
 Values coming in and out are expected to be within configured ranges. Whenever source and destination are in different ranges those will be **automatically remapped**; this happens everywhere **with two special cases**.
 
-1) Values received as device control inputs and being out of configured range are clamped with warning emitted (reporting incoming value and expected range). _Device control matchers must be configured such that the incoming values fall within the configured control matcher ranges (the mode in which device control range information is available from OS and autoremapping is done is not possible for all types of controls: currently evdev will only provide range info for absolute axis, so we rely on "sane" predefines in all cases)_.
+Values received as device control inputs and being out of configured range are clamped with warning emitted (reporting incoming value and expected range). _Device control matchers must be configured such that the incoming values fall within the configured control matcher ranges (the mode in which device control range information is available from OS and autoremapping is done is not possible for all types of controls: currently evdev will only provide range info for absolute axis, so we rely on "sane" predefines in all cases)_.
 
-2) Script transformation step, in which it is the duty of the script to provide value in expected output range and process inputs with respect to whatever input range is. However, for script author's convenience, optional **remapping ranges** can be specified **per auxiliary source** and **per auxiliary destination**. Denoting a value range to be used within the script. If set, for sources the remapping will be done from source range to remapping range before passing a value to script and for destinations - from remapping range to destination range before passing value from script, automatically. If not set - the script will work with ("native") ranges. Auxiliary pipelines, if configured, for the script are also configured for specific input range and relativity. Similarly to inputs and ouputs it's script's duty to provide value within appropriate range as such pipeline input. All values coming from script and falling out of configured ranges shall be automatically clamped with warning emitted.
+Script transformation step, in which it is the duty of the script to provide value in expected output range and process inputs with respect to whatever input range is. However, for script author's convenience, optional **remapping ranges** can be specified **per auxiliary source** and **per auxiliary destination**. Denoting a value range to be used within the script. If set, for sources the remapping will be done from source range to remapping range before passing a value to script and for destinations - from remapping range to destination range before passing value from script, automatically. If not set - the script will work with ("native") ranges. Auxiliary pipelines, if configured, for the script are also configured for specific input range and relativity. Similarly to inputs and ouputs it's script's duty to provide value within appropriate range as such pipeline input. All values coming from script and falling out of configured ranges shall be automatically clamped with warning emitted.
 
 All the values within the transformation pipeline have a **relativity semantic marker**. Currently it's used internally for the engine in few places, but from user's perspective it's only actual **for informal purposes (as of current)** (e.g., steering and integrate steps will accumulate input irrespective to whether it's marked as relative or absolute, however it's possible to imlpement different behavior for relative vs absolute inputs). _NB: A special general mode is possible (but not yet planned) to implement in which absolute and relative values will be automatically interconverted with respect to relativity (e.g. mapping relative to absolute should result in accumulation, mapping absolute to relative should result in storing a delta and in two other cases (relative to relative and absolute to absolute) the result should be one to one mapping with remapping from source range to destination)_ .
-
 
 ---
 
@@ -331,9 +333,24 @@ sudo usermod -a -G input $USER
 sudo modprobe uinput
 ```
 
+---
+
 ### Binary releases.
 
-[**Download binary pre-releases here**](https://github.com/leosat/MMVJ/releases/) or build manually with cargo if binary release [doesn't work on your system](#troubleshooting) (takes a few minutes, [see below for instructions](#build-from-source)).  
+[**Download binary releases here**](https://github.com/leosat/MMVJ/releases/) (or build manually with cargo if binary release [doesn't work on your system](#troubleshooting) (takes a few minutes, [see below for instructions](#build-from-source))). 
+
+Release contains pre-built application and configuration packed in **appimage format**. 
+
+To run it, 
+
+1.  Add executable permission `chmod +x mmvj*appimage`  
+2.  Run it!  `./mmvj*appimage`  
+    1.  When running from terminal will by default start in command-line mode. To enable gui run it with --gui option.
+    2.  When running from gui will by default start in gui mode.
+3.  On start application will create **conf/** directory **in current working directory**, where set of example configuration files will be automatically extracted.   
+    Those can be manipulated/saved, they _will not_ be automatically overwritten.
+
+---
 
 ### Build from Source.
 
@@ -527,4 +544,4 @@ When this app reaches production state this will be changed.
 
 Pull requests are **not yet accepted**,   
 because please see the WARNING/DISCLAIMER at the top.  
-It will change as soon as the project gets in production-ready state.
+It will change as soon as the project gets in production-ready state
