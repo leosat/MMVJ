@@ -158,13 +158,26 @@ impl GuiGraphState {
 
         ui.horizontal(|ui| {
             ui.label("Time wind.:");
-            ui.add(egui::Slider::new(&mut self.time_window_sec, MIN_TIME_WINDOW..=MAX_TIME_WINDOW).suffix(" s"));
+            ui.add(
+                egui::DragValue::new(&mut self.time_window_sec)
+                    .range(MIN_TIME_WINDOW..=MAX_TIME_WINDOW)
+                    .suffix(" s")
+                    .speed(0.1),
+            );
             ui.separator();
             ui.label("Resolution:");
-            ui.add(egui::Slider::new(&mut self.resolution_factor, 0.1..=1.0).logarithmic(true));
+            ui.add(
+                egui::DragValue::new(&mut self.resolution_factor)
+                    .range(0.1..=1.0)
+                    .speed(0.1),
+            );
             ui.separator();
             ui.label("Dot width");
-            ui.add(egui::Slider::new(&mut self.dot_width_factor, 0.5..=PI).logarithmic(true));
+            ui.add(
+                egui::DragValue::new(&mut self.dot_width_factor)
+                    .range(0.5..=PI)
+                    .speed(0.1),
+            );
         });
 
         for event in &*self.data {
