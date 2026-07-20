@@ -1,12 +1,11 @@
 # MMVJ - force-feedback-enabled mouse steering and more: HID and MIDI transforming I/O mapper and virtual HID manager, for Linux.
 
-[Skipto **Disclaimer/development notice**](#warning-disclaimer) ...  
-[Skipto **Features**](#high-level-features-overview) ...  
-[Skipto **Application glossary**](#application-specific-glossary) ...  
-[Skipto **Configuration**](#configuration) ...  
-[Skipto **Installation (use appimage release)**](#installation) ...  
-[Skipto **Build from source**](#build-from-source) ...  
-[Skipto **Usage**](#usage) ...  
+[Skipto **Disclaimer/development notice**](#warning-disclaimer)  
+[Skipto **Features**](#high-level-features-overview)  
+[Skipto **Installation (new: binary appimage release)**](#installation)  
+[Skipto **Usage**](#usage)  
+[Skipto **Application glossary**](#application-specific-glossary)  
+[Skipto **Configuration**](#configuration)  
 [Goto **FAQ**](doc/FAQ.md) ...
 
 ---
@@ -55,7 +54,7 @@ Some early video demos of MMVJ being applied in raw rally simulation:
 *   **Matches existing devices by name regex and control types.**
 *   **Creates virtual HID (Mice/Keyboards/Joysticks) devices**: configure any number of Virtual Joysticks, Gamepads, Mice or hybrid devices with any sets of controls.
     *   **With virtual HID (e.g. Virtual Joysticks) persistence**: if set as persistent will not be respawned across configuration changes.
-*   **Remaps and transforms (advanced pipelines with shared and local state included) signals between different kinds of  devices** (e.g. \[1\])**:**
+*   **Remaps and transforms (advanced pipelines with shared and local state included) signals between different kinds of devices** (e.g. \[1\])**:**
     *   **Allowed inputs: Variables, MIDI and HID (Mice/Keyboards/Joysticks (including force feedback readings from virtual ones)).**
     *   **Allowed outputs: Variables and HID (Mice/Keyboards/Joysticks).**
 *   **Supports shared state variables/manually configured params**: configure any number of variables with ranges metadata to use as intermediate inputs or outputs in mappings graph.
@@ -66,7 +65,7 @@ Some early video demos of MMVJ being applied in raw rally simulation:
     *   Few details on **steering transformation** for use in simracing, flight and other simulator gaming:
         *   **Supports force feedback**: accepts **constant force and other effects (see the FAQ why this matters).**
         *   Supports configurable **autocentering (useful if no force feedback available or as an auxiliary behavior)**.
-        *   Supports intuitive emulation **of hands holding the steering wheel** with different force  **(a.k.a "hold factor" affecting the two mentioned above.
+        *   Supports intuitive emulation **of hands holding the steering wheel** with different force  \*\*(a.k.a "hold factor" affecting the two mentioned above.
     *   **Force feedback readings** from virtual HID (Virtual Joysticks) are also avaialbe as general readings on special internally-visible controls, enabling force feedback as input in arbitrary places of transformation pipelines (read and apply them from scripts or for ad-hoc parametrisation of transformation steps).
     *   **Supports scripting with Luau**: define scripted transformation steps having multiple optionally defined inputs, outputs (e.g. to use as hubs for smart signal routing) or child transformation pipelines synchronously runnable from the script.
 *   **Console-based monitoring mode for HID and MIDI devices.**
@@ -75,7 +74,7 @@ Some early video demos of MMVJ being applied in raw rally simulation:
 
 ---
 
-## Application-specific glossary.
+## **Application-specific glossary**
 
 ### Device Matchers.
 
@@ -320,7 +319,7 @@ While the configuration guide is WIP (configuration format is being stabilized),
 
 ---
 
-## Installation.
+## **Installation**
 
 ### Prerequisites: permissions.
 
@@ -384,7 +383,7 @@ cargo build --release -j4
 
 ---
 
-## Usage.
+## **Usage**
 
 ### Basic Usage (options can be combined).
 
@@ -426,7 +425,7 @@ cargo build --release -j4
 
 ---
 
-## **Configuration**.
+## **Configuration**
 
 ### Configuration file reference:
 
@@ -442,14 +441,16 @@ WIP for now, but you can use Gui to modify or define configs or see the examples
 
 #### \[i\] [Predefined control matchers config dump](conf/predefined_controls_dump.yaml) for definitions that you can reference in your config.
 
-## Performance
+##   
+**Performance**
 
 *   Low latency: \< 1ms processing time.
-*   Event-driven, on idle input base update rate is configurable from 10 to 1000 Hz.
+*   Event-driven, on idle input base update rate is configurable from 10 to 1000 Hz.  
+     
 
 ---
 
-## Troubleshooting.
+## **Troubleshooting**
 
 ### Binary release run problems:
 
@@ -462,11 +463,11 @@ You might still be able to extract the contents of this AppImage
 if you run it with the --appimage-extract option. 
 See https://github.com/AppImage/AppImageKit/wiki/FUSE 
 for more information
----------------------------------
+```
 
-Solution: run without trying to use fuse:
+Solution: run without fuse:
 
-
+```
 ./mmvj --appimage-extract-and-run
 ```
 
@@ -487,7 +488,9 @@ Any other library:
 Rebuild from source code, see instructions above.
 ```
 
-Permission denied errors.
+### Common problems.
+
+#### Permission denied errors.
 
 ```
 # Option 1: Add to input group (recommended)
@@ -498,7 +501,7 @@ sudo usermod -a -G input $USER
 sudo ./mmvj
 ```
 
-Force Feedback isn't working.
+#### Force Feedback isn't working.
 
 ```
 # Load uinput module
@@ -511,7 +514,7 @@ lsmod | grep uinput
 echo "uinput" | sudo tee -a /etc/modules
 ```
 
-MIDI Device not found.
+#### MIDI Device not found.
 
 ```
 # List all MIDI devices
