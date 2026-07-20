@@ -1087,11 +1087,12 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                         ui,
                     );
                 });
-
+                use documented::{Documented, DocumentedFields, DocumentedVariants, docs_const};
                 ui.separator();
                 ui.horizontal(|ui| {
                     let param_name = "Autocentering halflife";
-                    ui.label("Autocenter halflife (0 == off): ");
+                    ui.label("Autocenter halflife (0 == off): ")
+                        .on_hover_text(Self::get_field_docs("auto_center_halflife").unwrap());
                     changed_simple |= ui
                         .horizontal(|ui| {
                             self.auto_center_halflife.egui(

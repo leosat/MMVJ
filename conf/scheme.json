@@ -1519,16 +1519,20 @@
       "type": "string"
     },
     "SteeringCfg": {
+      "description": "Steering wheel emulation transform.\n\nConverts relative input (e.g. mouse movement) into an absolute wheel\nposition in [-1, +1], with force-feedback displacement, autocentering,\nand a configurable \"hold factor\" simulating grip strength.\n\nSee the [module-level documentation](steering_transform.md) for a full\nguide, signal-flow diagram, and configuration examples.",
       "type": "object",
       "properties": {
         "desc": {
+          "description": "Optional human-readable description shown in the GUI.",
           "$ref": "#/$defs/DescriptionCfg"
         },
         "enabled": {
+          "description": "Master on/off switch. When `false` the input passes through unchanged.",
           "type": "boolean",
           "default": true
         },
         "accumulator": {
+          "description": "Optional external variable (or device control) that persists the raw\naccumulated wheel angle (`pre_filter`) across ticks.\n\nUseful for sharing wheel state across mappings or for inspection.",
           "anyOf": [
             {
               "$ref": "#/$defs/DynValueRefs"
@@ -1539,27 +1543,33 @@
           ]
         },
         "deadzone_counts": {
+          "description": "*(Reserved — currently unused.)*\n\nIntended deadzone in input counts below which movement is ignored.",
           "type": "number",
           "format": "float",
           "minimum": 0.0,
           "default": 0.0
         },
         "input_gain": {
+          "description": "Multiplier applied to the raw input **before**\naccumulation. Mapped from its own interval to [0, 1].\n\n- Low (0.05–0.15): heavy, slow steering.\n- High (0.3–0.5): quick, responsive steering.\n\nAccepts a static value or a dynamic reference (`var:` / `dev:`)\nfor runtime adjustment.\n\nYAML aliases: `smoothing_alpha`, `input_sensitivity`.",
           "$ref": "#/$defs/ValueSrcs"
         },
         "auto_center_halflife": {
+          "description": "Half-life (in seconds) of the exponential autocentering decay.\n\n- `0`: autocentering disabled.\n- `0.1`: snappy return.\n- `0.3` (default): moderate, natural return.\n- `1.0+`: slow drift to center.\n\nDecay per tick: `(1 - 2^(-dt / halflife)) * (1 - hold_factor)`.\nOnly active when the user is idle and (FFB is negligible or\n`auto_center_along_force_feedback > 0`).",
           "$ref": "#/$defs/ValueSrcs",
           "default": 0.0
         },
         "auto_center_along_force_feedback": {
+          "description": "Allows autocentering to operate **alongside** active force feedback,\nscaled by this factor in [0, 1].\n\n- `0.0` (default): autocentering suppressed while FFB is present.\n- `1.0`: autocentering at full strength regardless of FFB.\n\nAccepts a bare `true`/`false` in YAML (converted to 1.0/0.0).",
           "$ref": "#/$defs/ValueSrcs",
           "default": 0.0
         },
         "hold_factor": {
+          "description": "Simulated grip strength in [0, 1]. Scales both FFB displacement\nand autocentering by `(1 - hold_factor)`.\n\n- `0.0` (default): hands off — FFB and autocentering act freely.\n- `0.5`: moderate grip — half effect.\n- `1.0`: locked grip — wheel immovable except by direct input.\n\nCommonly mapped to mouse Y via a separate `integrate` + `clamp`\nmapping for dynamic grip control.",
           "$ref": "#/$defs/ValueSrcs",
           "default": 0.0
         },
         "force_feedback": {
+          "description": "Force-feedback sub-configuration.\n\nWhen present and enabled, the step reads FFB forces from the\ndestination virtual device (or a `custom_source`), optionally\nfilters them through `transformation`, scales by `gain`, and\napplies the result as a positional offset weighted by\n`(1 - hold_factor) * dt`.\n\nOmit or set `enabled: false` to disable FFB entirely.",
           "anyOf": [
             {
               "$ref": "#/$defs/ForceFeedbackCfg"
@@ -1571,6 +1581,7 @@
           "default": null
         },
         "integrated_user_input_transform": {
+          "description": "Sub-pipeline applied to the accumulated user input **after**\nintegration but **before** FFB and autocentering.\n\nReceives the wheel angle in [-1, +1] (absolute). Use this to\nreshape the steering response curve:\n\n- `exp` with `base > 1, center_symmetric: true` — progressive\n  ratio (less sensitive in center).\n- `exp` with `base < 1` — inverted progressive (more sensitive\n  in center).\n- Empty (default) — linear 1:1 passthrough.",
           "$ref": "#/$defs/TfmSeqCfg",
           "default": []
         }
