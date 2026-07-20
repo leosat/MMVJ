@@ -156,8 +156,6 @@ pub(crate) struct TraceChannel {
     #[cfg(feature = "gui")]
     graph_senders: Vec<tokio::sync::mpsc::Sender<TelemetryEvent>>,
     file_loggers: Vec<Arc<Mutex<BufWriter<File>>>>,
-    #[cfg(feature = "gui")]
-    _graph_handles: Vec<TraceGraphHandle>, // for keep-alive.
 }
 
 impl TraceChannel {
@@ -195,8 +193,6 @@ impl TraceChannel {
 pub(crate) fn make_trace_channel(targets: Vec<TraceTarget>) -> TraceChannel {
     #[cfg(feature = "gui")]
     let mut graph_senders = Vec::new();
-    #[cfg(feature = "gui")]
-    let mut graph_handles = Vec::new();
     let mut file_loggers = Vec::new();
 
     for target in targets {
@@ -204,7 +200,6 @@ pub(crate) fn make_trace_channel(targets: Vec<TraceTarget>) -> TraceChannel {
             #[cfg(feature = "gui")]
             TraceTarget::Graph(handle) => {
                 graph_senders.push(handle.tx.clone());
-                graph_handles.push(handle); // for keeping it alive.
             }
             TraceTarget::File(path) => match std::fs::OpenOptions::new().create(true).append(true).open(&path) {
                 Ok(file) => {
@@ -216,8 +211,6 @@ pub(crate) fn make_trace_channel(targets: Vec<TraceTarget>) -> TraceChannel {
     }
 
     TraceChannel {
-        #[cfg(feature = "gui")]
-        _graph_handles: graph_handles,
         #[cfg(feature = "gui")]
         graph_senders,
         file_loggers,
