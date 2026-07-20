@@ -1,4 +1,4 @@
-use crate::common::{CommonDeviceManager, DriverCmd};
+use crate::common::DriverCmd;
 use crate::config::DebugLevel;
 use crate::config::MORE_DEBUG;
 use crate::gui_common::{
@@ -10,6 +10,7 @@ use crate::gui_device::GuiInDeviceCfg;
 use crate::gui_telemetry_graph::GuiTelemetryGraphStates;
 use crate::hid_device::HidDeviceKind;
 use crate::hid_manager::{AvailableHIDDeviceInfo, HidManager, WithDeviceClassification};
+use crate::mapped_device::MappedDeviceManager;
 #[cfg(feature = "midi")]
 use crate::midi::{AvailableMidiDeviceInfo, MidiManager};
 use crate::schemas_cfg::Config;

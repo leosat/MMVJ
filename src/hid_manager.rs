@@ -1,8 +1,8 @@
-use crate::common::{BaseNumT, CommonDeviceManager, OpenedDeviceInfo, get_interned_str};
+use crate::common::{BaseNumT, get_interned_str};
 use crate::config::DebugLevel;
 use crate::hid_device::{HidDevice, HidDeviceKind, HidVirtualDeviceCreationSpec};
 use crate::hid_owned_and_ffb::{X_AXIS_IDX, Y_AXIS_IDX};
-use crate::mapped_device::{MappedDeviceEvent, MappedDeviceIface, MappedEvents};
+use crate::mapped_device::{MappedDevice, MappedDeviceEvent, MappedDeviceManager, MappedEvents, OpenedDeviceInfo};
 use crate::num_interval::{NumInterval, OutOfRangePolicy};
 use crate::schemas_common::ObjId;
 use crate::schemas_hid::{HidDeviceCfg, HidDeviceClassificationCfg, HidVirtualOrMatcherParamsCfg};
@@ -179,7 +179,7 @@ impl HidManager {
             self.debug.is_on(),
         )?;
 
-        d.set_external_notification(Some(self.per_device_event_notification_tx.clone()));
+        d.attach_events_listener(Some(self.per_device_event_notification_tx.clone()));
 
         self.device_key_to_devices
             .borrow_mut()
@@ -408,9 +408,12 @@ impl WithDeviceClassification for evdev::Device {
     }
 }
 
-impl CommonDeviceManager for HidManager {
+impl MappedDeviceManager for HidManager {
     type AvailableDeviceInfo = AvailableHIDDeviceInfo;
     type DeviceCfg = HidDeviceCfg;
+    type DeviceKindFilter = Option<BitFlags<HidDeviceKind>>;
+    type DeviceEvent = MappedDeviceEvent;
+    type EventsListener = tokio::sync::mpsc::UnboundedSender<Self::DeviceEvent>;
 
     fn open(
         &self,
@@ -461,7 +464,7 @@ impl CommonDeviceManager for HidManager {
                 device_matcher_key
             );
             let id = d.get_id();
-            d.set_external_notification(Some(self.per_device_event_notification_tx.clone()));
+            d.attach_events_listener(Some(self.per_device_event_notification_tx.clone()));
             devices
                 .entry(d.get_cfg_key().to_string())
                 .or_default()
@@ -475,11 +478,11 @@ impl CommonDeviceManager for HidManager {
         }
     }
 
-    async fn consume_any_opened_device_event(&self) -> Option<MappedDeviceEvent> {
+    async fn consume_any_opened_device_event(&self) -> Option<Self::DeviceEvent> {
         poll_fn(|cx| self.all_devices_rx.borrow_mut().poll_recv(cx)).await
     }
 
-    fn enumerate_available_devices(&self, filter: Option<BitFlags<HidDeviceKind>>) -> Vec<Self::AvailableDeviceInfo> {
+    fn enumerate_available_devices(&self, filter: Self::DeviceKindFilter) -> Vec<Self::AvailableDeviceInfo> {
         let Ok(rd) = std::fs::read_dir("/dev/input").inspect_err(|e| log::error!("{e}")) else {
             return Vec::new();
         };
@@ -538,11 +541,7 @@ impl CommonDeviceManager for HidManager {
         Ok(())
     }
 
-    async fn monitor(
-        &self,
-        match_name_regex: &regex::Regex,
-        filter: Option<BitFlags<HidDeviceKind>>,
-    ) -> anyhow::Result<()> {
+    async fn monitor(&self, match_name_regex: &regex::Regex, filter: Self::DeviceKindFilter) -> anyhow::Result<()> {
         let devices = self.enumerate_available_devices(filter);
         let matched = devices
             .iter()
@@ -582,10 +581,10 @@ impl CommonDeviceManager for HidManager {
         }
     }
 
-    fn set_events_listenter(&self, tx: tokio::sync::mpsc::UnboundedSender<MappedDeviceEvent>) {
+    fn _set_events_listenter(&self, tx: tokio::sync::mpsc::UnboundedSender<Self::DeviceEvent>) {
         for device_data in &mut *self.device_key_to_devices.borrow_mut() {
             for device in device_data.1 {
-                device.0.borrow_mut().set_external_notification(Some(tx.clone()));
+                device.0.borrow_mut().attach_events_listener(Some(tx.clone()));
             }
         }
     }

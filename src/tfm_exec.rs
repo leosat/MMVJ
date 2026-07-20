@@ -542,8 +542,7 @@ impl WithTfmExec for ScriptCfg {
                 for (idx, (name, src)) in self.aux_srcs.iter().enumerate() {
                     let mut input_val = src.source.get_numeric_value();
                     src.remap_to_interval.inspect(|to_interval| {
-                        input_val =
-                            to_interval.map_from(input_val, &src.source.get_interval(), OutOfRangePolicy::Clamp)
+                        input_val = to_interval.map_from(input_val, &src.source.get_interval(), OutOfRangePolicy::Clamp)
                     });
 
                     let _ = exe_state

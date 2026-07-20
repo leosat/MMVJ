@@ -7,8 +7,8 @@ use crate::hid_manager::WithDeviceClassification;
 use crate::hid_owned_and_ffb::X_AXIS_IDX;
 use crate::hid_owned_and_ffb::Y_AXIS_IDX;
 use crate::mapped_controls::MappedCtls;
+use crate::mapped_device::MappedDevice;
 use crate::mapped_device::MappedDeviceEvent;
-use crate::mapped_device::MappedDeviceIface;
 use crate::mapped_device::MappedEvents;
 use crate::mapped_device::MappedHidEvent;
 use crate::num_interval::NumInterval;
@@ -210,7 +210,7 @@ pub(crate) struct HidDevice {
     name: String,
     _client_side_path: PathBuf,
     client_side_thread_rx_tx: DeviceComm,
-    external_notif_tx: Option<tokio::sync::mpsc::UnboundedSender<MappedDeviceEvent>>,
+    events_listener: Option<tokio::sync::mpsc::UnboundedSender<MappedDeviceEvent>>,
     client_side_thread_cancellation: CancellationToken,
     ctl_states: Arc<DeviceControlStates>,
     is_owned_virtual_device_persistent: bool,
@@ -715,7 +715,7 @@ fn test_virtual_joystick_internal(with_ff: bool) {
 
     let (notification_tx, mut notification_rx) = unbounded_channel::<MappedDeviceEvent>();
 
-    vjk.set_external_notification(Some(notification_tx));
+    vjk.attach_events_listener(Some(notification_tx));
 
     dbg!(&vjk);
     dbg!("Sleeping 1 second before infinite loop...");
@@ -866,7 +866,7 @@ impl HidDevice {
             owned_virtual_device: None,
             owned_virtual_device_cmd: None,
             owned_virtual_device_thread_cancellation: None,
-            external_notif_tx: None,
+            events_listener: None,
             client_side_thread_rx_tx: (rx1, tx2),
             client_side_thread_cancellation: cancellation_token,
             ctl_states,
@@ -885,7 +885,9 @@ impl Drop for HidDevice {
     }
 }
 
-impl MappedDeviceIface for HidDevice {
+impl MappedDevice for HidDevice {
+    type EventsListener = tokio::sync::mpsc::UnboundedSender<MappedDeviceEvent>;
+
     fn close(&self) -> anyhow::Result<()> {
         self.client_side_thread_cancellation.cancel();
 
@@ -900,25 +902,18 @@ impl MappedDeviceIface for HidDevice {
         self.id
     }
 
-    fn set_external_notification(
-        &mut self,
-        external_notification_comm: Option<tokio::sync::mpsc::UnboundedSender<MappedDeviceEvent>>,
-    ) {
-        if let Some(external_notification_comm) = &external_notification_comm {
+    fn attach_events_listener(&mut self, listener: Option<tokio::sync::mpsc::UnboundedSender<MappedDeviceEvent>>) {
+        if let Some(listener) = &listener {
             self.client_side_thread_rx_tx
                 .1
-                .send(DeviceThreadCmd::SetExternalNotification(
-                    external_notification_comm.clone(),
-                ))
+                .send(DeviceThreadCmd::SetExternalNotification(listener.clone()))
                 .expect("Can't set external notification with device client side thread.");
             if let Some(tx) = &self.owned_virtual_device_cmd {
-                tx.send(DeviceThreadCmd::SetExternalNotification(
-                    external_notification_comm.clone(),
-                ))
-                .expect("Can't set external notification with oned virtual device thread.");
+                tx.send(DeviceThreadCmd::SetExternalNotification(listener.clone()))
+                    .expect("Can't set external notification with oned virtual device thread.");
             }
         }
-        self.external_notif_tx = external_notification_comm;
+        self.events_listener = listener;
     }
 
     fn is_owning(&self) -> bool {
