@@ -1591,44 +1591,42 @@
       ]
     },
     "ForceFeedbackCfg": {
+      "description": "Force-feedback configuration for the steering transform.\n\nControls how FFB forces from the game (read via the virtual HID device)\nare filtered, scaled, and applied as positional offsets to the emulated\nsteering wheel.",
       "type": "object",
       "properties": {
         "desc": {
+          "description": "Optional human-readable description.",
           "$ref": "#/$defs/DescriptionCfg"
         },
         "enabled": {
+          "description": "Enable/disable FFB processing. When `false`, no force is applied.",
           "type": "boolean",
           "default": true
         },
         "gain": {
+          "description": "Multiplier applied to the (optionally filtered) FFB force.\n\n- `1.0` (default): force applied as-is.\n- `> 1.0`: amplifies FFB effect.\n- `< 1.0`: dampens FFB effect.\n- `0.0`: effectively disables FFB without removing the config block.",
           "type": "number",
           "format": "float",
           "minimum": 0.0,
           "default": 1.0
         },
         "invert": {
+          "description": "Flips the sign of the FFB force.\n\nUse when the wheel turns the wrong way in response to game forces\n(e.g. assists the turn instead of resisting it).",
           "type": "boolean",
           "default": false
         },
         "component": {
+          "description": "Selects which FFB axis to read from the virtual device.\n\n- `X` (default): primary steering axis.\n- `Y`: secondary axis / separate effect channel.",
           "$ref": "#/$defs/ForceFeedbackComponent",
           "default": "X"
         },
-        "hold_factor": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ValueSrcs"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
         "transformation": {
+          "description": "Sub-pipeline applied to the raw FFB signal **before** `gain` and\n`invert`.\n\nReceives the force in [-1, +1] with relative semantics.\nTypical uses: `ema`/`one_euro` smoothing, `clamp` for peak\nlimiting, curves for reshaping the force response.",
           "$ref": "#/$defs/TfmSeqCfg",
           "default": []
         },
         "custom_source": {
+          "description": "Overrides the default FFB source.\n\nInstead of reading force from the destination virtual device's\ninternal FFB state, reads from this arbitrary `ValueSrc` (variable,\ndevice control, etc.). The value is mapped from the source's\ninterval to [-1, +1].",
           "anyOf": [
             {
               "$ref": "#/$defs/ValueSrcs"

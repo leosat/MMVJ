@@ -678,23 +678,6 @@ impl Default for SteeringExeState {
     }
 }
 
-impl TfmExeState for SteeringCfg {
-    type StateMutT<'a>
-        = parking_lot::ArcMutexGuard<parking_lot::RawMutex, SteeringExeState>
-    where
-        Self: 'a;
-
-    type ResetInput = Option<SteeringExeState>;
-
-    fn exe_state_mut(&self) -> Self::StateMutT<'_> {
-        self.exe_state.lock_arc()
-    }
-
-    fn exe_state_reset(&self, reset_with: Self::ResetInput) {
-        *self.exe_state_mut() = reset_with.unwrap_or_default()
-    }
-}
-
 impl WithTfmExec for SteeringCfg {
     fn exec(&self, input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
         if !self.enabled {

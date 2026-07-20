@@ -18,6 +18,7 @@ use crate::schemas_value::{
     DescriptionCfg, MappedValue, StaticValueCfg, ValueSrcs, WithDescriptionMut, WithNumericValue,
 };
 use crate::tracing::GraphDisplayStyle;
+// use documented::{Documented, DocumentedFields};
 use egui::text::LayoutJob;
 use egui::{Button, CollapsingHeader, FontId, Sense, TextFormat, WidgetText};
 use std::collections::HashMap;
@@ -968,6 +969,7 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
 
                 changed |= ui
                     .checkbox(&mut use_custom, "Use custom value source for FFB")
+                    .on_hover_text(self.custom_source_doc_str())
                     .changed();
 
                 ui.separator();
@@ -977,12 +979,19 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
                         changed = true;
                     }
                     ui.horizontal(|ui| {
-                        ui.label("Use force feedback component from mapping destination HID device: ");
+                        ui.label("Use force feedback component from mapping destination HID device: ")
+                            .on_hover_text(
+                                "Force feedback is received in 2d space with direction (Const force effect) or bound to X or Y \
+                                component (Spring/Friction/Damper/Inertia effects). \
+                                We are using FFB readings from destination virtual HID associated with the pipeline",
+                            );
                         changed |= ui
                             .selectable_value(&mut self.component, ForceFeedbackComponent::X, "X")
+                            .on_hover_text("Use X component of FFB")
                             .changed();
                         changed |= ui
                             .selectable_value(&mut self.component, ForceFeedbackComponent::Y, "Y")
+                            .on_hover_text("Use Y component of FFB")
                             .changed();
                     });
                 } else {
@@ -1017,13 +1026,18 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
                                     Some(GuiCmd::ConfigChangeSimple)
                                 }
                             };
-                        });
+                        })
+                        .response
+                        .on_hover_text(self.custom_source_doc_str());
                     }
                 }
 
                 ui.separator();
                 ui.horizontal(|ui| {
-                    changed |= ui.checkbox(&mut self.invert, "Invert force feedback").changed();
+                    changed |= ui
+                        .checkbox(&mut self.invert, "Invert force feedback")
+                        .on_hover_text(self.doc_str())
+                        .changed();
                 });
 
                 ui.separator();
@@ -1033,6 +1047,7 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
                             .text("Force feedback gain.")
                             .logarithmic(false),
                     )
+                    .on_hover_text(self.gain_doc_str())
                     .changed();
 
                 gui_out = gui_out.or(bool_to_simple_change_gui_cmd(changed));
@@ -1070,8 +1085,8 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
 
                 ui.separator();
                 ui.horizontal(|ui| {
-                    let param_name = "Smoothing (sensitivity) factor";
-                    ui.label(param_name);
+                    let param_name = "Input gain";
+                    ui.label(param_name).on_hover_text(self.input_gain_doc_str());
                     changed_simple |= self.input_gain.egui(
                         (
                             param_name,
@@ -1086,13 +1101,14 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                         ),
                         ui,
                     );
-                });
-                use documented::{Documented, DocumentedFields, DocumentedVariants, docs_const};
+                })
+                .response
+                .on_hover_text(self.input_gain_doc_str());
                 ui.separator();
                 ui.horizontal(|ui| {
                     let param_name = "Autocentering halflife";
                     ui.label("Autocenter halflife (0 == off): ")
-                        .on_hover_text(Self::get_field_docs("auto_center_halflife").unwrap());
+                        .on_hover_text(self.auto_center_halflife_doc_str());
                     changed_simple |= ui
                         .horizontal(|ui| {
                             self.auto_center_halflife.egui(
@@ -1118,7 +1134,8 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                     if self.auto_center_halflife.get_numeric_value() > 0.0 {
                         ui.horizontal(|ui| {
                             let param_name = "Apply autocentering along with force feedback.";
-                            ui.label(param_name);
+                            ui.label(param_name)
+                                .on_hover_text(Self::auto_center_along_force_feedback_doc_str_static());
                             changed_simple |= self.auto_center_along_force_feedback.egui(
                                 (
                                     param_name,
@@ -1139,7 +1156,9 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                     ui.collapsing("Force feedback params:", |ui| {
                         ui.separator();
                         *gui_out_mut = gui_out_mut.clone().or(ff.egui(state.clone(), ui));
-                    });
+                    })
+                    .header_response
+                    .on_hover_text(self.doc_str());
                 } else {
                     ui.separator();
                     #[allow(clippy::field_reassign_with_default)]
@@ -1177,7 +1196,9 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                             }
                         };
                     });
-                });
+                })
+                .header_response
+                .on_hover_text(self.hold_factor_doc_str());
 
                 gui_out = gui_out.or(bool_to_simple_change_gui_cmd(changed_simple));
 
@@ -1232,19 +1253,23 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                             changed_simple |= true;
                         }
                     }
-                });
+                })
+                .response
+                .on_hover_text(self.accumulator_doc_str());
 
                 ui.separator();
-                gui_out.or(ui
-                    .collapsing(
+                gui_out.or({
+                    let c = ui.collapsing(
                         "Accumulated user input (pre force feedback and autocentering) transform",
                         |ui| {
                             self.integrated_user_input_transform
                                 .egui(state.clone_and_push_hier(self.integrated_user_input_transform.id), ui)
                         },
-                    )
-                    .body_returned
-                    .unwrap_or_default())
+                    );
+                    c.header_response
+                        .on_hover_text(self.integrated_user_input_transform_doc_str());
+                    c.body_returned.unwrap_or_default()
+                })
             }
             GuiInTfmStepsSeq::Display => None,
         }

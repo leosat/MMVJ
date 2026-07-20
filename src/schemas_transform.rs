@@ -5,7 +5,9 @@ use crate::schemas_value::{
     DeviceControlMatcherRef, DynValueRefs, ValueDsts, VariableRef, WithNumInterval, WithRelativityRef,
     serialize_value_src_rt_ignore_interval,
 };
-use crate::tfm_exec::{IntegrateExeState, RaiseFallExeState, ScriptExeState, SteeringExeState, ThreadLocalState};
+use crate::tfm_exec::{
+    IntegrateExeState, RaiseFallExeState, ScriptExeState, SteeringExeState, TfmExeState, ThreadLocalState,
+};
 use crate::{
     common::{Relativity, SYMM_UNIT_INTERVAL, UNIT_INTERVAL},
     num_interval::NumInterval,
@@ -18,7 +20,7 @@ use atomic_float::AtomicF32;
 use bitflags::bitflags;
 use crossbeam_utils::CachePadded;
 use doc_for::*;
-use documented::{Documented, DocumentedFields, docs_const};
+// use documented::{Documented, DocumentedFields, docs_const};
 use garde::Validate;
 use parking_lot::Mutex;
 use schemars::JsonSchema;
@@ -249,13 +251,13 @@ impl PartialEq for TfmStepCommonStateShared {
     Clone,
     PartialEq,
     Validate,
+    Delegate,
 )]
-#[strum(serialize_all = "snake_case")]
-#[serde(rename_all = "snake_case")]
-#[derive(Delegate)]
 #[delegate(WithCommonState)]
 #[delegate(WithCommonStateMut)]
 #[delegate(WithCommonStateAssignedNew)]
+#[strum(serialize_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum TfmStepCfg {
     #[traverse(skip)]
     Nop(#[garde(skip)] NopCfg),
@@ -343,56 +345,90 @@ pub(crate) enum ForceFeedbackComponent {
     // XY,
 }
 
+use with_doc_str::with_doc_str;
+
+/// Force-feedback configuration for the steering transform.
+///
+/// Controls how FFB forces from the game (read via the virtual HID device)
+/// are filtered, scaled, and applied as positional offsets to the emulated
+/// steering wheel.
 #[derive(
-    JsonSchema, Debug, Clone, Traversable, TraversableMut, Serialize, Deserialize, PartialEq, Default, Validate,
+    // Documented,
+    // DocumentedFields,
+    JsonSchema,
+    Debug,
+    Clone,
+    Traversable,
+    TraversableMut,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Default,
+    Validate,
 )]
 #[serde(deny_unknown_fields)]
+#[with_doc_str]
 pub(crate) struct ForceFeedbackCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    common_state: TfmStepCommonStateShared,
+    ///
+    pub common_state: TfmStepCommonStateShared,
+
+    /// Optional human-readable description.
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
     pub(crate) desc: DescriptionCfg,
+
+    /// Enable/disable FFB processing. When `false`, no force is applied.
     #[serde(default = "default_step_enabled")]
     #[garde(skip)]
     pub(crate) enabled: bool,
+
+    /// Multiplier applied to the (optionally filtered) FFB force.
+    ///
+    /// - `1.0` (default): force applied as-is.
+    /// - `> 1.0`: amplifies FFB effect.
+    /// - `< 1.0`: dampens FFB effect.
+    /// - `0.0`: effectively disables FFB without removing the config block.
     #[serde(default = "default_ff_gain")]
-    #[garde(range(min = 0.0))] // Gain magnitude (invert is handled via a separate boolean)
+    #[garde(range(min = 0.0))]
     pub(crate) gain: BaseNumT,
+
+    /// Flips the sign of the FFB force.
+    ///
+    /// Use when the wheel turns the wrong way in response to game forces
+    /// (e.g. assists the turn instead of resisting it).
     #[serde(default)]
     #[garde(skip)]
     pub(crate) invert: bool,
+
+    /// Selects which FFB axis to read from the virtual device.
+    ///
+    /// - `X` (default): primary steering axis.
+    /// - `Y`: secondary axis / separate effect channel.
     #[serde(default)]
     #[garde(skip)]
     pub(crate) component: ForceFeedbackComponent,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(alias = "wheel_hold_factor")]
-    #[garde(skip)]
-    pub(crate) hold_factor: Option<ValueSrcs>,
+
+    /// Sub-pipeline applied to the raw FFB signal **before** `gain` and
+    /// `invert`.
+    ///
+    /// Receives the force in [-1, +1] with relative semantics.
+    /// Typical uses: `ema`/`one_euro` smoothing, `clamp` for peak
+    /// limiting, curves for reshaping the force response.
     #[serde(default)]
     #[garde(skip)]
     pub(crate) transformation: TfmSeqCfg,
-    // #[serde(default)]
-    // #[serde(skip_serializing_if = "is_false")]
-    // #[garde(skip)]
-    // pub(crate) external_gain_control_enabled: bool,
-    // #[serde(default)]
-    // #[serde(skip_serializing_if = "is_false")]
-    // #[garde(skip)]
-    // pub(crate) external_autocentering_control_enabled: bool,
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // #[garde(skip)]
-    // pub(crate) constant: Option<Box<ForceFeedbackCfg>>,
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // #[garde(skip)]
-    // pub(crate) spring: Option<Box<ForceFeedbackCfg>>,
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // #[garde(skip)]
-    // pub(crate) friction: Option<Box<ForceFeedbackCfg>>,
+
+    /// Overrides the default FFB source.
+    ///
+    /// Instead of reading force from the destination virtual device's
+    /// internal FFB state, reads from this arbitrary `ValueSrc` (variable,
+    /// device control, etc.). The value is mapped from the source's
+    /// interval to [-1, +1].
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     #[garde(skip)]
@@ -1343,19 +1379,8 @@ impl_with_common_state!(
 ///
 /// See the [module-level documentation](steering_transform.md) for a full
 /// guide, signal-flow diagram, and configuration examples.
-#[derive(
-    Documented,
-    DocumentedFields,
-    Debug,
-    Clone,
-    Serialize,
-    Traversable,
-    TraversableMut,
-    Deserialize,
-    JsonSchema,
-    Validate,
-)]
-// #[docs_const]
+#[derive(Debug, Clone, Serialize, Traversable, TraversableMut, Deserialize, JsonSchema, Validate)]
+#[with_doc_str]
 pub(crate) struct SteeringCfg {
     #[serde(skip)]
     #[traverse(skip)]
@@ -1367,7 +1392,7 @@ pub(crate) struct SteeringCfg {
     #[traverse(skip)]
     #[garde(skip)]
     ///
-    pub(super) exe_state: Arc<Mutex<SteeringExeState>>,
+    exe_state: Arc<Mutex<SteeringExeState>>,
 
     /// Optional human-readable description shown in the GUI.
     #[traverse(skip)]
@@ -1480,6 +1505,23 @@ pub(crate) struct SteeringCfg {
     #[serde(default)]
     #[garde(skip)]
     pub(crate) integrated_user_input_transform: TfmSeqCfg,
+}
+
+impl TfmExeState for SteeringCfg {
+    type StateMutT<'a>
+        = parking_lot::ArcMutexGuard<parking_lot::RawMutex, SteeringExeState>
+    where
+        Self: 'a;
+
+    type ResetInput = Option<SteeringExeState>;
+
+    fn exe_state_mut(&self) -> Self::StateMutT<'_> {
+        self.exe_state.lock_arc()
+    }
+
+    fn exe_state_reset(&self, reset_with: Self::ResetInput) {
+        *self.exe_state_mut() = reset_with.unwrap_or_default()
+    }
 }
 
 impl Default for SteeringCfg {
