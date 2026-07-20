@@ -18,6 +18,7 @@ use atomic_float::AtomicF32;
 use bitflags::bitflags;
 use crossbeam_utils::CachePadded;
 use doc_for::*;
+use documented::{Documented, DocumentedFields, docs_const};
 use garde::Validate;
 use parking_lot::Mutex;
 use schemars::JsonSchema;
@@ -1334,51 +1335,148 @@ impl_with_common_state!(
     ScriptCfg,
 );
 
-#[derive(Debug, Clone, Serialize, Traversable, TraversableMut, Deserialize, JsonSchema, Validate)]
+/// Steering wheel emulation transform.
+///
+/// Converts relative input (e.g. mouse movement) into an absolute wheel
+/// position in [-1, +1], with force-feedback displacement, autocentering,
+/// and a configurable "hold factor" simulating grip strength.
+///
+/// See the [module-level documentation](steering_transform.md) for a full
+/// guide, signal-flow diagram, and configuration examples.
+#[derive(
+    Documented,
+    DocumentedFields,
+    Debug,
+    Clone,
+    Serialize,
+    Traversable,
+    TraversableMut,
+    Deserialize,
+    JsonSchema,
+    Validate,
+)]
+// #[docs_const]
 pub(crate) struct SteeringCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
+    ///
     common_state: TfmStepCommonStateShared,
+
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
+    ///
     pub(super) exe_state: Arc<Mutex<SteeringExeState>>,
+
+    /// Optional human-readable description shown in the GUI.
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
     pub(crate) desc: DescriptionCfg,
+
+    /// Master on/off switch. When `false` the input passes through unchanged.
     #[serde(default = "default_step_enabled")]
     #[garde(skip)]
     pub(crate) enabled: bool,
+
+    /// Optional external variable (or device control) that persists the raw
+    /// accumulated wheel angle (`pre_filter`) across ticks.
+    ///
+    /// Useful for sharing wheel state across mappings or for inspection.
     #[garde(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) accumulator: Option<DynValueRefs>,
+
+    /// *(Reserved — currently unused.)*
+    ///
+    /// Intended deadzone in input counts below which movement is ignored.
     #[allow(dead_code)]
     #[serde(default)]
     #[garde(range(min = 0.0))]
     pub(crate) deadzone_counts: BaseNumT,
-    //#[garde(range(min = 0.0, max = 1.0))]
+
+    /// Multiplier applied to the raw input **before**
+    /// accumulation. Mapped from its own interval to [0, 1].
+    ///
+    /// - Low (0.05–0.15): heavy, slow steering.
+    /// - High (0.3–0.5): quick, responsive steering.
+    ///
+    /// Accepts a static value or a dynamic reference (`var:` / `dev:`)
+    /// for runtime adjustment.
+    ///
+    /// YAML aliases: `smoothing_alpha`, `input_sensitivity`.
     #[garde(skip)]
     #[serde(alias = "smoothing_alpha")]
     #[serde(alias = "input_sensitivity")]
     pub(crate) input_gain: ValueSrcs,
+
+    /// Half-life (in seconds) of the exponential autocentering decay.
+    ///
+    /// - `0`: autocentering disabled.
+    /// - `0.1`: snappy return.
+    /// - `0.3` (default): moderate, natural return.
+    /// - `1.0+`: slow drift to center.
+    ///
+    /// Decay per tick: `(1 - 2^(-dt / halflife)) * (1 - hold_factor)`.
+    /// Only active when the user is idle and (FFB is negligible or
+    /// `auto_center_along_force_feedback > 0`).
     #[serde(default)]
     #[garde(skip)]
     pub(crate) auto_center_halflife: ValueSrcs,
+
+    /// Allows autocentering to operate **alongside** active force feedback,
+    /// scaled by this factor in [0, 1].
+    ///
+    /// - `0.0` (default): autocentering suppressed while FFB is present.
+    /// - `1.0`: autocentering at full strength regardless of FFB.
+    ///
+    /// Accepts a bare `true`/`false` in YAML (converted to 1.0/0.0).
     #[serde(default)]
     #[garde(skip)]
     #[serde(deserialize_with = "deserialize_bool_or_value_src")]
     pub(crate) auto_center_along_force_feedback: ValueSrcs,
+
+    /// Simulated grip strength in [0, 1]. Scales both FFB displacement
+    /// and autocentering by `(1 - hold_factor)`.
+    ///
+    /// - `0.0` (default): hands off — FFB and autocentering act freely.
+    /// - `0.5`: moderate grip — half effect.
+    /// - `1.0`: locked grip — wheel immovable except by direct input.
+    ///
+    /// Commonly mapped to mouse Y via a separate `integrate` + `clamp`
+    /// mapping for dynamic grip control.
     #[serde(default)]
     #[serde(serialize_with = "serialize_value_src_rt_ignore_interval")]
     #[garde(skip)]
     pub(crate) hold_factor: ValueSrcs,
+
+    /// Force-feedback sub-configuration.
+    ///
+    /// When present and enabled, the step reads FFB forces from the
+    /// destination virtual device (or a `custom_source`), optionally
+    /// filters them through `transformation`, scales by `gain`, and
+    /// applies the result as a positional offset weighted by
+    /// `(1 - hold_factor) * dt`.
+    ///
+    /// Omit or set `enabled: false` to disable FFB entirely.
     #[serde(default)]
     #[garde(skip)]
     pub(crate) force_feedback: Option<ForceFeedbackCfg>,
+
+    /// Sub-pipeline applied to the accumulated user input **after**
+    /// integration but **before** FFB and autocentering.
+    ///
+    /// Receives the wheel angle in [-1, +1] (absolute). Use this to
+    /// reshape the steering response curve:
+    ///
+    /// - `exp` with `base > 1, center_symmetric: true` — progressive
+    ///   ratio (less sensitive in center).
+    /// - `exp` with `base < 1` — inverted progressive (more sensitive
+    ///   in center).
+    /// - Empty (default) — linear 1:1 passthrough.
     #[serde(default)]
     #[garde(skip)]
     pub(crate) integrated_user_input_transform: TfmSeqCfg,
