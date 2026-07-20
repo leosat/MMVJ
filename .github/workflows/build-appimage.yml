@@ -3,11 +3,6 @@ name: Build and Auto-Release AppImage
 on:
   push:
     branches: [ "main" ]
-    ##workflow_run:
-    ##workflows: ["Common testing"]
-    ##branches: ["main"]
-    ##types:
-    ##- completed
 
 permissions:
   contents: write
@@ -18,7 +13,42 @@ env:
   DISPLAY_NAME: MMVJ
 
 jobs:
+  check-release:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check if release already exists
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(grep -m 1 '^version =' Cargo.toml | cut -d '"' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+
+          # Always build for non-main branches
+          #if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+          #  echo "Not on main branch, proceeding with build."
+          #  echo "should_build=true" >> $GITHUB_OUTPUT
+          #  exit 0
+          #fi
+
+          if gh release view "v$VERSION" &> /dev/null; then
+            echo "Release v$VERSION already exists. Skipping build."
+            echo "should_build=false" >> $GITHUB_OUTPUT
+          else
+            echo "Release v$VERSION does not exist. Proceeding with build."
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          fi
+
   build-appimage:
+    needs: check-release
+    if: needs.check-release.outputs.should_build == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -28,7 +58,6 @@ jobs:
           - os: ubuntu-22.04-arm
             arch: aarch64
     runs-on: ${{ matrix.os }}
-    ##if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -42,15 +71,8 @@ jobs:
           cache-on-failure: true
           shared-key: "rust-cache-shared-release-${{ matrix.arch }}"
 
-      - name: Extract version from Cargo.toml
-        run: |
-          VERSION=$(grep -m 1 '^version =' Cargo.toml | cut -d '"' -f2)
-          if [ -z "$VERSION" ]; then
-            echo "::error::Could not find 'version' in Cargo.toml"
-            exit 1
-          fi
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Extracted version: $VERSION"
+      - name: Set VERSION environment variable
+        run: echo "VERSION=${{ needs.check-release.outputs.version }}" >> $GITHUB_ENV
 
       - name: Install system dependencies
         run: |
@@ -104,15 +126,7 @@ jobs:
           BINARY="$HERE/usr/bin/mmvj"
 
           if [ ! -d "./conf" ]; then
-            #echo "Default configuration directory './conf' not found in the current directory."
-            # read -p "Do you want to extract the default configuration here? [y/N] " response
-            # if [[ "$response" =~ ^[Yy]$ ]]; then
-            # echo "Extracting default configuration to ./conf..."
-              cp -r "$PACKAGED_CONF" ./conf
-            # echo "Configuration extracted successfully."
-            # else
-            # echo "Skipping extraction. The application will run without a local config directory."
-            # fi
+            cp -r "$PACKAGED_CONF" ./conf
           fi
 
           if [ ! -t 0 ]; then
@@ -178,37 +192,11 @@ jobs:
           retention-days: 1
 
   release:
-    needs: build-appimage
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [check-release, build-appimage]
+    if: needs.check-release.outputs.should_build == 'true'
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Extract version from Cargo.toml
-        run: |
-          VERSION=$(grep -m 1 '^version =' Cargo.toml | cut -d '"' -f2)
-          if [ -z "$VERSION" ]; then
-            echo "::error::Could not find 'version' in Cargo.toml"
-            exit 1
-          fi
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Extracted version: $VERSION"
-
-      - name: Check if release already exists
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if gh release view "v${{ env.VERSION }}" &> /dev/null; then
-            echo "Release v${{ env.VERSION }} already exists. Skipping release creation."
-            echo "RELEASE_EXISTS=true" >> $GITHUB_ENV
-          else
-            echo "Release v${{ env.VERSION }} does not exist. Will create it."
-            echo "RELEASE_EXISTS=false" >> $GITHUB_ENV
-          fi
-
       - name: Download all build artifacts
-        if: env.RELEASE_EXISTS == 'false'
         uses: actions/download-artifact@v4
         with:
           pattern: ${{ env.APP_NAME }}-bundle-*
@@ -216,11 +204,10 @@ jobs:
           merge-multiple: true
 
       - name: Publish to GitHub Releases
-        if: env.RELEASE_EXISTS == 'false'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.VERSION }}
-          name: MMVJ v${{ env.VERSION }}
+          tag_name: v${{ needs.check-release.outputs.version }}
+          name: MMVJ v${{ needs.check-release.outputs.version }}
           files: dist/*
           generate_release_notes: true
           draft: false
