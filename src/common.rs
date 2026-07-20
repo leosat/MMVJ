@@ -1,12 +1,6 @@
 use crate::config::DebugLevel;
-use crate::hid_device::HidDeviceKind;
-use crate::mapped_device::MappedDeviceEvent;
-use crate::schemas_common::ObjId;
 use crate::schemas_mapping::Mapping;
 use crate::{num_interval::NumInterval, schemas_cfg::Config};
-use atomic_float::AtomicF32;
-use crossbeam_utils::CachePadded;
-use enumflags2::BitFlags;
 use num_traits::{Float, Num, ToPrimitive};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -64,79 +58,8 @@ pub(crate) fn intern_str(str: &str) -> usize {
 
 //====================================================================================
 
-#[derive(Debug, Clone, PartialEq, Default)]
-pub(crate) enum _DeviceOwnershipStatus {
-    Owned,
-    #[default]
-    Unowned,
-}
-
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-pub(crate) enum _DeviceVirtuality {
-    Virtual,
-    #[default]
-    Physical,
-}
-
-#[allow(unused)]
-#[derive(Debug, Clone)]
-pub(crate) struct OpenedDeviceInfo<AvailableDeviceInfoT> {
-    pub(crate) id: ObjId,
-    pub(crate) info: AvailableDeviceInfoT,
-}
-pub(crate) trait CommonDeviceManager {
-    type AvailableDeviceInfo;
-    type DeviceCfg;
-    fn open(
-        &self,
-        device_info: Self::AvailableDeviceInfo,
-        device_matcher_key: &str,
-        device_cfg: &Self::DeviceCfg,
-    ) -> anyhow::Result<OpenedDeviceInfo<Self::AvailableDeviceInfo>>;
-    // NB/TODO: API: this consumes any message and that's it... which suggests one consumer.
-    // NB/TODO: API: but if one consumer, why to keep the rx channel end, maybe just make an API
-    // NB/TODO: API: to attach any external channel and not bother about serving rx end from here.
-    // NB/TODO: API: this API is not mut for interior mutability, any impl. must be clever
-    //          to keep borrows etc across await points...
-    // https://github.com/leosat/MMVJ/issues/72
-    async fn consume_any_opened_device_event(&self) -> Option<MappedDeviceEvent>;
-    async fn monitor(
-        &self,
-        match_name_regex: &regex::Regex,
-        filter: Option<BitFlags<HidDeviceKind>>,
-    ) -> anyhow::Result<()>;
-    #[allow(unused)] // TODO: https://github.com/leosat/MMVJ/issues/72
-    fn set_events_listenter(&self, tx: tokio::sync::mpsc::UnboundedSender<MappedDeviceEvent>);
-    fn enumerate_available_devices(&self, filter: Option<BitFlags<HidDeviceKind>>) -> Vec<Self::AvailableDeviceInfo>;
-    // fn set_control_value(&self, device_key: &str, ctl_key: &str, value: BaseNumericT, _silent: bool);
-    // fn get_control_value(&self, device_key: &str, ctl_key: &str) -> BaseNumericT;
-    fn stop(&self, full_shutdown: bool) -> anyhow::Result<()>;
-}
-
-//====================================================================================
-type SharedStats = Arc<CachePadded<AtomicF32>>;
-type SharedStats3 = (SharedStats, SharedStats, SharedStats);
-
-#[allow(unused)]
-#[derive(Debug, Default)]
-pub(crate) struct SharedAtomicStateStats {
-    pub(crate) mem_usage: SharedStats3,
-    pub(crate) cpu_usage: SharedStats3,
-    pub(crate) input_freq: SharedStats3,
-    pub(crate) mapping_time_sec: SharedStats3,
-}
-
-#[allow(unused)]
-#[derive(Debug, Default)]
-pub(crate) struct Stats {
-    median: SharedAtomicStateStats,
-    mean: SharedAtomicStateStats,
-}
-
 // #[derive(Debug, Default)]
 // pub(crate) struct SharedAtomicState {
-//     pub(crate) _stats: Stats,
-//     pub(crate) _vars: [SharedStats; 32],
 //     pub(crate) map: papaya::HashMap<usize, AtomicF32>,
 // }
 

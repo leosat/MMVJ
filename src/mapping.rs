@@ -1,9 +1,9 @@
-use crate::common::{BaseNumT, CommonDeviceManager, get_debug_level, get_interned_str, intern_str};
+use crate::common::{BaseNumT, get_debug_level, get_interned_str, intern_str};
 use crate::config::DebugLevel;
 use crate::hid_device::HidDeviceKind;
 use crate::hid_manager::{HidManager, WithDeviceClassification};
 use crate::mapped_controls::MappedCtls;
-use crate::mapped_device::{MappedDeviceEvent, MappedEvents, MappedHidEvent};
+use crate::mapped_device::{MappedDeviceEvent, MappedDeviceManager, MappedEvents, MappedHidEvent};
 #[cfg(feature = "midi")]
 use crate::midi::{MappedMidiMessage, MidiManager};
 use crate::num_interval::{NumInterval, OutOfRangePolicy};

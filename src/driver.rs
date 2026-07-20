@@ -1,7 +1,7 @@
-use crate::common::CommonDeviceManager;
 use crate::config::DebugLevel;
 use crate::config::MORE_DEBUG;
 use crate::hid_manager::{HidManager, WithDeviceClassification};
+use crate::mapped_device::MappedDeviceManager;
 use crate::mapping::MappingEngine;
 #[cfg(feature = "midi")]
 use crate::midi::{MidiLearnMode, MidiManager};
