@@ -3,7 +3,7 @@
 * [MMVJ FAQ.](#mmvj-faq)
   * [Controlling an imaginary car with mouse or MIDI controller - what a strange idea and how can it be even physically doable/ergonomic?](#controlling-an-imaginary-car-with-mouse-or-midi-controller---what-a-strange-idea-and-how-can-it-be-even-physically-doableergonomic)
   * [There are steering wheels and specialized controllers on the market, why to do it with mouse or a MIDI device?](#there-are-steering-wheels-and-specialized-controllers-on-the-market-why-to-do-it-with-mouse-or-a-midi-device)
-  * [Configuration seems complex you need a configuration GUI.](#configuration-seems-complex-you-need-a-configuration-gui)
+  * [Configuration seems complex, where is Gui?](#configuration-seems-complex-how-to-enable-gui)
   * [I'm having hard time figuring out what all those numbers in config mean.](#im-having-hard-time-figuring-out-what-all-those-numbers-in-config-mean)
   * [Force feedback doesn't seem to work with my game and MMVJ, how to debug that?](#force-feedback-doesnt-seem-to-work-with-my-game-and-mmvj-how-to-debug-that)
   * [Force feedback works, but it's worse with it than without.](#force-feedback-works-but-its-worse-with-it-than-without)
@@ -12,7 +12,7 @@
 
 ## Controlling an imaginary car with mouse or MIDI controller - what a strange idea and how can it be even physically doable/ergonomic?
 
-Firstly, **if we directly bind mouse movements to virtual joystick axis - and do only that - we will not be able to steer a well simulated vehicle**... you can try that with our program too - there's special configuration to demonstrate that. It's very hard to find center position and in such a configuration the player will end up going left to right with amplitude or frequency increasing...
+Firstly, **if we directly bind mouse movements to virtual joystick axis - and do only that - we will not be able to steer a well simulated vehicle**... It's very hard to find center position and in such a configuration the player will end up going left to right with amplitude or frequency increasing.
 
 So how it may even work then? The answer: **there are some less obvious things which need to be addressed** and we do, see below.
 
@@ -39,28 +39,25 @@ Several more practical reasons:
 3. **Existing hardware**: If you already have a high-quality MIDI controller for music production, MMVJ lets you repurpose it for gaming without buying dedicated hardware.
 4. **Learning tool**: MMVJ is also useful for understanding vehicle dynamics, force feedback systems, and input processing pipelines - it's an educational project as much as a practical tool.
 
-## Configuration seems complex, you need a configuration GUI.
+## Configuration seems complex, how to enable Gui?
 
-Currently MMVJ is designed as a lightweight, "power-user" utility. YAML-based configuration allows for maximum flexibility, easy backup of settings, and the ability to share specific "profiles" for different games simply by swapping text files. **Besides, it's human-readable ... and writeable!**.
-
-On configuration file change detected the programm will try to reload it at runtime, checking for any errors beforehand and, if any, reporting the exact config problem while continuing running with last valid configuration.
-
-GUI element already included in our program is optionally enabled with --gui option runtime: it allows for mappings configuration tweaking and steering indication. Values on their way from inputs to outputs are graphed for every trasnformation step.
+Using --gui command line option. The Gui allows configuration modifications and creation of new ones, provides with runtime monitoring of every dynamically updated value in the pipeline, including runtime plotting.
 
 ## I'm having hard time figuring out what all those numbers in config mean.
 
-The configuration reference is on the way (WIP). Stay tuned!
+The configuration reference is on the way (WIP). It will be accessible as both plain md files and via Gui on corresponding knobs.
 
-* **Enable telemetry traces/runtime graphs**.
 * **For steering debugging**: steering indicator shows your current steering position and hold factor visually. The telemetry graphs show time-series data for any traced values.
 * Use [jstest-jtk](https://github.com/Grumbel/jstest-gtk) to see inputs translate to joysitck controls.
-* **Start with presets**: Use the predefined control types in the config as starting points. The schema defines reasonable defaults.
+* **Start with presets**: Use example configs and predefined control types as starting points. 
 * **Tune one parameter at a time**: Change a single curve exponent or filter parameter, then observe the effect in the telemetry overlay. This makes cause-and-effect clear.
-* **Understand the ranges**: MMVJ uses number ranges everywhere. Input ranges define what your input physical device produces, output ranges define what the game expects. Curves and filters transform within these ranges.
+* **Understand the intervals and relativity**: for more details refer to the glossary section in main readme.
 
 ## Force feedback doesn't seem to work with my game and MMVJ, how to debug that?
 
-If using with a game on Linux, which runs under Wine, please see relevant README.md section describing how to configure Wine. In short, it requires virtual joysticks to be recognized as DInput devices and not XInput.
+If using with a game on Linux, which runs under Wine, please see relevant README.md section describing how to configure Wine. In short, it requires virtual joysticks to be recognized as DInput devices and not XInput. Since Wine is in active development itself, there may be more details case by case (including how you configure your virtual joysticks (number and types of controls, bus choice or hardware IDs used) or how Wine itself is built/configured).
+
+Feel free to discuss particular problematic cases and solutions in our community section!
 
 ## Force feedback works, but it's worse with it than without.
 
