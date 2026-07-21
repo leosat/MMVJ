@@ -6,7 +6,7 @@ use crate::schemas_value::{
     serialize_value_src_rt_ignore_interval,
 };
 use crate::tfm_exec::{
-    IntegrateExeState, RaiseFallExeState, ScriptExeState, SteeringExeState, TfmExeState, ThreadLocalState,
+    IntegrateExeState, RaiseFallExeState, ScriptExeState, SteeringExeState, TfmExeState, UncheckedIMStorage,
 };
 use crate::{
     common::{Relativity, SYMM_UNIT_INTERVAL, UNIT_INTERVAL},
@@ -1691,7 +1691,7 @@ pub(crate) struct ScriptCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    pub(super) exe_state: Arc<ThreadLocalState<ScriptExeState>>,
+    pub(super) exe_state: UncheckedIMStorage<Option<ScriptExeState>>,
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]

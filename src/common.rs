@@ -104,7 +104,6 @@ pub(crate) enum MappingEngineCmd {
     #[default]
     UpdateMappingRouterIdleTickOnly,
     UpdateMappingRouter,
-    ResetScriptingCache,
 }
 
 #[derive(Debug, Clone)]
