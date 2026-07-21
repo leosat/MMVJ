@@ -293,6 +293,31 @@ pub(crate) enum TfmStepCfg {
     _ForceFeedback(#[garde(skip)] Box<ForceFeedbackCfg>),
 }
 
+pub(crate) const DEFAULT_TRANSFORM_DESCRIPTION: &str = "No transform description available... yet.";
+
+impl TfmStepCfg {
+    pub(crate) const fn doc_str(&self) -> &'static str {
+        match self {
+            TfmStepCfg::Steering(s) => s.doc_str(),
+            TfmStepCfg::Nop(_)
+            | TfmStepCfg::Invert(_)
+            | TfmStepCfg::Integrate(_)
+            | TfmStepCfg::Clamp(_)
+            | TfmStepCfg::RaiseFall(_)
+            | TfmStepCfg::Ema(_)
+            | TfmStepCfg::Linear(_)
+            | TfmStepCfg::Smoothstep(_)
+            | TfmStepCfg::SCurve(_)
+            | TfmStepCfg::Exp(_)
+            | TfmStepCfg::SignedPower(_)
+            | TfmStepCfg::OneEuro(_)
+            | TfmStepCfg::Script(_)
+            | TfmStepCfg::_HighPass(_)
+            | TfmStepCfg::_ForceFeedback(_) => DEFAULT_TRANSFORM_DESCRIPTION,
+        }
+    }
+}
+
 impl TfmStepCfg {
     pub(crate) fn get_enabled_ref_mut(&mut self) -> &mut bool {
         match self {
@@ -1002,7 +1027,7 @@ impl TfmSeqCfg {
                         ff.transformation
                             .recompute_metadata(AutoOrManual::Auto(InputValueMetadata {
                                 interval: SYMM_UNIT_INTERVAL,
-                                relativity: Relativity::Abs,
+                                relativity: Relativity::Rel,
                             }));
                     };
                     (SYMM_UNIT_INTERVAL, Relativity::Abs)
@@ -1377,7 +1402,7 @@ impl_with_common_state!(
 /// position in [-1, +1], with force-feedback displacement, autocentering,
 /// and a configurable "hold factor" simulating grip strength.
 ///
-/// See the [module-level documentation](steering_transform.md) for a full
+/// See the doc/steering.md for a full
 /// guide, signal-flow diagram, and configuration examples.
 #[derive(Debug, Clone, Serialize, Traversable, TraversableMut, Deserialize, JsonSchema, Validate)]
 #[with_doc_str]
