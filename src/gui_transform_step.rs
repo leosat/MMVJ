@@ -1662,7 +1662,8 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                 });
                 ui.separator();
                 if changed_script {
-                    gui_out = Some(GuiCmd::MappingChange(MappingEngineCmd::ResetScriptingCache))
+                    *self.exe_state.get_mut() = None;
+                    gui_out = Some(GuiCmd::ConfigChangeSimple)
                 } else if changed_settings_general {
                     gui_out = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter))
                 } else if changed_settings_simple {

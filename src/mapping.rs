@@ -12,14 +12,14 @@ use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_control_matcher::ControlMatchers;
 
 use crate::schemas_mapping::Mapping;
-use crate::schemas_transform::{DynValFilter, ScriptCfg, collect_dynamic_value_matchers};
+use crate::schemas_transform::{DynValFilter, collect_dynamic_value_matchers};
 use crate::schemas_value::{
     DynValueRefs, ValueDsts, WithLastKnownIOSettable, WithNumInterval, WithNumericValueSettable,
 };
 use crate::schemas_value::{MappedValue, WithNumericValue};
 use crate::schemas_value::{ValueSrcs, WithRelativity};
 
-use crate::tfm_exec::{TfmExeState, TfmExecCtx, WithTfmExec};
+use crate::tfm_exec::{TfmExecCtx, WithTfmExec};
 use anyhow::Result;
 use log::{debug, info, warn};
 use rand::seq::SliceRandom;
@@ -28,7 +28,6 @@ use std::fs;
 use std::sync::atomic::Ordering::Relaxed;
 use tokio::select;
 use tokio::time::{Duration, MissedTickBehavior, interval};
-use traversable::Traversable;
 
 pub(crate) struct MappingEngine<'driver_loop> {
     running: bool,
@@ -52,6 +51,7 @@ pub(crate) struct MappingEngine<'driver_loop> {
     info_sysdev_to_enabled_mappings: HashMap<ObjId, Vec<usize>>, // NB: this is only used in mappings init routine, but leaving here for potential future use in other places.
     // ---
     idle_tick_mappings: Vec<usize>,
+    lua: mlua::Lua,
 }
 
 impl<'driver_loop> MappingEngine<'driver_loop> {
@@ -81,17 +81,16 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             info_sysdev_to_enabled_mappings: Default::default(),
             // ---
             idle_tick_mappings: Default::default(),
+            lua: mlua::Lua::new(),
         })
     }
 
     pub(crate) fn set_cfg(&mut self, cfg: Config) {
         self.cfg = cfg;
-        self.scripting_cache_reset();
     }
 
     pub(crate) fn set_mappings(&mut self, mappings: &[Mapping]) {
         self.cfg.mappings = mappings.to_vec();
-        self.scripting_cache_reset();
     }
 
     pub(crate) fn get_idle_tick_rate(&self) -> u32 {
@@ -116,7 +115,6 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
     pub(crate) fn init(&mut self) -> Result<()> {
         info!("Initializing mapping engine router.");
 
-        self.scripting_cache_reset();
         self.idle_tick_mappings_reset();
 
         // ---
@@ -277,22 +275,6 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             .for_each(|(idx, _)| self.idle_tick_mappings.push(idx));
     }
 
-    pub(crate) fn scripting_cache_reset(&mut self) {
-        struct ScripCacheResetVisitor {}
-        impl traversable::Visitor for ScripCacheResetVisitor {
-            type Break = ();
-            fn enter(&mut self, this: &dyn core::any::Any) -> std::ops::ControlFlow<Self::Break> {
-                if let Some(s) = this.downcast_ref::<ScriptCfg>()
-                    && s.enabled
-                {
-                    s.exe_state_reset(());
-                }
-                std::ops::ControlFlow::Continue(())
-            }
-        }
-        let _ = self.cfg.mappings.traverse(&mut ScripCacheResetVisitor {});
-    }
-
     pub(crate) async fn run(&mut self) {
         self.running = true;
         let mut ticker = interval(Duration::from_secs_f64(1.0 / self.idle_tick_rate as f64));
@@ -445,6 +427,8 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
     }
 
     fn process_idle_tick(&self) {
+        // TODO:? let _ = self.lua.gc_collect().inspect_err(|e| log::error!("{e}"));
+
         for idx in &self.idle_tick_mappings {
             let mapping = &self.cfg.mappings[*idx];
             if let Some(flag) = mapping.dst.get_idle_tick_enabled_flag()
@@ -506,6 +490,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                 current_mapping_src: &mapping.src,
                 current_mapping_dst: &mapping.dst,
                 is_idle_tick,
+                lua: &self.lua,
             },
         );
 
@@ -547,6 +532,7 @@ pub(crate) struct MappingTfmExecCtx<'m, 'driver_loop> {
     current_mapping_src: &'m ValueSrcs,
     current_mapping_dst: &'m ValueDsts,
     is_idle_tick: bool,
+    lua: &'m mlua::Lua,
 }
 
 impl<'m, 'driver_loop> TfmExecCtx for MappingTfmExecCtx<'m, 'driver_loop> {
@@ -580,5 +566,9 @@ impl<'m, 'driver_loop> TfmExecCtx for MappingTfmExecCtx<'m, 'driver_loop> {
 
     fn get_idle_tick_rate(&self) -> u32 {
         self.mapping_engine.get_idle_tick_rate()
+    }
+
+    fn get_lua(&self) -> &mlua::Lua {
+        &self.lua
     }
 }

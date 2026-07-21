@@ -478,9 +478,6 @@ fn handle_cmd(
                             log::debug!("Mapping update: update router info");
                             let _ = mapping_engine.init();
                         }
-                        crate::common::MappingEngineCmd::ResetScriptingCache => {
-                            log::debug!("Mapping update: reset scripting cache");
-                        }
                     }
                 }
                 #[cfg(feature = "gui")]
