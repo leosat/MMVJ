@@ -1519,7 +1519,7 @@
       "type": "string"
     },
     "SteeringCfg": {
-      "description": "Steering wheel emulation transform.\n\nConverts relative input (e.g. mouse movement) into an absolute wheel\nposition in [-1, +1], with force-feedback displacement, autocentering,\nand a configurable \"hold factor\" simulating grip strength.\n\nSee the [module-level documentation](steering_transform.md) for a full\nguide, signal-flow diagram, and configuration examples.",
+      "description": "Steering wheel emulation transform.\n\nConverts relative input (e.g. mouse movement) into an absolute wheel\nposition in [-1, +1], with force-feedback displacement, autocentering,\nand a configurable \"hold factor\" simulating grip strength.\n\nSee the doc/steering.md for a full\nguide, signal-flow diagram, and configuration examples.",
       "type": "object",
       "properties": {
         "desc": {

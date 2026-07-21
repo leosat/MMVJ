@@ -528,6 +528,13 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                         },
                                     );
 
+                                    if self.doc_str() != DEFAULT_TRANSFORM_DESCRIPTION {
+                                        ui.label(
+                                            egui::RichText::from(egui_phosphor::bold::CIRCLE_WAVY_QUESTION).size(16.0),
+                                        )
+                                        .on_hover_text(self.doc_str());
+                                    }
+
                                     let mut gui_out = None;
 
                                     ui.separator();
@@ -1036,7 +1043,7 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
                 ui.horizontal(|ui| {
                     changed |= ui
                         .checkbox(&mut self.invert, "Invert force feedback")
-                        .on_hover_text(self.doc_str())
+                        .on_hover_text(self.invert_doc_str())
                         .changed();
                 });
 
@@ -1053,13 +1060,14 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
                 gui_out = gui_out.or(bool_to_simple_change_gui_cmd(changed));
 
                 ui.separator();
-                gui_out = gui_out.or(ui
-                    .collapsing("Force feedback transformation:", |ui| {
+                gui_out = gui_out.or({
+                    let c = ui.collapsing("Force feedback transformation:", |ui| {
                         self.transformation
                             .egui(gui_in.clone().clone_and_push_hier(self.transformation.id), ui)
-                    })
-                    .body_returned
-                    .unwrap_or_default());
+                    });
+                    c.header_response.on_hover_text(self.transformation_doc_str());
+                    c.body_returned.unwrap_or_default()
+                });
             }
             GuiInTfmStepsSeq::Display => {}
         }
@@ -1341,7 +1349,7 @@ fn draw_gui_idle_tick_params(ui: &mut egui::Ui, tfm: &mut impl TfmStepIdleBehavi
         ui.horizontal(|ui| {
             let frequency_warning = "Warning: behavior depends on idle tick frequency.".to_string();
             changed |= ui
-                .checkbox(tfm.relative_input_feed_on_idle_mut(), "Feed 0 on idle tick.")
+                .checkbox(tfm.relative_input_feed_on_idle_mut(), "Feed on idle tick.")
                 .on_hover_text(&frequency_warning)
                 .changed();
 
@@ -1352,7 +1360,7 @@ fn draw_gui_idle_tick_params(ui: &mut egui::Ui, tfm: &mut impl TfmStepIdleBehavi
 
             ui.separator();
             changed |= ui
-                .checkbox(tfm.relative_input_reset_on_idle_mut(), "Reset filter on idle tick.")
+                .checkbox(tfm.relative_input_reset_on_idle_mut(), "Reset on idle tick.")
                 .on_hover_text(&frequency_warning)
                 .changed();
             if *tfm.relative_input_reset_on_idle_mut() {
