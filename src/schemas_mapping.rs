@@ -18,7 +18,6 @@ use crate::schemas_value::WithNumInterval;
 use crate::schemas_value::WithRelativity;
 use crate::schemas_value::{ValueDsts, ValueSrcs};
 use crossbeam_utils::CachePadded;
-use doc_for::*;
 use garde::Validate;
 use serde::{Deserialize, Serialize};
 

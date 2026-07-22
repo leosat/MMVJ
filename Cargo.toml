@@ -1,6 +1,6 @@
 [package]
 name = "mmvj"
-version = "2026.7.22-0"
+version = "2026.7.22-1"
 edition = "2024"
 # rust-version = "1.85.0"
 authors = ["Leonid Satanovskiy"]
@@ -34,7 +34,6 @@ clap = { version = "4.6.1", features = ["derive"] }
 colored = "3.0.0"
 crossbeam-utils = "0.8.21"
 deserialize_untagged_verbose_error = "0.1.5"
-doc_for = "0.1.4"
 eframe = { version = "0.34.2", optional = true, features = [ "glow", "persistence" ]}
 egui-file-dialog = "0.13.0"
 egui_logger = "0.10.0"
@@ -71,10 +70,9 @@ winit = { version = "0.30.12", optional = true }
 garde = { version = "0.22.1", features = ["serde", "regex", "derive"] }
 cfg-if = "1.0.4"
 egui-phosphor = { version = "0.12.0", features = ["bold", "fill"] }
-rand = "0.10.1"
 branches = "0.4.4"
 ambassador = "0.5.1"
-documented = "0.10.0"
+fastrand = "2.5.0"
 
 [dev-dependencies]
 tempfile = "3.10"

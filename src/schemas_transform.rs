@@ -19,7 +19,6 @@ use ambassador::{Delegate, delegatable_trait};
 use atomic_float::AtomicF32;
 use bitflags::bitflags;
 use crossbeam_utils::CachePadded;
-use doc_for::*;
 // use documented::{Documented, DocumentedFields, docs_const};
 use garde::Validate;
 use parking_lot::Mutex;

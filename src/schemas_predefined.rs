@@ -1,7 +1,6 @@
 #[cfg(feature = "midi")]
 use crate::schemas_midi::MidiMessageCfg;
 use crate::{common::BaseNumT, mapped_controls::MappedCtls, num_interval::NumInterval, schemas_hid::AxisProperties};
-use doc_for::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

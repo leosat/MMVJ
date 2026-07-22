@@ -14,7 +14,6 @@ use crate::{
     },
 };
 use crossbeam_utils::CachePadded;
-use doc_for::*;
 use evdev::FFEffectCode;
 use garde::Validate;
 use serde::{Deserialize, Deserializer, Serialize};
