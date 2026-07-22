@@ -1102,7 +1102,7 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                             ValueRefChoiceContext::TfmStepAuxSrc,
                             GuiInValue::Edit(GuiInValueEditParams {
                                 allow_interval_edit: false,
-                                slider_log_scale: true,
+                                slider_log_scale: false,
                                 cfg_variables,
                                 cfg_devices,
                             }),
@@ -1222,7 +1222,7 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                                 ValueRefChoiceContext::TfmStepAuxSrc,
                                 GuiInValue::Edit(GuiInValueEditParams {
                                     allow_interval_edit: false,
-                                    slider_log_scale: true,
+                                    slider_log_scale: false,
                                     cfg_variables,
                                     cfg_devices,
                                 }),
