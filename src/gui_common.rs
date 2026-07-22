@@ -12,7 +12,6 @@ use egui::{
     Ui,
     collapsing_header::{CollapsingState, HeaderResponse},
 };
-use rand::RngExt;
 use std::{any::Any, path::PathBuf};
 
 pub(crate) enum GuiInKinds {
@@ -296,7 +295,7 @@ pub(crate) trait DrawEgui<'s> {
 }
 
 pub(crate) fn get_item_name_with_random_suffix(prefix: &str, count: usize) -> String {
-    format!("{} #{}.{}", prefix, count, rand::rng().random::<u32>())
+    format!("{} #{}.{}", prefix, count, fastrand::u32(..))
 }
 
 //------------------------------

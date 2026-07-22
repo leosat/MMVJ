@@ -22,7 +22,6 @@ use crate::schemas_value::{ValueSrcs, WithRelativity};
 use crate::tfm_exec::{TfmExecCtx, WithTfmExec};
 use anyhow::Result;
 use log::{debug, info, warn};
-use rand::seq::SliceRandom;
 use std::collections::HashMap;
 use std::fs;
 use std::sync::atomic::Ordering::Relaxed;
@@ -346,13 +345,21 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     }
                 });
 
-            if cms.len() > 1 && self.router_buff_mappings_to_execute.len() > 1 {
-                self.router_buff_mappings_to_execute.sort();
-                self.router_buff_mappings_to_execute.dedup();
-                self.router_buff_mappings_to_execute.shuffle(&mut rand::rng());
-            }
+            let dedup = cms.len() > 1;
+            let shuffle = self.router_buff_mappings_to_execute.len() > 1;
+            Self::dedup_and_shuffle(&mut self.router_buff_mappings_to_execute, dedup, shuffle);
             self.run_mappings__(msg.device_id);
             self.router_buff_mappings_to_execute.clear();
+        }
+    }
+
+    fn dedup_and_shuffle<T: PartialEq + Ord>(v: &mut Vec<T>, dedup: bool, shuffle: bool) {
+        if dedup {
+            v.sort();
+            v.dedup();
+        }
+        if shuffle {
+            fastrand::shuffle(v);
         }
     }
 
@@ -379,11 +386,9 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                 }
             });
 
-            if cms.len() > 1 && self.router_buff_mappings_to_execute.len() > 1 {
-                self.router_buff_mappings_to_execute.sort();
-                self.router_buff_mappings_to_execute.dedup();
-                self.router_buff_mappings_to_execute.shuffle(&mut rand::rng());
-            }
+            let dedup = cms.len() > 1;
+            let shuffle = self.router_buff_mappings_to_execute.len() > 1;
+            Self::dedup_and_shuffle(&mut self.router_buff_mappings_to_execute, dedup, shuffle);
             self.run_mappings__(device_id);
             self.router_buff_mappings_to_execute.clear();
 

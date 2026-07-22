@@ -8,13 +8,13 @@ use crate::schemas_ui::UiCfg;
 use crate::schemas_value::VariableState;
 use anyhow::Result;
 use deserialize_untagged_verbose_error::DeserializeUntaggedVerboseError;
-use doc_for::*;
 use garde::Validate;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use traversable::{Traversable, TraversableMut};
+use with_doc_str::with_doc_str;
 
 #[derive(
     Debug, Clone, Default, Serialize, Deserialize, TraversableMut, Traversable, JsonSchema, Validate, PartialEq,
@@ -181,7 +181,7 @@ pub(crate) fn default_update_rate() -> u32 {
 
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Default, Validate, PartialEq)]
 #[serde(deny_unknown_fields)]
-#[doc_impl]
+#[with_doc_str]
 pub(crate) struct GlobalSettingsCfg {
     /// The program will run idle tick with this rate in Hz.
     #[serde(default = "default_update_rate")]
