@@ -48,12 +48,12 @@ struct Cli {
     no_hot_reload: bool,
     #[arg(
         value_enum,
-        default_value_t = mmvj_lib::config::DebugLevel::Off,
+        default_value_t = mmvj_lib::debug::DebugLevel::Off,
         short,
         long,
         help = "Enable debug information output (including related to Force Feedback, override with --debug-ff false)."
     )]
-    debug: mmvj_lib::config::DebugLevel,
+    debug: mmvj_lib::debug::DebugLevel,
     #[arg(long, help = "Enable Force Feedback debug information output.", num_args = 0..=1, 
     default_value = "false")]
     debug_ff: bool,

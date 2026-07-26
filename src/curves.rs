@@ -1,7 +1,9 @@
 use crate::{
-    common::{BaseNumT, UNIT_INTERVAL},
+    common::BaseNumT,
     num_interval::{NumInterval, OutOfRangePolicy},
 };
+
+use crate::num_interval::UNIT_INTERVAL;
 
 pub(crate) struct Curves;
 

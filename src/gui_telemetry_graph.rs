@@ -1,6 +1,8 @@
 use std::f32::consts::PI;
 
-use crate::common::{BaseNumT, ZERO_INTERVAL};
+use crate::num_interval::ZERO_INTERVAL;
+
+use crate::common::BaseNumT;
 use crate::num_interval::{NumInterval, OutOfRangePolicy};
 use crate::tracing::{TelemetryEvent, TraceGraphHandle};
 use circular_buffer::CircularBuffer;

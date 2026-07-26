@@ -1,5 +1,7 @@
-use crate::common::{BaseNumT, get_interned_str};
-use crate::config::DebugLevel;
+use crate::common::BaseNumT;
+use crate::interner::get_interned_str;
+
+use crate::debug::DebugLevel;
 use crate::hid_device::{HidDevice, HidDeviceKind, HidVirtualDeviceCreationSpec};
 use crate::hid_owned_and_ffb::{X_AXIS_IDX, Y_AXIS_IDX};
 use crate::mapped_device::{MappedDevice, MappedDeviceEvent, MappedDeviceManager, MappedEvents, OpenedDeviceInfo};

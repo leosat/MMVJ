@@ -2,11 +2,15 @@
 #![cfg_attr(all(not(debug_assertions)), allow(warnings))]
 
 pub mod config;
+pub mod debug;
 pub mod driver;
+pub use debug::DebugLevel;
 
 //--------------------------------
 pub(crate) mod common;
+pub(crate) mod interner;
 pub(crate) mod num_interval;
+pub(crate) mod relativity;
 //--------------------------------
 pub(crate) mod hid_device;
 pub(crate) mod hid_owned_and_ffb;

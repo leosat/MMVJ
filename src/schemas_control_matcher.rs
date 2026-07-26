@@ -3,10 +3,11 @@ use serde::Serialize;
 use std::sync::atomic::AtomicBool;
 use traversable::{Traversable, TraversableMut};
 
+use crate::relativity::Relativity;
 #[cfg(feature = "midi")]
 use crate::schemas_midi::MidiControlMatcherCfg;
 use crate::{
-    common::{BaseNumT, Relativity},
+    common::BaseNumT,
     mapped_controls::MappedCtls,
     num_interval::NumInterval,
     schemas_common::WithRuntimeId,

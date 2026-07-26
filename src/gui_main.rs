@@ -1,5 +1,5 @@
-use crate::config::DebugLevel;
 use crate::config::MORE_DEBUG;
+use crate::debug::DebugLevel;
 use crate::driver::DriverCmd;
 use crate::gui_common::{
     DrawEgui, GuiCmd, GuiCmdVariableChange, GuiCmdVariableRemove, GuiCmdVirtualDeviceChange, GuiInKinds, ScriptAuxKind,

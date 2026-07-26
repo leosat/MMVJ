@@ -14,6 +14,9 @@ use std::{
     },
 };
 
+use crate::num_interval::UNIT_INTERVAL;
+use crate::num_interval::ZERO_INTERVAL;
+use crate::relativity::Relativity;
 use crossbeam_utils::CachePadded;
 use deserialize_untagged_verbose_error::DeserializeUntaggedVerboseError;
 use schemars::JsonSchema;
@@ -21,7 +24,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de::IntoDeserializ
 use traversable::{Traversable, TraversableMut};
 
 use crate::{
-    common::{BaseAtomicT, BaseNumT, Relativity, UNIT_INTERVAL, ZERO_INTERVAL},
+    common::{BaseAtomicT, BaseNumT},
     num_interval::{NumInterval, NumIntervalValue},
     schemas_common::{ObjId, WithRuntimeId},
     schemas_control_matcher::ControlMatchers,
