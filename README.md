@@ -429,7 +429,9 @@ cargo build --release -j4
 
 ### Configuration file reference:
 
-WIP for now, but you can use Gui to modify or define configs or see the examples below.
+
+[See the configuration readme](./doc/README.CONF.md)
+
 
 ### Example Configuration:
 
