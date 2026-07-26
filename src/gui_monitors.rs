@@ -84,7 +84,7 @@ impl<'s> DrawEgui<'s> for UiAxisMonitorCfg {
             let color_intensity = (255.0 * ((1.0 - hold).clamp(0., 1.))) as u8;
             let cursor_color = egui::Color32::from_rgb(255 - color_intensity, 100, 100);
 
-            let x_pos = rect.min.x + (position + 1.0) / 2.0 * rect.width();
+            let x_pos = rect.min.x + (position as f32 + 1.0) / 2.0 * rect.width();
             let cursor_width = (rect.width() * 0.02).max(8.0);
             let cursor_rect = egui::Rect::from_center_size(
                 egui::pos2(x_pos, rect.center().y),

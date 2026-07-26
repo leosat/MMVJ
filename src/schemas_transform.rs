@@ -1,4 +1,4 @@
-use crate::common::BaseNumT;
+use crate::common::{BaseAtomicT, BaseNumT};
 use crate::config::WithSanitize;
 use crate::schemas_value::{DescriptionCfg, InputValueMetadata, WithDescriptionMut};
 use crate::schemas_value::{
@@ -123,8 +123,8 @@ pub(crate) struct TfmStepCommonState {
     relativity: (Relativity, Relativity),
     #[cfg(feature = "gui")]
     pub(crate) gui_trace_graph_opened: Arc<AtomicBool>,
-    pub(crate) last_in: Arc<CachePadded<AtomicF32>>,
-    pub(crate) last_out: Arc<CachePadded<AtomicF32>>,
+    pub(crate) last_in: Arc<CachePadded<BaseAtomicT>>,
+    pub(crate) last_out: Arc<CachePadded<BaseAtomicT>>,
     pub(crate) trace_channel: Option<Arc<TraceChannel>>,
 }
 

@@ -528,7 +528,7 @@ pub(crate) async fn owned_hid_device_thread(
                                 play_sums[axis_idx],
                                 &SYMM_UNIT_INTERVAL,
                                 crate::num_interval::OutOfRangePolicy::WarnAndClamp,
-                            ) as f32,
+                            ) as BaseNumT,
                             Ordering::Relaxed,
                         );
                 }

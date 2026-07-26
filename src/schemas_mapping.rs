@@ -4,6 +4,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
 
 use crate::common::BaseAtomicT;
+use crate::common::BaseNumT;
 use crate::schemas_common::ObjId;
 use crate::schemas_common::WithRuntimeId;
 use crate::schemas_common::default_true;
@@ -82,14 +83,14 @@ pub(crate) struct Mapping {
     pub(crate) requires_idle_tick: bool,
 }
 
-impl WithLastKnownIO<(f32, f32)> for Mapping {
-    fn get_last_known_io(&self) -> (f32, f32) {
+impl WithLastKnownIO<(BaseNumT, BaseNumT)> for Mapping {
+    fn get_last_known_io(&self) -> (BaseNumT, BaseNumT) {
         (self.last_in.load(Relaxed), self.last_out.load(Relaxed))
     }
 }
 
-impl WithLastKnownIOSettable<(Option<f32>, Option<f32>)> for Mapping {
-    fn set_last_known_io(&self, v: (Option<f32>, Option<f32>)) {
+impl WithLastKnownIOSettable<(Option<BaseNumT>, Option<BaseNumT>)> for Mapping {
+    fn set_last_known_io(&self, v: (Option<BaseNumT>, Option<BaseNumT>)) {
         v.0.inspect(|v| self.last_in.store(*v, Relaxed));
         v.1.inspect(|v| self.last_out.store(*v, Relaxed));
     }
