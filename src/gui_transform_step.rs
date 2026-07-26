@@ -1373,10 +1373,10 @@ fn draw_gui_idle_tick_params(ui: &mut egui::Ui, tfm: &mut impl TfmStepIdleBehavi
 }
 
 // --------------------------------------------
-
 impl<'s> DrawEgui<'s> for ScriptCfg {
     type In = (ObjId, GuiInTfmStepsSeq<'s>, GuiInValue<'s>);
     type Out = Option<GuiCmd>;
+
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let tfm_step_id = gui_in.0;
         let mut changed_settings_general = false;
@@ -1397,7 +1397,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                     let mut draw_aux_data_ui = |aux_kind: ScriptAuxKind| {
                         ui.separator();
                         ui.push_id(aux_kind, |ui| {
-                            draw_collapsing_ui(
+                            let c = draw_collapsing_ui(
                                 ui,
                                 None::<()>,
                                 Some(match aux_kind {
@@ -1576,6 +1576,12 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                                     });
                                 }
                             });
+
+                            c.0.on_hover_text(match aux_kind {
+                                ScriptAuxKind::Source => self.aux_srcs_doc_str(),
+                                ScriptAuxKind::Destination => self.aux_dsts_doc_str(),
+                                ScriptAuxKind::Transformation => self.aux_transformations_doc_str(),
+                            });
                         });
                     };
 
@@ -1592,6 +1598,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                 let mut use_custom_interval = self.output_interval.is_some();
                 changed_settings_simple |= ui
                     .checkbox(&mut use_custom_interval, "Custom output interval")
+                    .on_hover_text(self.output_interval_doc_str())
                     .changed();
                 if use_custom_interval {
                     ui.separator();
@@ -1621,6 +1628,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                 let mut use_custom_relativity = self.output_relativity.is_some();
                 changed_settings_simple |= ui
                     .checkbox(&mut use_custom_relativity, "Custom output relativity")
+                    .on_hover_text(self.output_relativity_doc_str())
                     .changed();
                 if use_custom_relativity {
                     ui.separator();
@@ -1640,26 +1648,23 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                 }
 
                 ui.separator();
-                draw_collapsing_ui(ui, None::<()>, Some("Script text"), |_| {}).body(|ui| {
+                let c = draw_collapsing_ui(ui, None::<()>, Some("Script text"), |_| {}).body(|ui| {
                     ui.separator();
-                    ui.label(
-                        egui::RichText::new(format!("Language: {}", self.lang))
-                            // .color(Color32::LIGHT_GREEN)
-                            .strong(),
-                    );
+                    ui.label(egui::RichText::new(format!("Language: {}", self.lang)).strong())
+                        .on_hover_text(self.lang_doc_str());
                     ui.separator();
                     changed_script = ui
                         .add(
                             egui::TextEdit::multiline(&mut self.script)
                                 .font(egui::TextStyle::Monospace)
                                 .interactive(true)
-                                // .background_color(Color32::DARK_BLUE)
-                                // .text_color(Color32::GREEN)
                                 .desired_width(f32::INFINITY)
                                 .hint_text("Create your script"),
                         )
                         .changed()
                 });
+                c.0.on_hover_text(self.script_doc_str());
+
                 ui.separator();
                 if changed_script {
                     *self.exe_state.get_mut() = None;
