@@ -1,7 +1,7 @@
 #[cfg(feature = "midi")]
 use crate::schemas_value::{WithLastKnownIO, WithLastKnownIOSettable, WithNumericValueSettable};
 use crate::{
-    common::{BaseAtomicT, BaseNumT},
+    base_num::{BaseAtomicT, BaseNumT},
     mapped_controls::{MappedCtls, MappedCtlsMidi},
     num_interval::NumInterval,
     schemas_common::{

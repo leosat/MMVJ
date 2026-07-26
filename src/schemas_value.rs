@@ -24,7 +24,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de::IntoDeserializ
 use traversable::{Traversable, TraversableMut};
 
 use crate::{
-    common::{BaseAtomicT, BaseNumT},
+    base_num::{BaseAtomicT, BaseNumT},
     num_interval::{NumInterval, NumIntervalValue},
     schemas_common::{ObjId, WithRuntimeId},
     schemas_control_matcher::ControlMatchers,

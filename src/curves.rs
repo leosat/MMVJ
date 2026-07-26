@@ -1,5 +1,5 @@
 use crate::{
-    common::BaseNumT,
+    base_num::BaseNumT,
     num_interval::{NumInterval, OutOfRangePolicy},
 };
 

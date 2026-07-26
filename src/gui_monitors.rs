@@ -1,6 +1,6 @@
 use eframe::egui::{self};
 
-use crate::common::BaseNumT;
+use crate::base_num::BaseNumT;
 use crate::gui_common::DrawEgui;
 use crate::num_interval::OutOfRangePolicy;
 use crate::schemas_ui::UiAxisMonitorCfg;

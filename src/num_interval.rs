@@ -1,4 +1,4 @@
-use crate::common::*;
+use crate::base_num::*;
 use anyhow::{Result, bail};
 use num_traits::{Bounded, Float, FromPrimitive, Num, NumCast, ToPrimitive, Zero};
 use serde::{Deserialize, Serialize};

@@ -1,5 +1,5 @@
-use crate::common::BaseAtomicT;
-use crate::common::BaseNumT;
+use crate::base_num::BaseAtomicT;
+use crate::base_num::BaseNumT;
 use crate::debug::DebugLevel;
 use crate::hid_manager::WithDeviceClassification;
 use crate::hid_owned_and_ffb::X_AXIS_IDX;

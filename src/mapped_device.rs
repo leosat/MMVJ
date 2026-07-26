@@ -1,6 +1,6 @@
 use enumflags2::BitFlags;
 
-use crate::common::BaseNumT;
+use crate::base_num::BaseNumT;
 use crate::hid_device::HidDeviceKind;
 use crate::mapped_controls::MappedCtls;
 #[cfg(feature = "midi")]

@@ -1,4 +1,3 @@
-// ================================================
 cfg_if::cfg_if! {
     if #[cfg(feature="base_num_f64")] {
         pub(crate) type BaseNumT = f64;

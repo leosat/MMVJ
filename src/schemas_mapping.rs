@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
 
-use crate::common::BaseAtomicT;
-use crate::common::BaseNumT;
+use crate::base_num::BaseAtomicT;
+use crate::base_num::BaseNumT;
 use crate::schemas_common::ObjId;
 use crate::schemas_common::WithRuntimeId;
 use crate::schemas_common::default_true;

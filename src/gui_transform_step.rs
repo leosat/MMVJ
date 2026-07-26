@@ -1,4 +1,4 @@
-use crate::common::BaseNumT;
+use crate::base_num::BaseNumT;
 use crate::relativity::Relativity;
 
 use crate::config::MORE_DEBUG;

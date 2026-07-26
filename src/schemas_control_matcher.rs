@@ -7,7 +7,7 @@ use crate::relativity::Relativity;
 #[cfg(feature = "midi")]
 use crate::schemas_midi::MidiControlMatcherCfg;
 use crate::{
-    common::BaseNumT,
+    base_num::BaseNumT,
     mapped_controls::MappedCtls,
     num_interval::NumInterval,
     schemas_common::WithRuntimeId,
