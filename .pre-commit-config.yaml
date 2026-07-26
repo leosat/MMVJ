@@ -1,0 +1,19 @@
+repos:
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: Cargo Format
+        description: Check Rust code formatting.
+        entry: cargo fmt --all -- --check --color always
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-check
+        name: Cargo Check
+        description: Check Rust compilation errors.
+        entry: cargo check --all-targets --all-features --color always
+        language: system
+        types: [rust]
+        pass_filenames: false
+
