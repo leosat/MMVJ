@@ -1,4 +1,4 @@
-use crate::common::{BaseAtomicT, BaseNumT};
+use crate::base_num::{BaseAtomicT, BaseNumT};
 use crate::config::WithSanitize;
 use crate::relativity::Relativity;
 use crate::schemas_value::{DescriptionCfg, InputValueMetadata, WithDescriptionMut};

@@ -1,4 +1,4 @@
-use crate::common::BaseNumT;
+use crate::base_num::BaseNumT;
 use crate::num_interval::NumInterval;
 use std::time::Instant;
 

@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::common::BaseNumT;
+use crate::base_num::BaseNumT;
 
 //-----------------------------------------
 #[allow(unused)]
@@ -146,7 +146,7 @@ impl OneEuroFilter {
     }
 
     fn smoothing_factor(dt: BaseNumT, cutoff: BaseNumT) -> BaseNumT {
-        let tau = 1.0 as BaseNumT / ((2.0 * crate::common::BaseNumConsts::PI as BaseNumT * cutoff) as BaseNumT);
+        let tau = 1.0 as BaseNumT / ((2.0 * crate::base_num::BaseNumConsts::PI as BaseNumT * cutoff) as BaseNumT);
         1.0 / (1.0 + tau / dt)
     }
 }

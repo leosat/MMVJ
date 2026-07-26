@@ -1,4 +1,4 @@
-use crate::common::BaseNumT;
+use crate::base_num::BaseNumT;
 use crate::interner::get_interned_str;
 
 use crate::debug::DebugLevel;

@@ -1,7 +1,7 @@
 use crate::num_interval::SYMM_UNIT_INTERVAL;
 use crate::num_interval::UNIT_INTERVAL;
 
-use crate::common::BaseNumT;
+use crate::base_num::BaseNumT;
 use crate::curves::Curves;
 use crate::debug::get_debug_level;
 #[cfg(feature = "gui")]

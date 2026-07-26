@@ -1,5 +1,5 @@
 use crate::{
-    common::{BaseAtomicT, BaseNumT},
+    base_num::{BaseAtomicT, BaseNumT},
     hid_device::HID_AXIS_MAX_INTERVAL,
     hid_manager::{HidDeviceClassification, WithDeviceClassification},
     mapped_controls::MappedCtls,

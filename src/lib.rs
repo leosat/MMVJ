@@ -7,7 +7,7 @@ pub mod driver;
 pub use debug::DebugLevel;
 
 //--------------------------------
-pub(crate) mod common;
+pub(crate) mod base_num;
 pub(crate) mod interner;
 pub(crate) mod num_interval;
 pub(crate) mod relativity;

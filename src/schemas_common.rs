@@ -12,7 +12,7 @@ use num_traits::Zero;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::common::BaseNumT;
+use crate::base_num::BaseNumT;
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct ObjId(usize);

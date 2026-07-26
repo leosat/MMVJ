@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
-use crate::common::BaseNumT;
+use crate::base_num::BaseNumT;
 use crate::{hid_device::HID_AXIS_MAX_INTERVAL, num_interval::NumInterval};
 
 #[cfg(feature = "midi")]
