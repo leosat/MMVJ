@@ -1,5 +1,5 @@
 use crate::common::BaseNumT;
-use crate::common::{MappingEngineCmd, Relativity, SYMM_UNIT_INTERVAL};
+use crate::common::{Relativity, SYMM_UNIT_INTERVAL};
 use crate::config::MORE_DEBUG;
 use crate::config::WithSanitize;
 use crate::gui_common::{
@@ -10,6 +10,7 @@ use crate::gui_mapping::ValueRefChoiceContext;
 use crate::gui_telemetry_graph::{GuiTelemetryGraphStates, make_trace_graph_2d};
 use crate::gui_value::{GuiInInterval, GuiInValue, GuiInValueEditParams, draw_value_choice_iface};
 use crate::hid_device::HID_AXIS_MAX_RANGE;
+use crate::mapping::MappingEngineCmd;
 use crate::num_interval::NumInterval;
 use crate::schemas_cfg::{DevicesCfgNew, VariablesCfg};
 use crate::schemas_common::{ObjId, WithRuntimeId};

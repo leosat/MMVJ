@@ -28,6 +28,14 @@ use std::sync::atomic::Ordering::Relaxed;
 use tokio::select;
 use tokio::time::{Duration, MissedTickBehavior, interval};
 
+#[derive(Debug, Default, Clone, PartialEq)]
+pub(crate) enum MappingEngineCmd {
+    _None,
+    #[default]
+    UpdateMappingRouterIdleTickOnly,
+    UpdateMappingRouter,
+}
+
 pub(crate) struct MappingEngine<'driver_loop> {
     running: bool,
     idle_tick_rate: u32,

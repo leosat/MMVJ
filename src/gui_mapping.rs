@@ -1,4 +1,3 @@
-use crate::common::MappingEngineCmd;
 use crate::config::MORE_DEBUG;
 use crate::gui_common::{
     DrawEgui, GuiCmd, GuiDndJob, GuiDndJobMoveTfmStep, ScriptAuxKind, bool_to_simple_change_gui_cmd, draw_collapsing_ui,
@@ -6,6 +5,7 @@ use crate::gui_common::{
 use crate::gui_telemetry_graph::GuiTelemetryGraphStates;
 use crate::gui_transform_step::GuiInTfmStepsSeq;
 use crate::gui_value::{GuiInValue, GuiInValueEditParams};
+use crate::mapping::MappingEngineCmd;
 use crate::schemas_cfg::{DevicesCfgNew, VariablesCfg};
 
 use crate::schemas_common::{ObjId, WithRuntimeId};

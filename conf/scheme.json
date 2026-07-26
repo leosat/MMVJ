@@ -1928,24 +1928,30 @@
       "additionalProperties": false
     },
     "ScriptCfg": {
+      "description": "User-script transform step.\n\nEmbeds a Luau script that runs on **every tick** of the mapping\npipeline, giving full programmatic control over the signal. The script\ncan read the main pipeline input and any number of auxiliary data\nsources, execute arbitrary logic (with persistent global state across\nticks), and write results back to the main pipeline output and/or\nauxiliary destinations.\n\nFive global API functions are injected into the Luau environment for\nthe duration of each tick:\n\n| Function | Purpose |\n|----------|---------|\n| `read(key)` | Read the main input (`0`) or an auxiliary source (string / 1-based index). |\n| `write(key, value)` | Write the main output (`0`) or an auxiliary destination. |\n| `transform(name, value)` | Invoke a named sub-pipeline from `aux_transformations`. |\n| `is_idle()` | `true` when the tick is an idle-clock tick (no user input). |\n| `base_rate()` | The configured idle tick rate in Hz. |\n\nSee `doc/script.md` for a full guide, signal-flow diagram, API\nreference, and configuration examples.",
       "type": "object",
       "properties": {
         "desc": {
+          "description": "Optional human-readable description shown in the GUI.",
           "$ref": "#/$defs/DescriptionCfg"
         },
         "enabled": {
+          "description": "Master on/off switch. When `false` the input passes through\nunchanged and the script is **not** executed.",
           "type": "boolean",
           "default": true
         },
         "lang": {
+          "description": "Scripting language to use. Currently only `Luau` is supported.\n\nDefaults to `Luau`; may be omitted entirely.",
           "$ref": "#/$defs/ScriptLanguage",
           "default": "Luau"
         },
         "script": {
+          "description": "Luau source code executed on every tick.\n\nCompiled **once** (lazily, on first execution) into a callable\nfunction; subsequent ticks re-use the compiled bytecode. On\ncompilation failure the error is logged and the step degrades to\na no-op.\n\nGlobal variables **persist** between ticks — this is the primary\nmechanism for maintaining state (accumulators, timers, flags).\nOn the first tick, uninitialized globals are `nil`.\n\nUse YAML block scalars (`|-`) for multi-line scripts.",
           "type": "string",
           "default": ""
         },
         "output_interval": {
+          "description": "Overrides the **output interval metadata** of this step.\n\nWhen `None` (default), the output interval is inherited from the\ninput. Set this when the script produces values in a different\nrange and downstream steps need the correct interval.",
           "anyOf": [
             {
               "$ref": "#/$defs/NumInterval"
@@ -1956,6 +1962,7 @@
           ]
         },
         "output_relativity": {
+          "description": "Overrides the **output relativity metadata** of this step.\n\nWhen `None` (default), the output relativity is inherited from\nthe input. Set to `Abs` or `Rel` when the script converts\nbetween relative and absolute semantics.",
           "anyOf": [
             {
               "$ref": "#/$defs/Relativity"
@@ -1966,18 +1973,21 @@
           ]
         },
         "aux_srcs": {
+          "description": "Auxiliary data **sources** readable from the script via\n`read(\"<key>\")` or `read(<1-based index>)`.\n\nAccepts a YAML **map** (explicit string keys) or a **list**\n(auto-numbered `\"1\"`, `\"2\"`, …).\n\nYAML alias: `sources`.",
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/ScriptSourceCfg"
           }
         },
         "aux_dsts": {
+          "description": "Auxiliary data **destinations** writable from the script via\n`write(\"<key>\", value)` or `write(<1-based index>, value)`.\n\nAccepts a YAML **map** or a **list**, same as [`aux_srcs`](Self::aux_srcs).\n\nYAML alias: `destinations`.",
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/ScriptDestinationCfg"
           }
         },
         "aux_transformations": {
+          "description": "Named transformation **sub-pipelines** invocable from the script\nvia `transform(\"<name>\", value)`.\n\nEach entry is a standard transformation pipeline (list of\ntransform steps), identical in format to the top-level\n`transformation:` field of a mapping. Each sub-pipeline\nmaintains its own independent execution state.\n\nAccepts a YAML **map** or a **list**.",
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/TfmSeqCfg"
@@ -1986,9 +1996,13 @@
       }
     },
     "ScriptLanguage": {
-      "type": "string",
-      "enum": [
-        "Luau"
+      "description": "Scripting language selector for the [`ScriptCfg`] transform step.\n\nCurrently only [`Luau`](ScriptLanguage::Luau) is supported.",
+      "oneOf": [
+        {
+          "description": "Luau — a fast, sandboxed dialect of Lua 5.1 with gradual typing,\nexecuted via the `mlua` crate.",
+          "type": "string",
+          "const": "Luau"
+        }
       ]
     },
     "Relativity": {
@@ -1999,9 +2013,11 @@
       ]
     },
     "ScriptSourceCfg": {
+      "description": "A single auxiliary data source entry within [`ScriptCfg::aux_srcs`].\n\nBinds an external value (variable, device control, or static number)\nto a key that the script references via `read()`.",
       "type": "object",
       "properties": {
         "remap_to_interval": {
+          "description": "When set, the raw value read from [`source`](Self::source) is\n**remapped** from the source's native interval to this interval\nbefore the script sees it.\n\nExample: a force-feedback axis with native range \\[-32768, 32767\\]\nand `remap_to_interval: [-1.0, 1.0]` yields a normalized value\nin \\[-1, +1\\].\n\nWhen `None`, the raw value is passed through as-is.",
           "anyOf": [
             {
               "$ref": "#/$defs/NumInterval"
@@ -2012,15 +2028,18 @@
           ]
         },
         "source": {
+          "description": "The data source to read from.\n\nAccepts any valid `ValueSrc`:\n- Device control: `{ dev: <device>, ctl: <control> }`\n- Variable: `{ var: <name> }`\n- Static value: `{ value: <number>, range: [from, to] }`",
           "$ref": "#/$defs/ValueSrcs",
           "default": 0.0
         }
       }
     },
     "ScriptDestinationCfg": {
+      "description": "A single auxiliary data destination entry within [`ScriptCfg::aux_dsts`].\n\nBinds an external target (variable or device control) to a key that\nthe script references via `write()`.",
       "type": "object",
       "properties": {
         "remap_from_interval": {
+          "description": "When set, the value written by the script is **remapped** from\nthis interval to the destination's native interval before being\nstored.\n\nExample: script output in \\[-100, 100\\] with\n`remap_from_interval: [-100.0, 100.0]` and a destination\nvariable range of \\[-14000, 14000\\] scales automatically.\n\nWhen `None`, the value is written as-is.",
           "anyOf": [
             {
               "$ref": "#/$defs/NumInterval"
@@ -2031,6 +2050,7 @@
           ]
         },
         "destination": {
+          "description": "The target to write to.\n\nAccepts any valid `ValueDst`:\n- Device control: `{ dev: <device>, ctl: <control> }`\n- Variable: `{ var: <name> }`\n- `null` — void destination (writes silently discarded).",
           "$ref": "#/$defs/ValueDsts",
           "default": null
         }

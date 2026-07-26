@@ -1,22 +1,66 @@
+use crate::config::ConfigManager;
 use crate::config::DebugLevel;
 use crate::config::MORE_DEBUG;
 use crate::hid_manager::{HidManager, WithDeviceClassification};
 use crate::mapped_device::MappedDeviceManager;
 use crate::mapping::MappingEngine;
+use crate::mapping::MappingEngineCmd;
 #[cfg(feature = "midi")]
 use crate::midi::{MidiLearnMode, MidiManager};
 use crate::schemas_cfg::Config;
-use crate::{common::DriverCmd, config::ConfigManager};
+use crate::schemas_mapping::Mapping;
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 use colored::Colorize;
 use log::{error, info, warn};
 use std::fs;
 use std::path::Path;
+use std::path::PathBuf;
 #[cfg(feature = "gui")]
 use tokio_util::sync::CancellationToken;
 
 const COMMAND_RECV_CAPACITY: usize = 100;
+
+#[derive(Debug, Clone)]
+pub(crate) enum DriverCmd {
+    ChangeConfigSimple {
+        cfg: Config,
+    },
+    ChangeVirtualHids {
+        cfg: Config,
+        restart_persistent: bool,
+        report_done_tx: std::sync::mpsc::Sender<()>,
+    },
+    ChangeMappings {
+        mappings: Option<Vec<Mapping>>,
+        action: MappingEngineCmd,
+    },
+    ChangeIdleTickRate {
+        rate: u32,
+    },
+    #[cfg(feature = "gui")]
+    StatusGuiClosed,
+    #[allow(unused)]
+    SaveCfg {
+        cfg_file: Option<PathBuf>,
+        cfg_suffix: Option<String>,
+    },
+    LoadCfg {
+        cfg_file: PathBuf,
+        resp_tx: std::sync::mpsc::Sender<Result<Config, String>>,
+    },
+    Reload,
+    #[allow(unused)]
+    ReloadWithInitialCfg,
+    #[allow(unused)]
+    Halt,
+}
+
+impl PartialEq for DriverCmd {
+    fn eq(&self, other: &Self) -> bool {
+        core::mem::discriminant(self) == core::mem::discriminant(other)
+    }
+}
 
 enum DriverResponseOneShotChannels {
     Empty(std::sync::mpsc::Sender<()>),
@@ -467,14 +511,14 @@ fn handle_cmd(
                     }
 
                     match action {
-                        crate::common::MappingEngineCmd::_None => {
+                        MappingEngineCmd::_None => {
                             log::debug!("Mapping update: simple");
                         }
-                        crate::common::MappingEngineCmd::UpdateMappingRouterIdleTickOnly => {
+                        MappingEngineCmd::UpdateMappingRouterIdleTickOnly => {
                             log::debug!("Mapping update: update idle tick info");
                             mapping_engine.idle_tick_mappings_reset();
                         }
-                        crate::common::MappingEngineCmd::UpdateMappingRouter => {
+                        MappingEngineCmd::UpdateMappingRouter => {
                             log::debug!("Mapping update: update router info");
                             let _ = mapping_engine.init();
                         }
