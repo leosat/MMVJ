@@ -1,11 +1,8 @@
 use crate::config::DebugLevel;
-use crate::schemas_mapping::Mapping;
-use crate::{num_interval::NumInterval, schemas_cfg::Config};
+use crate::num_interval::NumInterval;
 use num_traits::{Float, Num, ToPrimitive};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use std::sync::mpsc::Sender;
 use std::sync::{Arc, LazyLock};
 
 // ================================================
@@ -93,57 +90,6 @@ impl From<bool> for Relativity {
             true => Relativity::Rel,
             false => Relativity::Abs,
         }
-    }
-}
-
-//====================================================================================
-
-#[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) enum MappingEngineCmd {
-    _None,
-    #[default]
-    UpdateMappingRouterIdleTickOnly,
-    UpdateMappingRouter,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) enum DriverCmd {
-    ChangeConfigSimple {
-        cfg: Config,
-    },
-    ChangeVirtualHids {
-        cfg: Config,
-        restart_persistent: bool,
-        report_done_tx: std::sync::mpsc::Sender<()>,
-    },
-    ChangeMappings {
-        mappings: Option<Vec<Mapping>>,
-        action: MappingEngineCmd,
-    },
-    ChangeIdleTickRate {
-        rate: u32,
-    },
-    #[cfg(feature = "gui")]
-    StatusGuiClosed,
-    #[allow(unused)]
-    SaveCfg {
-        cfg_file: Option<PathBuf>,
-        cfg_suffix: Option<String>,
-    },
-    LoadCfg {
-        cfg_file: PathBuf,
-        resp_tx: Sender<Result<Config, String>>,
-    },
-    Reload,
-    #[allow(unused)]
-    ReloadWithInitialCfg,
-    #[allow(unused)]
-    Halt,
-}
-
-impl PartialEq for DriverCmd {
-    fn eq(&self, other: &Self) -> bool {
-        core::mem::discriminant(self) == core::mem::discriminant(other)
     }
 }
 

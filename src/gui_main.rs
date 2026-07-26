@@ -1,6 +1,6 @@
-use crate::common::DriverCmd;
 use crate::config::DebugLevel;
 use crate::config::MORE_DEBUG;
+use crate::driver::DriverCmd;
 use crate::gui_common::{
     DrawEgui, GuiCmd, GuiCmdVariableChange, GuiCmdVariableRemove, GuiCmdVirtualDeviceChange, GuiInKinds, ScriptAuxKind,
     draw_collapsing_ui, get_item_name_with_random_suffix,

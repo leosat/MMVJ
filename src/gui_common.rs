@@ -1,12 +1,12 @@
+use crate::mapping::MappingEngineCmd;
+use crate::{schemas_common::ObjId, schemas_control_matcher::ControlMatchers};
 use crate::{
-    common::MappingEngineCmd,
     schemas_common::WithRuntimeId,
     schemas_hid::HidControlMatcherCfg,
     schemas_mapping::Mapping,
     schemas_transform::TfmStepCfg,
     schemas_value::{DeviceControlMatcherRef, VariableRef, VariableState},
 };
-use crate::{schemas_common::ObjId, schemas_control_matcher::ControlMatchers};
 use eframe::egui;
 use egui::{
     Ui,
