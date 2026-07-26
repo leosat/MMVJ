@@ -22,7 +22,6 @@ use crate::schemas_hid::HidDeviceClassificationCfg;
 use crate::schemas_hid::HidFfEffect;
 use crate::schemas_hid::HidVirtualParamsCfg;
 use anyhow::Context;
-use atomic_float::AtomicF32;
 use crossbeam_utils::CachePadded;
 use enumflags2::BitFlags;
 use enumflags2::bitflags;
@@ -138,7 +137,7 @@ impl OwnedVirtualHIDDeviceThreadIO {
     }
 }
 
-pub(crate) type DeviceControlStates = [CachePadded<AtomicF32>; MappedCtls::Unhandled as usize];
+pub(crate) type DeviceControlStates = [CachePadded<BaseAtomicT>; MappedCtls::Unhandled as usize];
 // Vec<CachePadded<AtomicF32>>;
 pub(crate) type DeviceComm = (
     tokio::sync::mpsc::UnboundedReceiver<DeviceThreadCmd>,
@@ -811,7 +810,8 @@ impl HidDevice {
                     if let Ok(ctl) = MappedCtls::try_from(abs) {
                         ctl_intervals[ctl as usize].from = abs_info.minimum as BaseNumT;
                         ctl_intervals[ctl as usize].to = abs_info.maximum as BaseNumT;
-                        ctl_states[ctl as usize].store(abs_info.value as f32, std::sync::atomic::Ordering::Relaxed);
+                        ctl_states[ctl as usize]
+                            .store(abs_info.value as BaseNumT, std::sync::atomic::Ordering::Relaxed);
                         if debug.is_on() {
                             log::debug!(
                                 "Abs info for {device_path:?} axis {} {:?}",

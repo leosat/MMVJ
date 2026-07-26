@@ -957,16 +957,16 @@ mod tests {
     #[test]
     fn test_map_to_unit_exptrapolation_overflow_case_for_int() {
         let interval = NumInterval::new(10_i8, 20);
-        let mapped = interval.map_to_unit::<f32>(5, OutOfRangePolicy::Allow);
+        let mapped = interval.map_to_unit::<BaseNumT>(5, OutOfRangePolicy::Allow);
         assert!(
-            approx_eq(-0.5, mapped),
+            approx_eq(-0.5 as BaseNumT, mapped),
             "Extrapolation below 'from' failed. Expected -0.5, got {}",
             mapped
         );
 
-        let mapped = interval.map_to_unit::<f32>(25, OutOfRangePolicy::Allow);
+        let mapped = interval.map_to_unit::<BaseNumT>(25, OutOfRangePolicy::Allow);
         assert!(
-            approx_eq(1.5, mapped),
+            approx_eq(1.5 as BaseNumT, mapped),
             "Extrapolation below 'from' failed. Expected 1.5, got {}",
             mapped
         );
@@ -1205,7 +1205,7 @@ mod tests {
         let value =
             NumInterval::new(42.0_f32, f32::MAX).value_cast_with_out_of_range_policy(f64::MIN, OutOfRangePolicy::Clamp);
 
-        assert!(approx_eq(value as f32, 42.0));
+        assert!(approx_eq(value as BaseNumT, 42.0 as BaseNumT));
     }
 
     #[cfg(debug_assertions)]

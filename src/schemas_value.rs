@@ -14,7 +14,6 @@ use std::{
     },
 };
 
-use atomic_float::AtomicF32;
 use crossbeam_utils::CachePadded;
 use deserialize_untagged_verbose_error::DeserializeUntaggedVerboseError;
 use schemars::JsonSchema;
@@ -22,7 +21,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de::IntoDeserializ
 use traversable::{Traversable, TraversableMut};
 
 use crate::{
-    common::{BaseNumT, Relativity, UNIT_INTERVAL, ZERO_INTERVAL},
+    common::{BaseAtomicT, BaseNumT, Relativity, UNIT_INTERVAL, ZERO_INTERVAL},
     num_interval::{NumInterval, NumIntervalValue},
     schemas_common::{ObjId, WithRuntimeId},
     schemas_control_matcher::ControlMatchers,
@@ -166,19 +165,27 @@ pub(crate) trait WithNumIntervalMut {
 pub mod variable_value_serde {
     use super::*;
 
-    pub fn serialize<S>(value: &AutoOrManual<Arc<CachePadded<AtomicF32>>>, serializer: S) -> Result<S::Ok, S::Error>
+    pub fn serialize<S>(value: &AutoOrManual<Arc<CachePadded<BaseAtomicT>>>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        serializer.serialize_f32(value.load(std::sync::atomic::Ordering::Relaxed))
+        #[cfg(feature = "base_num_f64")]
+        return serializer.serialize_f64(value.load(std::sync::atomic::Ordering::Relaxed));
+        #[cfg(not(feature = "base_num_f64"))]
+        return serializer.serialize_f32(value.load(std::sync::atomic::Ordering::Relaxed));
     }
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<AutoOrManual<Arc<CachePadded<AtomicF32>>>, D::Error>
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<AutoOrManual<Arc<CachePadded<BaseAtomicT>>>, D::Error>
     where
         D: Deserializer<'de>,
     {
+        #[cfg(feature = "base_num_f64")]
+        let value = f64::deserialize(deserializer)?;
+        #[cfg(not(feature = "base_num_f64"))]
         let value = f32::deserialize(deserializer)?;
-        Ok(AutoOrManual::Manual(Arc::new(CachePadded::new(AtomicF32::new(value)))))
+        Ok(AutoOrManual::Manual(Arc::new(CachePadded::new(BaseAtomicT::new(
+            value,
+        )))))
     }
 }
 
@@ -194,7 +201,7 @@ pub(crate) struct VariableState {
     #[serde(skip_serializing_if = "AutoOrManual::is_auto")]
     #[schemars(skip)] // TODO: implement schema!
     #[serde(default)]
-    pub(crate) value: AutoOrManual<Arc<CachePadded<AtomicF32>>>,
+    pub(crate) value: AutoOrManual<Arc<CachePadded<BaseAtomicT>>>,
     // NB: Currently variables are Abs-only.
     // NB: Supporting Rel semantic will require adding reactive mappings run on Rel variables updates.
     // #[traverse(skip)]
@@ -580,7 +587,10 @@ where
     S: Serializer,
 {
     match v {
+        #[cfg(not(feature = "base_num_f64"))]
         ValueSrcs::Static(v) => serializer.serialize_f32(v.value),
+        #[cfg(feature = "base_num_f64")]
+        ValueSrcs::Static(v) => serializer.serialize_f64(v.value),
         ValueSrcs::Dynamic(v) => v.serialize(serializer),
     }
 }

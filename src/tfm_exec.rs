@@ -959,7 +959,7 @@ impl WithTfmExec for SteeringCfg {
                 self.common_state_ref().gui_trace(
                     TfmStepTraceStage::Custom(
                         GraphDisplayStyle::default()
-                            .with_color(Color32::GREEN.gamma_multiply((1.0 as BaseNumT - hold_factor_unit).max(0.4)))
+                            .with_color(Color32::GREEN.gamma_multiply((1.0 - hold_factor_unit as f32).max(0.4)))
                             .with_width(1.7),
                     ),
                     &MappedValue::<BaseNumT> {
