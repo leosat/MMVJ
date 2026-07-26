@@ -396,7 +396,7 @@ pub(crate) struct ForceFeedbackCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    ///
+    /// Internal state
     pub common_state: TfmStepCommonStateShared,
 
     /// Optional human-readable description.
@@ -1409,13 +1409,13 @@ pub(crate) struct SteeringCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    ///
+    /// Internal state
     common_state: TfmStepCommonStateShared,
 
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    ///
+    /// Internal state
     exe_state: Arc<Mutex<SteeringExeState>>,
 
     /// Optional human-readable description shown in the GUI.
@@ -1713,13 +1713,13 @@ pub(crate) struct ScriptCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    ///
+    /// Internal state
     common_state: TfmStepCommonStateShared,
 
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    ///
+    /// Internal state
     pub(super) exe_state: UncheckedIMStorage<Option<ScriptExeState>>,
 
     /// Optional human-readable description shown in the GUI.

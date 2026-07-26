@@ -61,7 +61,7 @@ impl<'s> DrawEgui<'s> for DynValueRefs {
                 ui.label(
                     egui::RichText::new(format!(
                         "var: {} (range: {}, {:?}, {:08.2})",
-                        &v.variable_key,
+                        v.variable_key,
                         v.variable.get_interval(),
                         v.variable.get_relativity(),
                         v.variable.get_numeric_value()

@@ -230,7 +230,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             }
         }
 
-        for (_, v) in self.info_sysdev_to_enabled_mappings.iter_mut() {
+        for v in self.info_sysdev_to_enabled_mappings.values_mut() {
             v.sort();
             v.dedup();
         }
@@ -574,6 +574,6 @@ impl<'m, 'driver_loop> TfmExecCtx for MappingTfmExecCtx<'m, 'driver_loop> {
     }
 
     fn get_lua(&self) -> &mlua::Lua {
-        &self.lua
+        self.lua
     }
 }

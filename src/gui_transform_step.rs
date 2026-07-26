@@ -1790,7 +1790,7 @@ impl<'s> DrawEgui<'s> for Vec<TfmSeqCfg> {
         let mut gui_out = None;
         for (tfm_idx, tfm_seq) in self.iter_mut().enumerate() {
             ui.separator();
-            let ch = CollapsingHeader::new(format!("Aux transformation #{} ({:.80}...)", tfm_idx, &*tfm_seq.desc))
+            let ch = CollapsingHeader::new(format!("Aux transformation #{} ({:.80}...)", tfm_idx, *tfm_seq.desc))
                 .id_salt(tfm_idx);
             gui_out = gui_out.or(ch
                 .show(ui, |ui| ui.group(|ui| tfm_seq.egui(gui_in.clone(), ui)).inner)

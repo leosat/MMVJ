@@ -361,7 +361,7 @@ impl crate::gui_main::GuiMain {
                             format!(
                                 "{} ({mapping_idx}) {} {}",
                                 egui_phosphor::bold::DOTS_SIX_VERTICAL,
-                                &mapping.name,
+                                mapping.name,
                                 egui_phosphor::bold::DOTS_SIX_VERTICAL,
                             ),
                         );

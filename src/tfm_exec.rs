@@ -527,7 +527,7 @@ impl WithTfmExec for ScriptCfg {
                         } else {
                             Err(mlua::Error::RuntimeError(format!(
                                 "Can't find transformation with key {}",
-                                &args.0
+                                args.0
                             )))
                         }
                     };
@@ -613,7 +613,10 @@ impl WithTfmExec for ScriptCfg {
                           (key, mut value): (SrcOrDstKey, BaseNumT)|
                           -> std::result::Result<(), mlua::Error> {
                         match key {
-                            SrcOrDstKey::Num(0) => Ok(*input_ref = value),
+                            SrcOrDstKey::Num(0) => {
+                                let _: () = *input_ref = value;
+                                Ok(())
+                            }
                             SrcOrDstKey::Str(key) => {
                                 if let Some(dst) = self.aux_dsts.get(&key) {
                                     match dst.destination {
@@ -625,7 +628,7 @@ impl WithTfmExec for ScriptCfg {
                                                     OutOfRangePolicy::Clamp,
                                                 )
                                             }
-                                            ctx.set_dyn_value(&d, value)
+                                            ctx.set_dyn_value(d, value)
                                         }
                                         ValueDsts::Void => {}
                                     };
@@ -649,7 +652,7 @@ impl WithTfmExec for ScriptCfg {
                                                 OutOfRangePolicy::Clamp,
                                             )
                                         }
-                                        ctx.set_dyn_value(&d, value);
+                                        ctx.set_dyn_value(d, value);
                                     }
                                     ValueDsts::Void => {}
                                 })
@@ -958,6 +961,7 @@ impl WithTfmExec for SteeringCfg {
                 #[cfg(feature = "gui")]
                 self.common_state_ref().gui_trace(
                     TfmStepTraceStage::Custom(
+                        #[allow(clippy::unnecessary_cast)]
                         GraphDisplayStyle::default()
                             .with_color(Color32::GREEN.gamma_multiply((1.0 - hold_factor_unit as f32).max(0.4)))
                             .with_width(1.7),
