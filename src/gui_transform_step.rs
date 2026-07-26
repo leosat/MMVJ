@@ -31,6 +31,9 @@ use strum::IntoEnumIterator;
 use unchecked_refcell::UncheckedRefCell;
 
 // -----------------------------
+
+const EMBEDDED_GRAPH_MAX_WIDTH: f32 = 500.0;
+
 pub(crate) enum TfmStepTraceStage {
     In,
     Out,
@@ -548,7 +551,7 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
 
                                     ui.separator();
                                     ui.scope(|ui| {
-                                        ui.set_max_width(400.0);
+                                        ui.set_max_width(EMBEDDED_GRAPH_MAX_WIDTH);
                                         if draw_graph_docked_or_windowed(self, graph_states, ui) {
                                             gui_out = Some(GuiCmd::ConfigChangeSimple);
                                         }
