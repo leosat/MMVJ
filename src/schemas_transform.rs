@@ -298,6 +298,7 @@ impl TfmStepCfg {
     pub(crate) const fn doc_str(&self) -> &'static str {
         match self {
             TfmStepCfg::Steering(s) => s.doc_str(),
+            TfmStepCfg::Script(s) => s.doc_str(),
             TfmStepCfg::Nop(_)
             | TfmStepCfg::Invert(_)
             | TfmStepCfg::Integrate(_)
@@ -310,7 +311,6 @@ impl TfmStepCfg {
             | TfmStepCfg::Exp(_)
             | TfmStepCfg::SignedPower(_)
             | TfmStepCfg::OneEuro(_)
-            | TfmStepCfg::Script(_)
             | TfmStepCfg::_HighPass(_)
             | TfmStepCfg::_ForceFeedback(_) => DEFAULT_TRANSFORM_DESCRIPTION,
         }
@@ -1674,53 +1674,140 @@ impl TfmStepIdleBehavior for OneEuroFilterCfg {
     }
 }
 
-// -------------------------------------
+/// Scripting language selector for the [`ScriptCfg`] transform step.
+///
+/// Currently only [`Luau`](ScriptLanguage::Luau) is supported.
 #[derive(JsonSchema, Display, Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
 pub(crate) enum ScriptLanguage {
+    /// Luau — a fast, sandboxed dialect of Lua 5.1 with gradual typing,
+    /// executed via the `mlua` crate.
     #[default]
     Luau,
 }
 
+/// User-script transform step.
+///
+/// Embeds a Luau script that runs on **every tick** of the mapping
+/// pipeline, giving full programmatic control over the signal. The script
+/// can read the main pipeline input and any number of auxiliary data
+/// sources, execute arbitrary logic (with persistent global state across
+/// ticks), and write results back to the main pipeline output and/or
+/// auxiliary destinations.
+///
+/// Five global API functions are injected into the Luau environment for
+/// the duration of each tick:
+///
+/// | Function | Purpose |
+/// |----------|---------|
+/// | `read(key)` | Read the main input (`0`) or an auxiliary source (string / 1-based index). |
+/// | `write(key, value)` | Write the main output (`0`) or an auxiliary destination. |
+/// | `transform(name, value)` | Invoke a named sub-pipeline from `aux_transformations`. |
+/// | `is_idle()` | `true` when the tick is an idle-clock tick (no user input). |
+/// | `base_rate()` | The configured idle tick rate in Hz. |
+///
+/// See `doc/script.md` for a full guide, signal-flow diagram, API
+/// reference, and configuration examples.
 #[derive(Clone, Serialize, Deserialize, JsonSchema, Debug, TraversableMut, Traversable)]
+#[with_doc_str]
 pub(crate) struct ScriptCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
+    ///
     common_state: TfmStepCommonStateShared,
+
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
+    ///
     pub(super) exe_state: UncheckedIMStorage<Option<ScriptExeState>>,
+
+    /// Optional human-readable description shown in the GUI.
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) desc: DescriptionCfg,
+
+    /// Master on/off switch. When `false` the input passes through
+    /// unchanged and the script is **not** executed.
     #[serde(default = "default_step_enabled")]
     pub(crate) enabled: bool,
+
+    /// Scripting language to use. Currently only `Luau` is supported.
+    ///
+    /// Defaults to `Luau`; may be omitted entirely.
     #[serde(default)]
     #[traverse(skip)]
     pub(crate) lang: ScriptLanguage,
+
+    /// Luau source code executed on every tick.
+    ///
+    /// Compiled **once** (lazily, on first execution) into a callable
+    /// function; subsequent ticks re-use the compiled bytecode. On
+    /// compilation failure the error is logged and the step degrades to
+    /// a no-op.
+    ///
+    /// Global variables **persist** between ticks — this is the primary
+    /// mechanism for maintaining state (accumulators, timers, flags).
+    /// On the first tick, uninitialized globals are `nil`.
+    ///
+    /// Use YAML block scalars (`|-`) for multi-line scripts.
     #[serde(default)]
     #[traverse(skip)]
     pub(crate) script: String,
+
+    /// Overrides the **output interval metadata** of this step.
+    ///
+    /// When `None` (default), the output interval is inherited from the
+    /// input. Set this when the script produces values in a different
+    /// range and downstream steps need the correct interval.
     #[traverse(skip)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) output_interval: Option<NumInterval<BaseNumT>>,
+
+    /// Overrides the **output relativity metadata** of this step.
+    ///
+    /// When `None` (default), the output relativity is inherited from
+    /// the input. Set to `Abs` or `Rel` when the script converts
+    /// between relative and absolute semantics.
     #[traverse(skip)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) output_relativity: Option<Relativity>,
+
+    /// Auxiliary data **sources** readable from the script via
+    /// `read("<key>")` or `read(<1-based index>)`.
+    ///
+    /// Accepts a YAML **map** (explicit string keys) or a **list**
+    /// (auto-numbered `"1"`, `"2"`, …).
+    ///
+    /// YAML alias: `sources`.
     #[serde(default)]
     #[serde(alias = "sources")]
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     #[serde(deserialize_with = "deserialize_btree_or_vec")]
     pub(crate) aux_srcs: BTreeMap<String, ScriptSourceCfg>,
 
+    /// Auxiliary data **destinations** writable from the script via
+    /// `write("<key>", value)` or `write(<1-based index>, value)`.
+    ///
+    /// Accepts a YAML **map** or a **list**, same as [`aux_srcs`](Self::aux_srcs).
+    ///
+    /// YAML alias: `destinations`.
     #[serde(default)]
     #[serde(alias = "destinations")]
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     #[serde(deserialize_with = "deserialize_btree_or_vec")]
     pub(crate) aux_dsts: BTreeMap<String, ScriptDestinationCfg>,
 
+    /// Named transformation **sub-pipelines** invocable from the script
+    /// via `transform("<name>", value)`.
+    ///
+    /// Each entry is a standard transformation pipeline (list of
+    /// transform steps), identical in format to the top-level
+    /// `transformation:` field of a mapping. Each sub-pipeline
+    /// maintains its own independent execution state.
+    ///
+    /// Accepts a YAML **map** or a **list**.
     #[serde(default)]
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     #[serde(deserialize_with = "deserialize_btree_or_vec")]
@@ -1799,26 +1886,62 @@ where
     }
 }
 
+/// A single auxiliary data source entry within [`ScriptCfg::aux_srcs`].
+///
+/// Binds an external value (variable, device control, or static number)
+/// to a key that the script references via `read()`.
 #[derive(Clone, Serialize, Deserialize, JsonSchema, Debug, TraversableMut, Traversable, Default, PartialEq)]
+#[with_doc_str]
 pub(crate) struct ScriptSourceCfg {
+    /// When set, the raw value read from [`source`](Self::source) is
+    /// **remapped** from the source's native interval to this interval
+    /// before the script sees it.
+    ///
+    /// Example: a force-feedback axis with native range \[-32768, 32767\]
+    /// and `remap_to_interval: [-1.0, 1.0]` yields a normalized value
+    /// in \[-1, +1\].
+    ///
+    /// When `None`, the raw value is passed through as-is.
     #[traverse(skip)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) remap_to_interval: Option<NumInterval<BaseNumT>>,
-    // #[serde(default)]
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // pub(crate) transformation: Option<TfmSeqCfg>,
+
+    /// The data source to read from.
+    ///
+    /// Accepts any valid `ValueSrc`:
+    /// - Device control: `{ dev: <device>, ctl: <control> }`
+    /// - Variable: `{ var: <name> }`
+    /// - Static value: `{ value: <number>, range: [from, to] }`
     #[serde(default)]
     pub(crate) source: ValueSrcs,
 }
 
+/// A single auxiliary data destination entry within [`ScriptCfg::aux_dsts`].
+///
+/// Binds an external target (variable or device control) to a key that
+/// the script references via `write()`.
 #[derive(Clone, Serialize, Deserialize, JsonSchema, Debug, TraversableMut, Traversable, Default, PartialEq)]
+#[with_doc_str]
 pub(crate) struct ScriptDestinationCfg {
+    /// When set, the value written by the script is **remapped** from
+    /// this interval to the destination's native interval before being
+    /// stored.
+    ///
+    /// Example: script output in \[-100, 100\] with
+    /// `remap_from_interval: [-100.0, 100.0]` and a destination
+    /// variable range of \[-14000, 14000\] scales automatically.
+    ///
+    /// When `None`, the value is written as-is.
     #[traverse(skip)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) remap_from_interval: Option<NumInterval<BaseNumT>>,
-    // #[serde(default)]
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // pub(crate) transformation: Option<TfmSeqCfg>,
+
+    /// The target to write to.
+    ///
+    /// Accepts any valid `ValueDst`:
+    /// - Device control: `{ dev: <device>, ctl: <control> }`
+    /// - Variable: `{ var: <name> }`
+    /// - `null` — void destination (writes silently discarded).
     #[serde(default)]
     pub(crate) destination: ValueDsts,
 }
