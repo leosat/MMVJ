@@ -2,8 +2,10 @@ use std::ops::RangeInclusive;
 
 use eframe::egui;
 
+use crate::relativity::Relativity;
+
 use crate::{
-    common::{BaseNumT, Relativity},
+    common::BaseNumT,
     gui_common::{DrawEgui, GuiInKinds},
     gui_mapping::ValueRefChoiceContext,
     hid_device::HID_AXIS_MAX_RANGE,

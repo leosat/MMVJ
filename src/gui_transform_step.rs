@@ -1,5 +1,6 @@
 use crate::common::BaseNumT;
-use crate::common::{Relativity, SYMM_UNIT_INTERVAL};
+use crate::relativity::Relativity;
+
 use crate::config::MORE_DEBUG;
 use crate::config::WithSanitize;
 use crate::gui_common::{
@@ -12,6 +13,7 @@ use crate::gui_value::{GuiInInterval, GuiInValue, GuiInValueEditParams, draw_val
 use crate::hid_device::HID_AXIS_MAX_RANGE;
 use crate::mapping::MappingEngineCmd;
 use crate::num_interval::NumInterval;
+use crate::num_interval::SYMM_UNIT_INTERVAL;
 use crate::schemas_cfg::{DevicesCfgNew, VariablesCfg};
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_transform::*;
@@ -1309,7 +1311,7 @@ impl TfmStepCommonState {
         if self.is_gui_tracing_enabled() {
             use egui::Color32;
 
-            use crate::{common::SYMM_UNIT_INTERVAL, tracing::GraphDisplayStyle};
+            use crate::tracing::GraphDisplayStyle;
 
             let graph_style = match stage {
                 TfmStepTraceStage::In => GraphDisplayStyle::as_line()
@@ -1323,7 +1325,7 @@ impl TfmStepCommonState {
 
             if let Some(tc) = self.trace_channel.as_ref() {
                 tc.trace(
-                    crate::common::SYMM_UNIT_INTERVAL.map_from(
+                    SYMM_UNIT_INTERVAL.map_from(
                         vd.value,
                         &vd.interval,
                         crate::num_interval::OutOfRangePolicy::WarnAndClamp,

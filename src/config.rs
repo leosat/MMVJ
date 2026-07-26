@@ -1,3 +1,4 @@
+use crate::debug::DebugLevel;
 use crate::hid_manager::WithDeviceClassification;
 use crate::schemas_cfg::*;
 use crate::schemas_control_matcher::ControlMatchers;
@@ -52,42 +53,6 @@ pub const GUI_ENABLED_CONST: bool = true;
 pub const MIDI_ENABLED_CONST: bool = false;
 #[cfg(feature = "midi")]
 pub const MIDI_ENABLED_CONST: bool = true;
-
-//-----------------------------------------------------------------
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum, Debug, Default)]
-pub enum DebugLevel {
-    #[default]
-    Off,
-    Low,
-    Mid,
-    Hi,
-}
-
-impl From<DebugLevel> for bool {
-    fn from(value: DebugLevel) -> Self {
-        value.is_on()
-    }
-}
-
-impl From<bool> for DebugLevel {
-    fn from(value: bool) -> Self {
-        if value { Self::Low } else { Self::Off }
-    }
-}
-
-impl DebugLevel {
-    pub fn is_on(&self) -> bool {
-        !matches!(self, Self::Off)
-    }
-
-    pub fn is_mid_or_above(&self) -> bool {
-        matches!(self, Self::Hi | Self::Mid)
-    }
-
-    pub fn is_hi(&self) -> bool {
-        matches!(self, Self::Hi)
-    }
-}
 
 //-----------------------------------------------------------------
 pub(crate) trait WithSanitize {

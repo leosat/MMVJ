@@ -3,7 +3,9 @@ use evdev::EvdevEnum;
 use tokio::time::MissedTickBehavior;
 use tokio_util::future::FutureExt;
 
-use crate::common::{BaseNumT, SYMM_UNIT_INTERVAL};
+use crate::num_interval::SYMM_UNIT_INTERVAL;
+
+use crate::common::BaseNumT;
 use crate::filters::OneEuroFilter;
 use crate::hid_device::HID_AXIS_MAX_INTERVAL;
 use crate::hid_device::{

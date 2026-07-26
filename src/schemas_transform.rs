@@ -1,5 +1,6 @@
 use crate::common::{BaseAtomicT, BaseNumT};
 use crate::config::WithSanitize;
+use crate::relativity::Relativity;
 use crate::schemas_value::{DescriptionCfg, InputValueMetadata, WithDescriptionMut};
 use crate::schemas_value::{
     DeviceControlMatcherRef, DynValueRefs, ValueDsts, VariableRef, WithNumInterval, WithRelativityRef,
@@ -9,8 +10,8 @@ use crate::tfm_exec::{
     IntegrateExeState, RaiseFallExeState, ScriptExeState, SteeringExeState, TfmExeState, UncheckedIMStorage,
 };
 use crate::{
-    common::{Relativity, SYMM_UNIT_INTERVAL, UNIT_INTERVAL},
     num_interval::NumInterval,
+    num_interval::{SYMM_UNIT_INTERVAL, UNIT_INTERVAL},
     schemas_common::*,
     schemas_value::{StaticValueCfg, ValueSrcs},
     tracing::TraceChannel,

@@ -9,6 +9,11 @@ use std::ops::{Div, Mul, Range, RangeInclusive};
 use std::{cmp::Ordering, fmt::Debug};
 
 //-------------------------------------------------------------
+pub(crate) const SYMM_UNIT_INTERVAL: NumInterval<BaseNumT> = crate::num_interval!(-1.0 as BaseNumT, 1.0 as BaseNumT);
+pub(crate) const UNIT_INTERVAL: NumInterval<BaseNumT> = crate::num_interval!(0.0 as BaseNumT, 1.0 as BaseNumT);
+#[allow(unused)]
+pub(crate) const ZERO_INTERVAL: NumInterval<BaseNumT> = crate::num_interval!(0.0 as BaseNumT, 0.0 as BaseNumT);
+//-------------------------------------------------------------
 
 pub(crate) trait NumIntervalSpanT {
     type ValueT: NumIntervalValue;

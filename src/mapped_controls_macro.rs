@@ -91,7 +91,7 @@ macro_rules! app_ctl_types_to_platform_api {
             }
 
             #[allow(dead_code)]
-            pub(crate) fn get_relativity(&self) -> $crate::common::Relativity {
+            pub(crate) fn get_relativity(&self) -> $crate::relativity::Relativity {
                 self.is_relative().into()
             }
 

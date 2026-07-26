@@ -1,8 +1,13 @@
-use crate::common::{BaseNumT, Relativity, SYMM_UNIT_INTERVAL, UNIT_INTERVAL, get_debug_level};
+use crate::num_interval::SYMM_UNIT_INTERVAL;
+use crate::num_interval::UNIT_INTERVAL;
+
+use crate::common::BaseNumT;
 use crate::curves::Curves;
+use crate::debug::get_debug_level;
 #[cfg(feature = "gui")]
 use crate::gui_transform_step::TfmStepTraceStage;
 use crate::num_interval::{NumInterval, OutOfRangePolicy};
+use crate::relativity::Relativity;
 
 use crate::schemas_common::WithRuntimeId;
 use crate::schemas_transform::WithCommonState;

@@ -1,6 +1,6 @@
-use crate::common::{BaseNumT, get_interned_str, intern_str};
-use crate::config;
-use crate::config::DebugLevel;
+use crate::common::BaseNumT;
+use crate::debug::DebugLevel;
+use crate::interner::{get_interned_str, intern_str};
 use crate::mapped_controls::MappedCtlsMidi;
 use crate::num_interval::NumInterval;
 use crate::schemas_common::ObjId;
@@ -263,7 +263,7 @@ pub(crate) const MIDIv1_PITCH_WHEEL_RANGE: std::ops::RangeInclusive<BaseNumT> =
 
 impl MidiManager {
     pub(crate) fn new(debug: DebugLevel) -> Result<Self> {
-        let midi_input = MidiInput::new(format!("{} MIDI Input", config::APP_NAME).as_str())
+        let midi_input = MidiInput::new(format!("{} MIDI Input", crate::config::APP_NAME).as_str())
             .context("Failed to create MIDI input")?;
 
         let (tx, rx) = mpsc::unbounded_channel();
@@ -320,7 +320,7 @@ impl MidiManager {
             let sender = self.message_sender.clone();
             let debug = self.debug;
             let device_name = device.name.clone();
-            let midi_in = MidiInput::new(&format!("{} {}", config::APP_NAME, device_name))?;
+            let midi_in = MidiInput::new(&format!("{} {}", crate::config::APP_NAME, device_name))?;
             let ports = midi_in.ports();
             let device_id = ObjId::from(intern_str(&device_name));
             if device.port_index >= ports.len() {
@@ -432,7 +432,7 @@ impl MidiLearnMode {
 
     pub(crate) async fn run(&mut self) -> Result<()> {
         info!("\n{}", "=".repeat(60));
-        info!("{} MIDI learn mode.", config::APP_NAME);
+        info!("{} MIDI learn mode.", crate::config::APP_NAME);
         info!("{}", "=".repeat(60));
         info!("This mode will automatically discover and learn MIDI controls.");
         info!("Press different controls on your MIDI devices to learn them.");

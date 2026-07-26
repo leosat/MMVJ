@@ -1,6 +1,6 @@
 use crate::config::ConfigManager;
-use crate::config::DebugLevel;
 use crate::config::MORE_DEBUG;
+use crate::debug::DebugLevel;
 use crate::hid_manager::{HidManager, WithDeviceClassification};
 use crate::mapped_device::MappedDeviceManager;
 use crate::mapping::MappingEngine;
@@ -223,7 +223,7 @@ pub async fn run(
     #[cfg(feature = "gui")] gui_monitors: bool,
     #[cfg(feature = "gui")] gui_full: bool,
 ) -> Result<()> {
-    crate::common::set_debug_level__(debug);
+    crate::debug::set_debug_level__(debug);
 
     sanitize_cfg_file_path(cfg_file_path)?;
 

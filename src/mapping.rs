@@ -1,5 +1,8 @@
-use crate::common::{BaseNumT, get_debug_level, get_interned_str, intern_str};
-use crate::config::DebugLevel;
+use crate::common::BaseNumT;
+use crate::interner::{get_interned_str, intern_str};
+
+use crate::debug::DebugLevel;
+use crate::debug::get_debug_level;
 use crate::hid_device::HidDeviceKind;
 use crate::hid_manager::{HidManager, WithDeviceClassification};
 use crate::mapped_controls::MappedCtls;
