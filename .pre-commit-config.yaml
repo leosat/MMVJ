@@ -17,3 +17,11 @@ repos:
         types: [rust]
         pass_filenames: false
 
+      - id: cargo-clippy
+        name: Cargo Clippy
+        description: Check Rust code with clippy.
+        entry: cargo clippy
+        language: system
+        types: [rust]
+        pass_filenames: false
+
