@@ -318,7 +318,7 @@ impl eframe::App for GuiMain {
                     UiMonitorsCfg::Axis(m) => ui.ctx().show_viewport_immediate(
                         egui::ViewportId::from_hash_of(format!("monitor {monitor_cfg_idx}")),
                         egui::ViewportBuilder::default()
-                            .with_title(format!("MMVJ Monitor: {}", &m.name))
+                            .with_title(format!("MMVJ Monitor: {}", m.name))
                             .with_transparent(false)
                             .with_fullsize_content_view(true)
                             .with_visible(true)
@@ -498,7 +498,7 @@ impl eframe::App for GuiMain {
                     };
                 });
                 ui.separator();
-                ui.label(format!(" Config: {}", &self.cfg.cfg_file.to_string_lossy()));
+                ui.label(format!(" Config: {}", self.cfg.cfg_file.to_string_lossy()));
             });
 
         egui::CentralPanel::default().show_inside(ui, |ui| {
@@ -1304,7 +1304,7 @@ impl GuiMain {
             for m in self.cfg.ui.monitors.iter().enumerate() {
                 match m.1 {
                     UiMonitorsCfg::Axis(ui_axis_monitor_cfg) => {
-                        ui.collapsing(format!("{} {}", m.0, &ui_axis_monitor_cfg.name), |ui| {
+                        ui.collapsing(format!("{} {}", m.0, ui_axis_monitor_cfg.name), |ui| {
                             egui::ScrollArea::vertical().show(ui, |ui| {
                                 ui.add(
                                     egui::TextEdit::multiline(&mut format!("{ui_axis_monitor_cfg:#?}"))
@@ -1324,7 +1324,7 @@ impl GuiMain {
         ui.separator();
         ui.collapsing("Mappings state:", |ui| {
             for m in self.cfg.mappings.iter().enumerate() {
-                ui.collapsing(format!("{} {}", m.0, &m.1.name), |ui| {
+                ui.collapsing(format!("{} {}", m.0, m.1.name), |ui| {
                     egui::ScrollArea::vertical().show(ui, |ui| {
                         ui.add(
                             egui::TextEdit::multiline(&mut format!("{m:#?}"))
@@ -1370,7 +1370,7 @@ impl GuiMain {
         ui.collapsing("Pre-configured (predefined) controls configuration (static):", |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.add(
-                    egui::TextEdit::multiline(&mut format!("{:#?}", &crate::config::PREDEF_CONTROLS))
+                    egui::TextEdit::multiline(&mut format!("{:#?}", crate::config::PREDEF_CONTROLS))
                         .font(egui::TextStyle::Monospace)
                         // .background_color(Color32::BLACK)
                         // .text_color(Color32::GRAY)

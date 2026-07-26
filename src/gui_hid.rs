@@ -381,11 +381,11 @@ impl<'s> DrawEgui<'s> for AvailableHIDDeviceInfo {
     fn egui(&mut self, _gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         ui.group(|ui| {
             ui.separator();
-            ui.label(format!("Device name: {}", &self.name));
+            ui.label(format!("Device name: {}", self.name));
             ui.separator();
-            ui.label(format!("Classification: {}", &self.classification.to_string()));
+            ui.label(format!("Classification: {}", self.classification));
             ui.separator();
-            ui.label(format!("Path: {}", &self.path.to_string_lossy()));
+            ui.label(format!("Path: {}", self.path.to_string_lossy()));
         });
     }
 }
