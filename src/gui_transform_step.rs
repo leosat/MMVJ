@@ -934,33 +934,47 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
 
     fn egui(&mut self, in_is_relative: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut changed: bool = false;
-        changed |= ui
-            .add(
-                egui::Slider::new(&mut self.min_cutoff_hz, 0.1..=1000.0)
-                    .text("Lowpass base cutoff")
-                    .suffix("Hz")
-                    .logarithmic(true),
-            )
-            .changed();
-        changed |= ui
-            .add(
-                egui::Slider::new(&mut self.beta, 0.0001..=10.0)
-                    .text("Beta")
-                    .logarithmic(true),
-            )
-            .changed();
-        changed |= ui
-            .add(
-                egui::Slider::new(&mut self.d_cutoff_hz, 0.001..=1000.0)
-                    .text("Derivative cutoff")
-                    .suffix("Hz")
-                    .logarithmic(true),
-            )
-            .changed();
+
+        ui.horizontal(|ui| {
+            let param_name = "Lowpass base cutoff";
+            changed |= ui
+                .add(
+                    egui::Slider::new(&mut self.min_cutoff_hz, 0.1..=1000.0)
+                        .suffix("Hz")
+                        .logarithmic(true),
+                )
+                .on_hover_text(self.min_cutoff_hz_doc_str())
+                .changed();
+            ui.label(param_name).on_hover_text(self.min_cutoff_hz_doc_str());
+        });
+
+        ui.horizontal(|ui| {
+            let param_name = "Beta (speed coefficient)";
+            changed |= ui
+                .add(egui::Slider::new(&mut self.beta, 0.0001..=10.0).logarithmic(true))
+                .on_hover_text(self.beta_doc_str())
+                .changed();
+            ui.label(param_name).on_hover_text(self.beta_doc_str());
+        });
+
+        ui.horizontal(|ui| {
+            let param_name = "Derivative cutoff";
+            changed |= ui
+                .add(
+                    egui::Slider::new(&mut self.d_cutoff_hz, 0.001..=1000.0)
+                        .suffix("Hz")
+                        .logarithmic(true),
+                )
+                .on_hover_text(self.d_cutoff_hz_doc_str())
+                .changed();
+            ui.label(param_name).on_hover_text(self.d_cutoff_hz_doc_str());
+        });
+
         if in_is_relative {
             ui.separator();
             changed |= draw_gui_idle_tick_params(ui, self);
         }
+
         bool_to_simple_change_gui_cmd(changed)
     }
 }

@@ -5,6 +5,7 @@
 
 * [Steering](./steering.md)
 * [Script](./script.md)
+* [One Euro filter](./one_euro.md)
 * ... others are WIP, Please see the demo config with comments [in the config folder.](../conf/)
 
 # Global settings

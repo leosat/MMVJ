@@ -177,27 +177,17 @@ mappings:
       min_cutoff_hz: 1.0
       d_cutoff_hz: 1.0
   - steering:
-      enabled: true
-      deadzone_counts: 0.0
-      input_gain: 0.1
-      auto_center_halflife: 0.15
-      auto_center_along_force_feedback: 0.0
-      hold_factor:
-        var: Steering Hold Factor
-      force_feedback:
-        enabled: true
-        gain: 1.0
-        invert: false
-        component: X
-        transformation:
-        - ema:
-            enabled: true
-            tau: 0.01
-      integrated_user_input_transform:
-      - exp:
           enabled: true
-          base: 3.3
-          center_symmetric: true
+          input_gain: 1.0
+          force_feedback:
+            enabled: true
+            gain: 1.0
+            transformation:
+              - one_euro:
+                  enabled: true
+                  min_cutoff_hz: 2.0
+                  beta: 0.01
+                  d_cutoff_hz: 0.5
 - name: "Src: any_kbd.KEY_DOWN -> Dst: Virtual steering wheel.BTN_EAST"
   enabled: true
   source:
