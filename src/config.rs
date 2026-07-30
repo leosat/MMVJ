@@ -118,30 +118,22 @@ impl Config {
     }
 
     #[cfg(feature = "midi")]
-    fn get_available_midi_control_matcher_keys(&self, device_matcher_key: &str) -> Result<Vec<String>> {
-        if let Some(dm) = self.devices.midi.get(device_matcher_key) {
-            let mut c = Vec::new();
-            c.extend(dm.controls.keys().cloned());
-            c.extend(PREDEF_CONTROLS.midi_controls.keys().cloned());
-            c.sort();
-            c.dedup();
-            Ok(c)
-        } else {
-            bail!("Device definition is not found for {device_matcher_key}");
-        }
+    fn get_available_midi_control_matcher_keys(midi_dm: &MidiMatcherCfg) -> Vec<String> {
+        let mut c = Vec::new();
+        c.extend(midi_dm.controls.keys().cloned());
+        c.extend(PREDEF_CONTROLS.midi_controls.keys().cloned());
+        c.sort();
+        c.dedup();
+        c
     }
 
-    fn get_availale_hid_control_matcher_keys(&self, device_matcher_key: &str) -> Result<Vec<String>> {
-        if let Some(dm) = self.devices.hid.get(device_matcher_key) {
-            let mut c = Vec::new();
-            c.extend(dm.controls.keys().cloned());
-            c.extend(PREDEF_CONTROLS.hid_controls.keys().cloned());
-            c.sort();
-            c.dedup();
-            Ok(c)
-        } else {
-            bail!("Device definition is not found for {device_matcher_key}");
-        }
+    fn get_available_hid_control_matcher_keys(hid_dm: &HidDeviceCfg) -> Vec<String> {
+        let mut c = Vec::new();
+        c.extend(hid_dm.controls.keys().cloned());
+        c.extend(PREDEF_CONTROLS.hid_controls.keys().cloned());
+        c.sort();
+        c.dedup();
+        c
     }
 
     pub(crate) fn resolve(&mut self) -> Result<()> {
@@ -153,45 +145,45 @@ impl Config {
     fn resolve_devices(&mut self) -> Result<()> {
         #[cfg(feature = "midi")]
         {
-            let mut tmp = self.devices.midi.clone();
-            for (device_matcher_key, device_matcher_cfg) in &mut tmp {
-                self.resolve_midi(device_matcher_key, device_matcher_cfg)
+            for (device_matcher_key, device_matcher_cfg) in &mut self.devices.midi {
+                Self::resolve_midi(device_matcher_key, device_matcher_cfg)
                     .with_context(|| format!("Failed to resolve MIDI device '{}'", device_matcher_key))?;
             }
-            self.devices.midi = tmp;
         }
 
-        let mut tmp = self.devices.hid.clone();
-        for (device_matcher_key, device_matcher_cfg) in &mut tmp {
-            self.resolve_hid(device_matcher_key, device_matcher_cfg)
+        for (device_matcher_key, device_matcher_cfg) in &mut self.devices.hid {
+            Self::resolve_hid(device_matcher_key, device_matcher_cfg)
                 .with_context(|| format!("Failed to resolve HID '{}'", device_matcher_key))?;
             device_matcher_cfg.add_special_force_feedback_controls();
         }
-        self.devices.hid = tmp;
 
         Ok(())
     }
 
     fn resolve_dynamic_value_refs(&mut self) -> Result<()> {
         struct CfgDstsAndSrcsVisitor<'s> {
-            pub cfg: &'s mut Config,
+            pub devices: &'s mut DevicesCfgNew,
+            pub variables: &'s mut VariablesCfg,
             pub mapping_name: Option<String>,
         }
 
         impl<'s> traversable::VisitorMut for CfgDstsAndSrcsVisitor<'s> {
-            type Break = ();
+            type Break = anyhow::Result<()>;
             fn enter_mut(&mut self, this: &mut dyn core::any::Any) -> std::ops::ControlFlow<Self::Break> {
                 if let Some(m) = this.downcast_mut::<Mapping>() {
                     self.mapping_name = Some(m.name.clone());
                 }
                 if let Some(v) = this.downcast_mut::<DynValueRefs>() {
-                    *v = self
-                        .cfg
-                        .resolve_dynamic_value_ref(
-                            v,
-                            (self.mapping_name.as_ref().unwrap_or(&String::default())).as_str(),
-                        )
-                        .unwrap_or(v.clone());
+                    let resolved = Config::resolve_dynamic_value_ref(
+                        self.devices,
+                        self.variables,
+                        v,
+                        (self.mapping_name.as_ref().unwrap_or(&String::default())).as_str(),
+                    );
+                    match resolved {
+                        Ok(r) => *v = r,
+                        Err(e) => return std::ops::ControlFlow::Break(anyhow::Result::Err(e)),
+                    }
                 }
                 std::ops::ControlFlow::Continue(())
             }
@@ -217,18 +209,25 @@ impl Config {
             }
         }
 
-        let mut cfg_tmp = self.clone();
-        let _ = cfg_tmp.traverse_mut(&mut CfgDstsAndSrcsVisitor {
-            cfg: self,
+        let mut visitor = CfgDstsAndSrcsVisitor {
             mapping_name: None,
-        });
-        *self = cfg_tmp;
+            devices: &mut self.devices,
+            variables: &mut self.variables,
+        };
+
+        if let std::ops::ControlFlow::Break(res) = self.mappings.traverse_mut(&mut visitor) {
+            return res;
+        }
+
+        if let std::ops::ControlFlow::Break(res) = self.ui.traverse_mut(&mut visitor) {
+            return res;
+        }
 
         Ok(())
     }
 
     #[cfg(feature = "midi")]
-    fn resolve_midi_control(&self, _device_matcher_key: &str, entry: &mut MidiControlMatcherCfg) -> Result<()> {
+    fn resolve_midi_control(_device_matcher_key: &str, entry: &mut MidiControlMatcherCfg) -> Result<()> {
         if !entry.from_predefined.is_empty() {
             if let Some(predefined_control) = PREDEF_CONTROLS.midi_controls.get(&entry.from_predefined) {
                 if entry.midi_message == Default::default() {
@@ -255,7 +254,7 @@ impl Config {
         Ok(())
     }
 
-    fn resolve_hid_control(&self, _device_matcher_key: &str, entry: &mut HidControlMatcherCfg) -> Result<()> {
+    fn resolve_hid_control(_device_matcher_key: &str, entry: &mut HidControlMatcherCfg) -> Result<()> {
         if !entry.from_predefined.is_empty() {
             if let Some(predefined_control) = PREDEF_CONTROLS.hid_controls.get(&entry.from_predefined) {
                 entry.r#type = predefined_control.r#type;
@@ -279,9 +278,9 @@ impl Config {
         Ok(())
     }
 
-    pub(crate) fn resolve_hid(&self, device_matcher_key: &str, device: &mut HidDeviceCfg) -> Result<()> {
+    pub(crate) fn resolve_hid(device_matcher_key: &str, device: &mut HidDeviceCfg) -> Result<()> {
         for (control_name, control_entry) in &mut device.controls {
-            self.resolve_hid_control(device_matcher_key, control_entry)
+            Self::resolve_hid_control(device_matcher_key, control_entry)
                 .with_context(|| format!("Failed to expand HID control '{}'", control_name))?;
         }
         device.update_classification();
@@ -289,20 +288,24 @@ impl Config {
     }
 
     #[cfg(feature = "midi")]
-    pub(crate) fn resolve_midi(&mut self, device_matcher_key: &str, device: &mut MidiMatcherCfg) -> Result<()> {
+    pub(crate) fn resolve_midi(device_matcher_key: &str, device: &mut MidiMatcherCfg) -> Result<()> {
         for (control_name, control_entry) in &mut device.controls {
-            self.resolve_midi_control(device_matcher_key, control_entry)
+            Self::resolve_midi_control(device_matcher_key, control_entry)
                 .with_context(|| format!("Failed to expand MIDI control '{}'", control_name))?;
         }
         Ok(())
     }
 
-    fn resolve_dynamic_value_ref(&mut self, dyn_value: &DynValueRefs, mapping_name: &str) -> Result<DynValueRefs> {
+    fn resolve_dynamic_value_ref(
+        devices: &mut DevicesCfgNew,
+        variables: &mut VariablesCfg,
+        dyn_value: &DynValueRefs,
+        mapping_name: &str,
+    ) -> Result<DynValueRefs> {
         match dyn_value {
             DynValueRefs::DeviceControlMatcher(d) => {
-                if self.devices.hid.contains_key(&d.device_matcher_key) {
-                    let mut device = self
-                        .devices
+                if devices.hid.contains_key(&d.device_matcher_key) {
+                    let mut device = devices
                         .hid
                         .get_mut(&d.device_matcher_key)
                         .ok_or_else(|| anyhow::anyhow!("Device with key {} not found!", d.device_matcher_key))?
@@ -330,7 +333,7 @@ impl Config {
                             .controls
                             .insert(d.control_key.clone(), expanded_control_matcher.clone());
 
-                        let _ = self.devices.hid.insert(d.device_matcher_key.clone(), device.clone());
+                        let _ = devices.hid.insert(d.device_matcher_key.clone(), device.clone());
 
                         return Ok(DynValueRefs::DeviceControlMatcher(DeviceControlMatcherRef {
                             device_matcher_key: d.device_matcher_key.clone(),
@@ -343,9 +346,14 @@ impl Config {
                         "Control '{}' not found in device '{}'. Available controls (including predefined): {}",
                         d.control_key,
                         d.device_matcher_key,
-                        self.get_availale_hid_control_matcher_keys(&d.device_matcher_key)
-                            .context("Couldn't resolve controls for device.")?
-                            .join(", ")
+                        devices
+                            .hid
+                            .get(&d.device_matcher_key)
+                            .map(|dm| { Self::get_available_hid_control_matcher_keys(dm).join(", ") })
+                            .with_context(
+                                || format! {"Couldn't resolve controls for device referenced by key {}.",
+                                d.device_matcher_key}
+                            )?
                     );
                 }
                 // --------------------- MIDI ------------------------
@@ -357,10 +365,9 @@ impl Config {
                     );
 
                     #[cfg(feature = "midi")]
-                    if self.devices.midi.contains_key(&d.device_matcher_key) {
+                    if devices.midi.contains_key(&d.device_matcher_key) {
                         let midi_control = {
-                            if let Some(control) = self
-                                .devices
+                            if let Some(control) = devices
                                 .midi
                                 .get_mut(&d.device_matcher_key)
                                 .unwrap()
@@ -379,8 +386,7 @@ impl Config {
 
                                 let expanded_control_matcher: MidiControlMatcherCfg = predef.clone().into();
 
-                                let _ = self
-                                    .devices
+                                let _ = devices
                                     .midi
                                     .get_mut(&d.device_matcher_key)
                                     .unwrap()
@@ -393,9 +399,14 @@ impl Config {
                                     "Control '{}' not found in device '{}'. Available controls (including predefined): {}",
                                     d.control_key,
                                     d.device_matcher_key,
-                                    self.get_available_midi_control_matcher_keys(&d.device_matcher_key)
-                                        .context("Failed to get available controls for device.")?
-                                        .join(", ")
+                                    devices
+                                        .midi
+                                        .get(&d.device_matcher_key)
+                                        .map(|dm| { Self::get_available_midi_control_matcher_keys(dm).join(", ") })
+                                        .with_context(
+                                            || format! {"Couldn't resolve controls for device referenced by key {}.",
+                                            d.device_matcher_key}
+                                        )?
                                 );
                             }
                         };
@@ -411,7 +422,7 @@ impl Config {
                 }
             }
             DynValueRefs::Variable(var) => {
-                if let Some((k, v)) = self.variables.iter().find(|(k, _)| **k == var.variable_key) {
+                if let Some((k, v)) = variables.iter().find(|(k, _)| **k == var.variable_key) {
                     Ok(DynValueRefs::Variable(crate::schemas_value::VariableRef {
                         variable_key: k.clone(),
                         variable: v.clone(),
