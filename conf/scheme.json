@@ -1891,34 +1891,42 @@
       "additionalProperties": false
     },
     "OneEuroFilterCfg": {
+      "description": "Adaptive 1€ (One-Euro) low-pass filter transform step.\n\nImplements the [1€ Filter](https://cristal.univ-lille.fr/~casiez/1euro/)\nalgorithm — a speed-adaptive low-pass filter that dynamically adjusts\nits cutoff frequency based on the rate of change of the input signal.\n\n- **Slow / stationary input** -> cutoff ~= `min_cutoff_hz` -> heavy\n  smoothing, jitter suppressed.\n- **Fast input** -> cutoff ramps up via `β · |dx|` -> light smoothing,\n  low latency.\n\nIdeal for smoothing noisy relative inputs (mouse,\ntrackball) before a steering step, as a final output smoother\nafter steering, or inside a force-feedback sub-pipeline.",
       "type": "object",
       "properties": {
         "desc": {
+          "description": "Optional human-readable description shown in the GUI.",
           "$ref": "#/$defs/DescriptionCfg"
         },
         "enabled": {
+          "description": "Master on/off switch for the entire one-euro step. When `false`,\nthe input value passes through unchanged and no filter state is updated.",
           "type": "boolean",
           "default": true
         },
         "on_relative_input_feed_on_idle": {
+          "description": "When `true` and the input has **relative** semantics, the last\nknown value is re-fed into the filter on idle ticks so the\noutput continues to converge.\n\nIgnored for absolute inputs (always processed every tick).\nMutually exclusive with `on_relative_input_reset_on_idle`.\n\n**Warning:** convergence speed depends on `global.idle_tick_rate`.",
           "type": "boolean"
         },
         "on_relative_input_reset_on_idle": {
+          "description": "When `true` and the input has **relative** semantics, the filter\nstate (`x̂_prev`, `dx̂_prev`) is **reset** to the current input\non idle ticks.\n\nUse when the relative source may jump to a new baseline after a\npause and you want to avoid a smoothing transient.\nMutually exclusive with `on_relative_input_feed_on_idle`.",
           "type": "boolean"
         },
         "beta": {
+          "description": "Speed coefficient (β). Controls how much the cutoff frequency\nincreases in response to fast input movement.\n\nAdaptive cutoff formula: `cutoff = min_cutoff_hz + β · |dx̂|`\n\n- `0.0` — fixed-cutoff filter (no speed adaptation).\n- `0.001 – 0.01` — gentle adaptation (recommended starting range).\n- `0.1 – 10.0` — aggressive adaptation; near-passthrough during\n  fast sweeps, may re-introduce jitter.\n\n**Tuning heuristic:** start at `0.0`, increase until fast\nmovements feel responsive, then back off slightly.",
           "type": "number",
           "format": "float",
           "minimum": 0.0,
           "default": 0.007000000216066837
         },
         "min_cutoff_hz": {
+          "description": "Minimum cutoff frequency in Hz. The cutoff used when the input\nis stationary or moving very slowly.\n\n- `0.1 – 0.5` — very heavy smoothing at rest (strong jitter\n  suppression, noticeable lag onset).\n- `1.0` *(default)* — moderate smoothing; good starting point.\n- `5.0 – 50.0` — light smoothing; use when input is already\n  clean or minimal latency is critical.\n\nThink of this as the **noise floor** of the filter.",
           "type": "number",
           "format": "float",
           "minimum": 0.0,
           "default": 1.0
         },
         "d_cutoff_hz": {
+          "description": "Cutoff frequency in Hz for the derivative (speed) low-pass\nfilter.\n\nThe raw derivative `(x - x̂_prev) / dt` amplifies sensor jitter.\nThis secondary filter smooths the derivative so the adaptive\ncutoff does not oscillate.\n\n- `0.01 – 0.1` — very smooth derivative; stable but slow to\n  react to speed changes.\n- `1.0` *(default)* — balanced; works well for most devices.\n- `10.0 – 100.0` — barely filtered derivative; fast tracking\n  but may oscillate on noisy inputs.\n\nRarely needs adjustment from the default.",
           "type": "number",
           "format": "float",
           "minimum": 0.0,

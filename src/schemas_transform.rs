@@ -1,5 +1,6 @@
 use crate::base_num::{BaseAtomicT, BaseNumT};
 use crate::config::WithSanitize;
+use crate::filters::OneEuroFilter;
 use crate::relativity::Relativity;
 use crate::schemas_value::{DescriptionCfg, InputValueMetadata, WithDescriptionMut};
 use crate::schemas_value::{
@@ -300,6 +301,7 @@ impl TfmStepCfg {
         match self {
             TfmStepCfg::Steering(s) => s.doc_str(),
             TfmStepCfg::Script(s) => s.doc_str(),
+            TfmStepCfg::OneEuro(s) => s.doc_str(),
             TfmStepCfg::Nop(_)
             | TfmStepCfg::Invert(_)
             | TfmStepCfg::Integrate(_)
@@ -311,7 +313,6 @@ impl TfmStepCfg {
             | TfmStepCfg::SCurve(_)
             | TfmStepCfg::Exp(_)
             | TfmStepCfg::SignedPower(_)
-            | TfmStepCfg::OneEuro(_)
             | TfmStepCfg::_HighPass(_)
             | TfmStepCfg::_ForceFeedback(_) => DEFAULT_TRANSFORM_DESCRIPTION,
         }
@@ -660,36 +661,113 @@ impl Default for EmaFilterCfg {
     }
 }
 
+/// Adaptive 1€ (One-Euro) low-pass filter transform step.
+///
+/// Implements the [1€ Filter](https://cristal.univ-lille.fr/~casiez/1euro/)
+/// algorithm — a speed-adaptive low-pass filter that dynamically adjusts
+/// its cutoff frequency based on the rate of change of the input signal.
+///
+/// - **Slow / stationary input** -> cutoff ~= `min_cutoff_hz` -> heavy
+///   smoothing, jitter suppressed.
+/// - **Fast input** -> cutoff ramps up via `β · |dx|` -> light smoothing,
+///   low latency.
+///
+/// Ideal for smoothing noisy relative inputs (mouse,
+/// trackball) before a steering step, as a final output smoother
+/// after steering, or inside a force-feedback sub-pipeline.
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
+#[with_doc_str]
 pub(crate) struct OneEuroFilterCfg {
     #[serde(skip)]
     #[garde(skip)]
     common_state: TfmStepCommonStateShared,
+
     #[serde(skip)]
     #[garde(skip)]
-    pub(super) exe_state: Arc<Mutex<crate::filters::OneEuroFilter>>,
+    pub(super) exe_state: Arc<Mutex<OneEuroFilter>>,
+
+    /// Optional human-readable description shown in the GUI.
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
     pub(crate) desc: DescriptionCfg,
+
+    /// Master on/off switch for the entire one-euro step. When `false`,
+    /// the input value passes through unchanged and no filter state is updated.
     #[serde(default = "default_step_enabled")]
     #[garde(skip)]
     pub(crate) enabled: bool,
+
+    /// When `true` and the input has **relative** semantics, the last
+    /// known value is re-fed into the filter on idle ticks so the
+    /// output continues to converge.
+    ///
+    /// Ignored for absolute inputs (always processed every tick).
+    /// Mutually exclusive with `on_relative_input_reset_on_idle`.
+    ///
+    /// **Warning:** convergence speed depends on `global.idle_tick_rate`.
     #[serde(default = "default_false")]
     #[serde(skip_serializing_if = "is_false")]
     #[garde(skip)]
     pub(crate) on_relative_input_feed_on_idle: bool,
+
+    /// When `true` and the input has **relative** semantics, the filter
+    /// state (`x̂_prev`, `dx̂_prev`) is **reset** to the current input
+    /// on idle ticks.
+    ///
+    /// Use when the relative source may jump to a new baseline after a
+    /// pause and you want to avoid a smoothing transient.
+    /// Mutually exclusive with `on_relative_input_feed_on_idle`.
     #[serde(default = "default_false")]
     #[serde(skip_serializing_if = "is_false")]
     #[garde(skip)]
     pub(crate) on_relative_input_reset_on_idle: bool,
+
+    /// Speed coefficient (β). Controls how much the cutoff frequency
+    /// increases in response to fast input movement.
+    ///
+    /// Adaptive cutoff formula: `cutoff = min_cutoff_hz + β · |dx̂|`
+    ///
+    /// - `0.0` — fixed-cutoff filter (no speed adaptation).
+    /// - `0.001 – 0.01` — gentle adaptation (recommended starting range).
+    /// - `0.1 – 10.0` — aggressive adaptation; near-passthrough during
+    ///   fast sweeps, may re-introduce jitter.
+    ///
+    /// **Tuning heuristic:** start at `0.0`, increase until fast
+    /// movements feel responsive, then back off slightly.
     #[serde(default = "default_1euro_beta")]
     #[garde(range(min = 0.0))]
     pub(crate) beta: BaseNumT,
+
+    /// Minimum cutoff frequency in Hz. The cutoff used when the input
+    /// is stationary or moving very slowly.
+    ///
+    /// - `0.1 – 0.5` — very heavy smoothing at rest (strong jitter
+    ///   suppression, noticeable lag onset).
+    /// - `1.0` *(default)* — moderate smoothing; good starting point.
+    /// - `5.0 – 50.0` — light smoothing; use when input is already
+    ///   clean or minimal latency is critical.
+    ///
+    /// Think of this as the **noise floor** of the filter.
     #[serde(default = "default_1euro_min_cutoff_hz")]
     #[garde(range(min = 0.0))]
     pub(crate) min_cutoff_hz: BaseNumT,
+
+    /// Cutoff frequency in Hz for the derivative (speed) low-pass
+    /// filter.
+    ///
+    /// The raw derivative `(x - x̂_prev) / dt` amplifies sensor jitter.
+    /// This secondary filter smooths the derivative so the adaptive
+    /// cutoff does not oscillate.
+    ///
+    /// - `0.01 – 0.1` — very smooth derivative; stable but slow to
+    ///   react to speed changes.
+    /// - `1.0` *(default)* — balanced; works well for most devices.
+    /// - `10.0 – 100.0` — barely filtered derivative; fast tracking
+    ///   but may oscillate on noisy inputs.
+    ///
+    /// Rarely needs adjustment from the default.
     #[serde(default = "default_1euro_d_cutoff_hz")]
     #[garde(range(min = 0.0))]
     pub(crate) d_cutoff_hz: BaseNumT,
