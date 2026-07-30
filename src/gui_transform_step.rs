@@ -1241,26 +1241,24 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                         }
                     }
                     {
-                        let choice = match draw_value_choice_iface(
+                        let choice = draw_value_choice_iface(
                             ValueRefChoiceContext::TfmStepAuxDst,
                             ui,
                             "Custom accumulator",
                             "Custom accumulator",
                             cfg_devices,
                             cfg_variables,
-                        ) {
-                            Some(vr) => match vr {
-                                crate::schemas_value::ValuesRt::Src(value_srcs) => match value_srcs {
-                                    ValueSrcs::Static(_) => None,
-                                    ValueSrcs::Dynamic(srcs) => Some(srcs),
-                                },
-                                crate::schemas_value::ValuesRt::Dst(dsts) => match dsts {
-                                    crate::schemas_value::ValueDsts::Dynamic(d) => Some(d),
-                                    crate::schemas_value::ValueDsts::Void => None,
-                                },
+                        )
+                        .and_then(|vr| match vr {
+                            crate::schemas_value::ValuesRt::Src(value_srcs) => match value_srcs {
+                                ValueSrcs::Static(_) => None,
+                                ValueSrcs::Dynamic(srcs) => Some(srcs),
                             },
-                            None => None,
-                        };
+                            crate::schemas_value::ValuesRt::Dst(dsts) => match dsts {
+                                crate::schemas_value::ValueDsts::Dynamic(d) => Some(d),
+                                crate::schemas_value::ValueDsts::Void => None,
+                            },
+                        });
 
                         if choice.is_some() {
                             self.accumulator = choice;
