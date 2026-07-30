@@ -1032,7 +1032,7 @@ mod tests {
             assert!(input.is_char_boundary(truncated.len()));
             // Next byte should be the start of a multi-byte sequence or ASCII
             let next_byte = input.as_bytes()[truncated.len()];
-            assert!(!(next_byte & 0b1100_0000 == 0b1000_0000)); // Not a continuation byte
+            assert!(next_byte & 0b1100_0000 != 0b1000_0000); // Not a continuation byte
         }
     }
 

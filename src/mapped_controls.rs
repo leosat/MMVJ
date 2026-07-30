@@ -1091,6 +1091,7 @@ mod tests {
     #[test]
     fn test_clone_and_copy() {
         let original = MappedCtls::AbsX;
+        #[allow(clippy::clone_on_copy)]
         let cloned = original.clone();
         let copied = original;
 
