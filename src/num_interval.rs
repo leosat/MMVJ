@@ -820,11 +820,11 @@ mod tests {
     fn test_range_conversions_roundtrip() {
         let interval = NumInterval::new(5i32, 15);
 
-        let incl: RangeInclusive<i32> = interval.clone().into();
+        let incl: RangeInclusive<i32> = interval.into();
         assert_eq!(*incl.start(), 5);
         assert_eq!(*incl.end(), 15);
 
-        let excl: Range<i32> = interval.clone().into();
+        let excl: Range<i32> = interval.into();
         assert_eq!(excl.start, 5);
         assert_eq!(excl.end, 15);
 
@@ -855,7 +855,7 @@ mod tests {
         assert!(NumInterval::new(i128::MIN, i128::MAX).span() == i128::MAX as u128 + i128::MIN.unsigned_abs());
         assert!(NumInterval::new(i8::MIN, i8::MAX).span() == i8::MAX as u8 + i8::MIN.unsigned_abs());
         assert!(NumInterval::new(1, i8::MAX).span() == (i8::MAX - 1) as u8);
-        assert!(NumInterval::new(i8::MIN, 123).span() == 123 as u8 + i8::MIN.unsigned_abs());
+        assert!(NumInterval::new(i8::MIN, 123).span() == 123_u8 + i8::MIN.unsigned_abs());
         assert!(NumInterval::new(BaseNumT::MIN, BaseNumT::MAX).span() == BaseNumT::MAX - BaseNumT::MIN);
     }
 
@@ -995,7 +995,7 @@ mod tests {
             let inv = r.try_invert_value(v).unwrap();
             let inv_inv = r.try_invert_value(inv).unwrap();
             assert_eq!(inv_inv, v, "invert(invert({v})) != {v} in interval {r:?}");
-            let expected = 0 + 5 - v;
+            let expected = 5 - v;
             assert_eq!(
                 r.try_invert_value(v).unwrap(),
                 expected,
