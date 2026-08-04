@@ -93,18 +93,20 @@ const fn default_ema_tau() -> BaseNumT {
     0.04
 }
 
-// ============================================================
-pub(crate) trait DuplicateTfmTree
+pub(crate) trait DuplicateWithNewState
 where
     Self: Clone + TraversableMut + WithRuntimeId,
 {
-    fn duplicate_tfm_tree_with_new_state(&self) -> Self {
-        struct RuntimeInfoRenewVisitor {}
-        impl traversable::VisitorMut for RuntimeInfoRenewVisitor {
+    fn duplicate_with_new_state(&self) -> Self {
+        struct Visitor {}
+        impl traversable::VisitorMut for Visitor {
             type Break = ();
             fn enter_mut(&mut self, this: &mut dyn core::any::Any) -> std::ops::ControlFlow<Self::Break> {
                 if let Some(v) = this.downcast_mut::<TfmStepCfg>() {
                     v.common_state_assign_new();
+                    if let TfmStepCfg::Script(s) = v {
+                        s.exe_state = Default::default();
+                    }
                 } else if let Some(v) = this.downcast_mut::<TfmSeqCfg>() {
                     v.assign_new_id();
                 }
@@ -112,7 +114,7 @@ where
             }
         }
         let mut duplicate = self.clone();
-        let _ = duplicate.traverse_mut(&mut RuntimeInfoRenewVisitor {});
+        let _ = duplicate.traverse_mut(&mut Visitor {});
         duplicate
     }
 }
@@ -1799,7 +1801,14 @@ pub(crate) struct ScriptCfg {
     #[traverse(skip)]
     #[garde(skip)]
     /// Internal state
-    pub(super) exe_state: UncheckedIMStorage<Option<ScriptExeState>>,
+    pub(super) exe_state: Arc<UncheckedIMStorage<Option<ScriptExeState>>>,
+
+    #[serde(skip)]
+    #[traverse(skip)]
+    #[garde(skip)]
+    #[cfg(feature = "gui")]
+    /// Internal state
+    pub(super) edit_epoch: usize,
 
     /// Optional human-readable description shown in the GUI.
     #[traverse(skip)]
@@ -1921,6 +1930,8 @@ impl Default for ScriptCfg {
             aux_transformations: Default::default(),
             common_state: Default::default(),
             exe_state: Default::default(),
+            #[cfg(feature = "gui")]
+            edit_epoch: Default::default(),
         }
     }
 }
@@ -2025,7 +2036,7 @@ pub(crate) struct ScriptDestinationCfg {
     pub(crate) destination: ValueDsts,
 }
 
-impl DuplicateTfmTree for TfmStepCfg {}
+impl DuplicateWithNewState for TfmStepCfg {}
 
 impl WithRuntimeId for TfmStepCfg {
     fn get_id(&self) -> ObjId {

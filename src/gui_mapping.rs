@@ -10,7 +10,7 @@ use crate::schemas_cfg::{DevicesCfgNew, VariablesCfg};
 
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_mapping::Mapping;
-use crate::schemas_transform::{DuplicateTfmTree, DynValFilter, collect_dynamic_value_matchers};
+use crate::schemas_transform::{DuplicateWithNewState, DynValFilter, collect_dynamic_value_matchers};
 use crate::schemas_transform::{TfmSeqCfg, TfmStepCfg};
 use crate::schemas_value::DynValueRefs;
 use std::any::Any;
@@ -445,7 +445,7 @@ impl traversable::VisitorMut for DndJobMoveTfmStep_Visitor {
                         dbg!(found);
                     }
                     if self.dnd_job.do_copy {
-                        self.dropped_tfm_step = Some(found.1.clone().duplicate_tfm_tree_with_new_state());
+                        self.dropped_tfm_step = Some(found.1.clone().duplicate_with_new_state());
                     } else {
                         self.dropped_tfm_step = Some(found.1.clone());
 

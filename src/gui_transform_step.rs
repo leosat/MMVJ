@@ -1685,7 +1685,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
 
                 ui.separator();
                 if changed_script {
-                    *self.exe_state.get_mut() = None;
+                    self.edit_epoch += 1;
                     gui_out = Some(GuiCmd::ConfigChangeSimple)
                 } else if changed_settings_general {
                     gui_out = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter))
