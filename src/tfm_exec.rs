@@ -23,7 +23,7 @@ use crate::tracing::GraphDisplayStyle;
 use eframe::egui::Color32;
 use log::debug;
 use mlua::{FromLua, Lua};
-use std::ops::{Add, DerefMut};
+use std::ops::Add;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::Instant;
 
@@ -66,7 +66,7 @@ impl<T: Clone> UncheckedIMStorage<T> {
 }
 
 pub(crate) trait TfmExeState {
-    type StateMutT<'a>: DerefMut
+    type StateMutT<'a>
     where
         Self: 'a;
     type ResetInput<'b>;
@@ -438,6 +438,8 @@ impl WithTfmExec for LinearCfg {
 
 #[derive(Clone, Debug)]
 pub(crate) struct ScriptExeState {
+    #[cfg(feature = "gui")]
+    pub(super) edit_epoch: usize,
     pub(crate) compiled: mlua::Function,
 }
 
@@ -448,42 +450,51 @@ impl ScriptExeState {
             .into_function()
             .inspect_err(|e| log::error!("{e}"))
             .unwrap();
-        Self { compiled }
+        Self {
+            compiled,
+            #[cfg(feature = "gui")]
+            edit_epoch: Default::default(),
+        }
     }
 }
 
 impl TfmExeState for ScriptCfg {
     type StateMutT<'a>
-        = &'a mut ScriptExeState
+        = Option<&'a mut ScriptExeState>
     where
         Self: 'a;
 
-    type ResetInput<'b> = &'b mlua::Lua;
+    type ResetInput<'b> = (&'b mlua::Lua, bool);
 
     fn exe_state_mut(&self) -> Self::StateMutT<'_> {
-        self.exe_state.get_mut().as_mut().unwrap()
+        self.exe_state.get_mut().as_mut()
     }
 
-    fn exe_state_reset(&self, lua: Self::ResetInput<'_>) {
-        let mut state = ScriptExeState::new(&lua);
-
-        if get_debug_level().is_on() {
-            log::debug!("Compiling Luau script!");
+    fn exe_state_reset(&self, args: Self::ResetInput<'_>) {
+        let (lua, recompile_only) = args;
+        let script_compile = |exe_state: &mut ScriptExeState| {
+            exe_state.compiled = lua
+                .load(&self.script)
+                .into_function()
+                .inspect_err(|e| log::error!("{e}"))
+                .unwrap_or(lua.load("").into_function().unwrap());
+        };
+        if recompile_only && let Some(exe_state) = self.exe_state_mut() {
+            log::info!("Compiling Luau script!");
+            let env = exe_state.compiled.environment().unwrap();
+            script_compile(exe_state);
+            exe_state.compiled.set_environment(env).unwrap();
+        } else {
+            log::info!("Initializing Luau script exe state!");
+            let mut exe_state = ScriptExeState::new(lua);
+            script_compile(&mut exe_state);
+            let env = lua.create_table().unwrap();
+            let meta = lua.create_table().unwrap();
+            meta.set("__index", lua.globals()).unwrap();
+            env.set_metatable(meta.into()).unwrap();
+            exe_state.compiled.set_environment(env.clone()).unwrap();
+            *self.exe_state.get_mut() = Some(exe_state);
         }
-
-        state.compiled = lua
-            .load(&self.script)
-            .into_function()
-            .inspect_err(|e| log::error!("{e}"))
-            .unwrap_or(lua.load(" ").into_function().unwrap());
-
-        let env = lua.create_table().unwrap();
-        let meta = lua.create_table().unwrap();
-        meta.set("__index", lua.globals()).unwrap();
-        env.set_metatable(meta.into()).unwrap();
-        state.compiled.set_environment(env.clone()).unwrap();
-
-        *self.exe_state.get_mut() = Some(state);
     }
 }
 
@@ -531,11 +542,19 @@ impl WithTfmExec for ScriptCfg {
                     Ok(ctx.get_idle_tick_rate())
                 };
 
-                if self.exe_state.get().is_none() {
-                    self.exe_state_reset(&ctx.get_lua());
-                }
+                let exe_state = self
+                    .exe_state_mut()
+                    .or_else(|| {
+                        self.exe_state_reset((ctx.get_lua(), false));
+                        self.exe_state_mut()
+                    })
+                    .expect("Get or init lua script exe state failed.");
 
-                let exe_state = self.exe_state_mut();
+                #[cfg(feature = "gui")]
+                if self.edit_epoch != exe_state.edit_epoch {
+                    self.exe_state_reset((ctx.get_lua(), true));
+                    exe_state.edit_epoch = self.edit_epoch;
+                }
 
                 #[derive(Clone)]
                 enum SrcOrDstKey {
