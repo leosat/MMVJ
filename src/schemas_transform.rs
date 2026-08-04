@@ -1616,13 +1616,13 @@ impl TfmExeState for SteeringCfg {
     where
         Self: 'a;
 
-    type ResetInput = Option<SteeringExeState>;
+    type ResetInput<'b> = Option<SteeringExeState>;
 
     fn exe_state_mut(&self) -> Self::StateMutT<'_> {
         self.exe_state.lock_arc()
     }
 
-    fn exe_state_reset(&self, reset_with: Self::ResetInput) {
+    fn exe_state_reset(&self, reset_with: Self::ResetInput<'_>) {
         *self.exe_state_mut() = reset_with.unwrap_or_default()
     }
 }

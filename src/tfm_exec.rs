@@ -9,7 +9,6 @@ use crate::gui_transform_step::TfmStepTraceStage;
 use crate::num_interval::{NumInterval, OutOfRangePolicy};
 use crate::relativity::Relativity;
 
-use crate::schemas_common::WithRuntimeId;
 use crate::schemas_transform::WithCommonState;
 use crate::schemas_transform::{
     ClampCfg, EmaFilterCfg, ForceFeedbackComponent, IntegrateCfg, InvertCfg, LinearCfg, NormExpCfg, OneEuroFilterCfg,
@@ -70,9 +69,9 @@ pub(crate) trait TfmExeState {
     type StateMutT<'a>: DerefMut
     where
         Self: 'a;
-    type ResetInput;
+    type ResetInput<'b>;
     fn exe_state_mut(&self) -> Self::StateMutT<'_>;
-    fn exe_state_reset(&self, reset_with: Self::ResetInput);
+    fn exe_state_reset(&self, reset_with: Self::ResetInput<'_>);
 }
 
 pub(crate) trait TfmExecCtx {
@@ -99,14 +98,14 @@ impl WithTfmExec for TfmSeqCfg {
         for step in &self.steps {
             input = step.exec(input, ctx);
             if !input.interval.contains_value_closed(input.value) {
-                log::warn!(
-                    "Value {} must fit in interval {} after transformation step ``{}'' (ID: {}). 
-            Each step must ensure it, clamping!",
-                    input.value,
-                    input.interval,
-                    step,
-                    step.get_id()
-                );
+                //     log::warn!(
+                //         "Value {} must fit in interval {} after transformation step ``{}'' (ID: {}).
+                // Each step must ensure it, clamping!",
+                //         input.value,
+                //         input.interval,
+                //         step,
+                //         step.get_id()
+                //     );
                 input.value = input.interval.clamp(input.value);
             }
         }
@@ -132,13 +131,13 @@ impl TfmExeState for OneEuroFilterCfg {
         = parking_lot::ArcMutexGuard<parking_lot::RawMutex, crate::filters::OneEuroFilter>
     where
         Self: 'a;
-    type ResetInput = BaseNumT;
+    type ResetInput<'b> = BaseNumT;
 
     fn exe_state_mut(&self) -> Self::StateMutT<'_> {
         self.exe_state.lock_arc()
     }
 
-    fn exe_state_reset(&self, reset_with: Self::ResetInput) {
+    fn exe_state_reset(&self, reset_with: Self::ResetInput<'_>) {
         self.exe_state_mut().reset(reset_with);
     }
 }
@@ -176,13 +175,13 @@ impl TfmExeState for RaiseFallCfg {
     where
         Self: 'a;
 
-    type ResetInput = Option<RaiseFallExeState>;
+    type ResetInput<'b> = Option<RaiseFallExeState>;
 
     fn exe_state_mut(&self) -> Self::StateMutT<'_> {
         self.exe_state.lock_arc()
     }
 
-    fn exe_state_reset(&self, reset_with: Self::ResetInput) {
+    fn exe_state_reset(&self, reset_with: Self::ResetInput<'_>) {
         *self.exe_state_mut() = reset_with.unwrap_or_default();
     }
 }
@@ -271,13 +270,13 @@ impl TfmExeState for EmaFilterCfg {
     where
         Self: 'a;
 
-    type ResetInput = BaseNumT;
+    type ResetInput<'b> = BaseNumT;
 
     fn exe_state_mut(&self) -> Self::StateMutT<'_> {
         self.exe_state.lock_arc()
     }
 
-    fn exe_state_reset(&self, reset_with: Self::ResetInput) {
+    fn exe_state_reset(&self, reset_with: Self::ResetInput<'_>) {
         self.exe_state_mut().reset(reset_with);
     }
 }
@@ -439,22 +438,17 @@ impl WithTfmExec for LinearCfg {
 
 #[derive(Clone, Debug)]
 pub(crate) struct ScriptExeState {
-    // pub(crate) inputs: mlua::Table,
-    // pub(crate) outputs: mlua::Table,
     pub(crate) compiled: mlua::Function,
 }
 
 impl ScriptExeState {
     fn new(lua: &mlua::Lua) -> Self {
-        Self {
-            // inputs: lua.create_table().unwrap(),
-            // outputs: lua.create_table().unwrap(),
-            compiled: lua
-                .load(" ")
-                .into_function()
-                .inspect_err(|e| log::error!("{e}"))
-                .unwrap(),
-        }
+        let compiled = lua
+            .load(" ")
+            .into_function()
+            .inspect_err(|e| log::error!("{e}"))
+            .unwrap();
+        Self { compiled }
     }
 }
 
@@ -464,13 +458,13 @@ impl TfmExeState for ScriptCfg {
     where
         Self: 'a;
 
-    type ResetInput = mlua::Lua;
+    type ResetInput<'b> = &'b mlua::Lua;
 
     fn exe_state_mut(&self) -> Self::StateMutT<'_> {
         self.exe_state.get_mut().as_mut().unwrap()
     }
 
-    fn exe_state_reset(&self, lua: Self::ResetInput) {
+    fn exe_state_reset(&self, lua: Self::ResetInput<'_>) {
         let mut state = ScriptExeState::new(&lua);
 
         if get_debug_level().is_on() {
@@ -483,15 +477,11 @@ impl TfmExeState for ScriptCfg {
             .inspect_err(|e| log::error!("{e}"))
             .unwrap_or(lua.load(" ").into_function().unwrap());
 
-        // COMPAT
-        // let aux_tfm_idx = lua.create_table().unwrap();
-        // for (name, _) in self.aux_transformations.iter() {
-        //     let _ = aux_tfm_idx.set(name.as_str(), name.to_string());
-        // }
-        // let _ = lua
-        //     .globals()
-        //     .set("aux_tfm_idx", aux_tfm_idx)
-        //     .inspect_err(|e| log::error!("{e}"));
+        let env = lua.create_table().unwrap();
+        let meta = lua.create_table().unwrap();
+        meta.set("__index", lua.globals()).unwrap();
+        env.set_metatable(meta.into()).unwrap();
+        state.compiled.set_environment(env.clone()).unwrap();
 
         *self.exe_state.get_mut() = Some(state);
     }
@@ -504,15 +494,12 @@ impl WithTfmExec for ScriptCfg {
             return input;
         }
 
-        let mut stats_post_closure: f64 = 0.0;
-        let mut stats_pre_scope_setup: f64 = 0.0;
+        let mut stats_post_closure_setup: f64 = 0.0;
         let mut stats_post_scope_setup: f64 = 0.0;
+        let mut stats_post_env_setup: f64 = 0.0;
+        let mut stats_post_exec: f64 = 0.0;
 
         const NAIVE_BENCH: bool = false;
-
-        if NAIVE_BENCH {
-            println!("Script execution naive perf stats -----");
-        }
 
         let now = Instant::now();
         match self.lang {
@@ -545,7 +532,7 @@ impl WithTfmExec for ScriptCfg {
                 };
 
                 if self.exe_state.get().is_none() {
-                    self.exe_state_reset(ctx.get_lua().clone());
+                    self.exe_state_reset(&ctx.get_lua());
                 }
 
                 let exe_state = self.exe_state_mut();
@@ -669,26 +656,34 @@ impl WithTfmExec for ScriptCfg {
                 };
 
                 if NAIVE_BENCH {
-                    stats_post_closure = (Instant::now() - now).as_secs_f64();
-                }
-
-                if NAIVE_BENCH {
-                    stats_pre_scope_setup = (Instant::now() - now).as_secs_f64();
+                    stats_post_closure_setup = (Instant::now() - now).as_secs_f64();
                 }
 
                 let _ = ctx.get_lua().scope(|s| {
-                    let globals = ctx.get_lua().globals();
-                    let _ = globals.set("transform", s.create_function(transform_closure).unwrap());
-                    let _ = globals.set("is_idle", s.create_function(is_idle_closure).unwrap());
-                    let _ = globals.set("base_rate", s.create_function(base_tick_closure).unwrap());
-                    let _ = globals.set("read", s.create_function(read_src_closure).unwrap());
-                    let _ = globals.set("write", s.create_function_mut(write_dst_closure).unwrap());
+                    if NAIVE_BENCH {
+                        stats_post_scope_setup = (Instant::now() - now).as_secs_f64();
+                    }
+
+                    // TODO: consider using Lua userdata ref and setup those routines only once on state reset.
+                    let env = exe_state.compiled.environment().unwrap();
+                    let _ = env.set("transform", s.create_function(transform_closure).unwrap());
+                    let _ = env.set("is_idle", s.create_function(is_idle_closure).unwrap());
+                    let _ = env.set("base_rate", s.create_function(base_tick_closure).unwrap());
+                    let _ = env.set("read", s.create_function(read_src_closure).unwrap());
+                    let _ = env.set("write", s.create_function_mut(write_dst_closure).unwrap());
+
+                    if NAIVE_BENCH {
+                        stats_post_env_setup = (Instant::now() - now).as_secs_f64();
+                    }
+
                     if let Err(e) = exe_state.compiled.call::<()>(()) {
-                        if NAIVE_BENCH {
-                            stats_post_scope_setup = (Instant::now() - now).as_secs_f64();
-                        }
                         log::error!("{e} ");
                     }
+
+                    if NAIVE_BENCH {
+                        stats_post_exec = (Instant::now() - now).as_secs_f64();
+                    }
+
                     Ok(())
                 });
 
@@ -703,10 +698,16 @@ impl WithTfmExec for ScriptCfg {
 
         if NAIVE_BENCH {
             println!(
-                "post closure {},\n pre scope setup {},\n post scope setup {},\n post exec {}",
-                stats_post_closure,
-                stats_pre_scope_setup,
+                " Script execution naive perf stats -----
+                  post closures    {}
+                  post scope setup {}
+                  post env setup   {}
+                  post script exe  {}
+                  post exec total  {}\n",
+                stats_post_closure_setup,
                 stats_post_scope_setup,
+                stats_post_env_setup,
+                stats_post_exec,
                 (Instant::now() - now).as_secs_f64()
             );
         }
@@ -738,13 +739,13 @@ impl TfmExeState for IntegrateCfg {
     where
         Self: 'a;
 
-    type ResetInput = ();
+    type ResetInput<'b> = ();
 
     fn exe_state_mut(&self) -> Self::StateMutT<'_> {
         self.exe_state.lock_arc()
     }
 
-    fn exe_state_reset(&self, _: Self::ResetInput) {
+    fn exe_state_reset(&self, _: Self::ResetInput<'_>) {
         *self.exe_state_mut() = Default::default()
     }
 }
