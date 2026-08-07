@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
 use evdev::EvdevEnum;
+use num_traits::Zero;
 use tokio::time::MissedTickBehavior;
 use tokio_util::future::FutureExt;
 
@@ -92,10 +93,10 @@ pub(crate) struct FfEffectReplayInfo {
 impl From<evdev::FFReplay> for FfEffectReplayInfo {
     fn from(src: evdev::FFReplay) -> Self {
         Self {
-            length: std::time::Duration::from_millis(if src.length == 0 || src.length == u16::MAX {
-                u64::MAX // USB PID std: "To sustain an effect until explicitly stopped with the Stop method,
-            // set Duration to INFINITE (Null)".
+            // USB PID std: "To sustain an effect until explicitly stopped with the Stop method, set Duration to INFINITE (Null)".
             // NB: We also consider u16::MAX as infinity, based on observations of its usage in ffcfstress and ffmvforce.
+            length: std::time::Duration::from_millis(if src.length.is_zero() || src.length == u16::MAX {
+                u64::MAX
             } else {
                 src.length as u64
             }),
@@ -169,7 +170,7 @@ enum FfEffect {
 }
 
 const NO_REPLAY: FfEffectReplayInfo = FfEffectReplayInfo {
-    length: std::time::Duration::ZERO, // Notice that this is infinity in accordance to USB PID std.
+    length: std::time::Duration::MAX, // Notice that 0 duration is infinity in accordance to USB PID std.
     delay: std::time::Duration::ZERO,
 };
 
