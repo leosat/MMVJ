@@ -9,6 +9,7 @@ use crate::gui_transform_step::TfmStepTraceStage;
 use crate::num_interval::{NumInterval, OutOfRangePolicy};
 use crate::relativity::Relativity;
 
+use crate::schemas_common::WithRuntimeId;
 use crate::schemas_transform::WithCommonState;
 use crate::schemas_transform::{
     ClampCfg, EmaFilterCfg, ForceFeedbackComponent, IntegrateCfg, InvertCfg, LinearCfg, NormExpCfg, OneEuroFilterCfg,
@@ -98,14 +99,18 @@ impl WithTfmExec for TfmSeqCfg {
         for step in &self.steps {
             input = step.exec(input, ctx);
             if !input.interval.contains_value_closed(input.value) {
-                //     log::warn!(
-                //         "Value {} must fit in interval {} after transformation step ``{}'' (ID: {}).
-                // Each step must ensure it, clamping!",
-                //         input.value,
-                //         input.interval,
-                //         step,
-                //         step.get_id()
-                //     );
+                branches::mark_unlikely();
+                if get_debug_level().is_mid_or_above() {
+                    branches::mark_unlikely();
+                    log::warn!(
+                        "Value {} must fit in interval {} after transformation step ``{}'' (ID: {}). \
+                         Each step must ensure it, clamping!",
+                        input.value,
+                        input.interval,
+                        step,
+                        step.get_id()
+                    );
+                }
                 input.value = input.interval.clamp(input.value);
             }
         }
