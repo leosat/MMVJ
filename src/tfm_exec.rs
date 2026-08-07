@@ -1,3 +1,4 @@
+use crate::filters::clamp_dt_by_min_and_max_period;
 use crate::num_interval::SYMM_UNIT_INTERVAL;
 use crate::num_interval::UNIT_INTERVAL;
 
@@ -166,12 +167,23 @@ impl WithTfmExec for OneEuroFilterCfg {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct RaiseFallExeState {
     pub(crate) prev_out: BaseNumT,
     pub(crate) last_target: BaseNumT,
-    pub(crate) prev_out_time: Option<Instant>,
-    pub(crate) prev_user_input_time: Option<Instant>,
+    pub(crate) prev_out_time: Instant,
+    pub(crate) prev_user_input_time: Instant,
+}
+
+impl Default for RaiseFallExeState {
+    fn default() -> Self {
+        Self {
+            prev_out: Default::default(),
+            last_target: Default::default(),
+            prev_out_time: Instant::now(),
+            prev_user_input_time: Instant::now(),
+        }
+    }
 }
 
 impl TfmExeState for RaiseFallCfg {
@@ -202,19 +214,11 @@ impl WithTfmExec for RaiseFallCfg {
         let now = Instant::now();
         let mut filter_data = self.exe_state_mut();
 
-        let dt = if let Some(prev) = filter_data.prev_out_time {
-            (now - prev).as_secs_f32()
-        } else {
-            0.0
-        } as BaseNumT;
+        // NB: we do not clamp dt here as usecase is different from steering transform and filters.
+        let dt = (now - filter_data.prev_out_time).as_secs_f32() as BaseNumT;
+        let dt_user_input = (now - filter_data.prev_user_input_time).as_secs_f32() as BaseNumT;
 
-        let dt_user_input = if let Some(prev) = filter_data.prev_user_input_time {
-            (now - prev).as_secs_f32()
-        } else {
-            0.0
-        } as BaseNumT;
-
-        filter_data.prev_out_time = Some(now);
+        filter_data.prev_out_time = now;
 
         let target = if !ctx.is_idle_tick() {
             filter_data.last_target = input.value;
@@ -225,35 +229,33 @@ impl WithTfmExec for RaiseFallCfg {
 
         let mut final_out = filter_data.prev_out;
         if ctx.is_idle_tick() {
-            if dt > 0.0 {
-                let delta_v = target - filter_data.prev_out;
-                let rate_limit = if delta_v > 0.0 {
-                    self.raise_rate
-                } else {
-                    let mut fall_hold_factor = UNIT_INTERVAL.map_from(
-                        self.fall_hold_factor.get_numeric_value(),
-                        &self.fall_hold_factor.get_interval(),
-                        OutOfRangePolicy::WarnAndClamp,
-                    );
+            let delta_v = target - filter_data.prev_out;
+            let rate_limit = if delta_v > 0.0 {
+                self.raise_rate
+            } else {
+                let mut fall_hold_factor = UNIT_INTERVAL.map_from(
+                    self.fall_hold_factor.get_numeric_value(),
+                    &self.fall_hold_factor.get_interval(),
+                    OutOfRangePolicy::WarnAndClamp,
+                );
 
-                    if self.invert_fall_hold_factor {
-                        fall_hold_factor = UNIT_INTERVAL.clamp_and_invert(fall_hold_factor);
-                    }
+                if self.invert_fall_hold_factor {
+                    fall_hold_factor = UNIT_INTERVAL.clamp_and_invert(fall_hold_factor);
+                }
 
-                    if self.fall_delay > 0.0 {
-                        if self.fall_delay < dt_user_input {
-                            self.fall_rate * (1.0 - fall_hold_factor)
-                        } else {
-                            0.0
-                        }
-                    } else {
+                if self.fall_delay > 0.0 {
+                    if self.fall_delay < dt_user_input {
                         self.fall_rate * (1.0 - fall_hold_factor)
+                    } else {
+                        0.0
                     }
-                };
-                let max_delta = rate_limit * dt;
-                let actual_delta = delta_v.clamp(-max_delta, max_delta);
-                final_out = filter_data.prev_out + actual_delta;
-            }
+                } else {
+                    self.fall_rate * (1.0 - fall_hold_factor)
+                }
+            };
+            let max_delta = rate_limit * dt;
+            let actual_delta = delta_v.clamp(-max_delta, max_delta);
+            final_out = filter_data.prev_out + actual_delta;
 
             let smoothing_alpha = self.smoothing_alpha;
             final_out = (smoothing_alpha) * final_out + (1.0 - smoothing_alpha) * filter_data.prev_out;
@@ -261,7 +263,7 @@ impl WithTfmExec for RaiseFallCfg {
             final_out = input.interval.clamp(final_out);
             filter_data.prev_out = final_out;
         } else {
-            filter_data.prev_user_input_time = Some(now);
+            filter_data.prev_user_input_time = now;
         }
 
         input.value = final_out;
@@ -796,7 +798,6 @@ impl WithTfmExec for IntegrateCfg {
 pub(crate) struct SteeringExeState {
     pub(crate) last_time: Instant,
     pub(crate) pre_filter: BaseNumT,
-    pub(crate) post_filter: BaseNumT,
 }
 
 impl Default for SteeringExeState {
@@ -804,7 +805,6 @@ impl Default for SteeringExeState {
         Self {
             last_time: Instant::now(),
             pre_filter: Default::default(),
-            post_filter: Default::default(),
         }
     }
 }
@@ -829,8 +829,10 @@ impl WithTfmExec for SteeringCfg {
             OutOfRangePolicy::WarnAndClamp,
         );
 
-        let dt = (now - state.last_time).as_secs_f32() as BaseNumT;
+        let dt = clamp_dt_by_min_and_max_period((now - state.last_time).as_secs_f32() as BaseNumT);
+
         let delta: BaseNumT = input.interval.map_to_symm_unit(value, OutOfRangePolicy::Clamp);
+        let mut post_filter: BaseNumT;
 
         if let Some(acc) = &self.accumulator {
             state.pre_filter = SYMM_UNIT_INTERVAL.map_from(
@@ -874,7 +876,7 @@ impl WithTfmExec for SteeringCfg {
 
         '_User_input_filtering_and_curving_pre_FFB_and_autocentering: {
             if !self.integrated_user_input_transform.steps.is_empty() {
-                state.post_filter = self
+                post_filter = self
                     .integrated_user_input_transform
                     .exec(
                         TfmValue {
@@ -886,7 +888,7 @@ impl WithTfmExec for SteeringCfg {
                     )
                     .value;
             } else {
-                state.post_filter = state.pre_filter;
+                post_filter = state.pre_filter;
             }
         }
 
@@ -898,7 +900,7 @@ impl WithTfmExec for SteeringCfg {
                     .with_width(1.2),
             ),
             &TfmValue::<BaseNumT> {
-                value: state.post_filter,
+                value: post_filter,
                 interval: SYMM_UNIT_INTERVAL,
                 relativity: Relativity::Abs,
             },
@@ -978,8 +980,9 @@ impl WithTfmExec for SteeringCfg {
 
             if ff_force_symm_norm.abs() > 1e-4 {
                 let ff_position_offset = ff_force_symm_norm * (1.0 - hold_factor_unit) * dt;
-                state.post_filter += ff_position_offset;
+
                 state.pre_filter += ff_position_offset;
+                post_filter += ff_position_offset;
 
                 if get_debug_level().is_hi() && ff_force_symm_norm.abs() > 0.1 {
                     debug!(
@@ -1020,16 +1023,16 @@ impl WithTfmExec for SteeringCfg {
                     centerwize_decay_factor *= auto_center_along_force_feedback;
                 }
 
-                state.post_filter -= state.post_filter * centerwize_decay_factor;
                 state.pre_filter -= state.pre_filter * centerwize_decay_factor;
+                post_filter -= post_filter * centerwize_decay_factor;
             }
         };
 
         state.pre_filter = SYMM_UNIT_INTERVAL.clamp(state.pre_filter);
-        state.post_filter = SYMM_UNIT_INTERVAL.clamp(state.post_filter);
+        post_filter = SYMM_UNIT_INTERVAL.clamp(post_filter);
 
         let out = TfmValue::<BaseNumT> {
-            value: state.post_filter,
+            value: post_filter,
             interval: SYMM_UNIT_INTERVAL,
             relativity: Relativity::Abs,
         };
