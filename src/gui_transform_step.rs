@@ -17,9 +17,7 @@ use crate::num_interval::SYMM_UNIT_INTERVAL;
 use crate::schemas_cfg::{DevicesCfgNew, VariablesCfg};
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_transform::*;
-use crate::schemas_value::{
-    DescriptionCfg, MappedValue, StaticValueCfg, ValueSrcs, WithDescriptionMut, WithNumericValue,
-};
+use crate::schemas_value::{DescriptionCfg, StaticValueCfg, TfmValue, ValueSrcs, WithDescriptionMut, WithNumericValue};
 use crate::tracing::GraphDisplayStyle;
 // use documented::{Documented, DocumentedFields};
 use egui::text::LayoutJob;
@@ -1317,12 +1315,7 @@ impl TfmStepCommonState {
         self.gui_trace_graph_opened.load(Relaxed)
     }
 
-    pub(crate) fn gui_trace(
-        &self,
-        stage: TfmStepTraceStage,
-        vd: &MappedValue<BaseNumT>,
-        timestamp: std::time::Instant,
-    ) {
+    pub(crate) fn gui_trace(&self, stage: TfmStepTraceStage, vd: &TfmValue<BaseNumT>, timestamp: std::time::Instant) {
         if self.is_gui_tracing_enabled() {
             use egui::Color32;
 

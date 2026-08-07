@@ -5,7 +5,7 @@ mod steering_tfm_deserialization_and_exec_tests {
     use crate::num_interval::SYMM_UNIT_INTERVAL;
     use crate::relativity::Relativity;
     use crate::schemas_transform::{AutoOrManual, TfmSeqCfg, TfmStepCfg};
-    use crate::schemas_value::{DynValueRefs, InputValueMetadata, MappedValue, ValueDsts, WithNumericValue};
+    use crate::schemas_value::{DynValueRefs, InputValueMetadata, TfmValue, ValueDsts, WithNumericValue};
     use crate::tfm_exec::TfmExeState;
     use crate::tfm_exec::{TfmExecCtx, WithTfmExec};
     use std::cell::RefCell;
@@ -77,8 +77,8 @@ mod steering_tfm_deserialization_and_exec_tests {
     }
 
     /// Simulate a mouse REL_X event (range [-127, 127], relative).
-    fn mouse_rel_x(value: BaseNumT) -> MappedValue<BaseNumT> {
-        MappedValue {
+    fn mouse_rel_x(value: BaseNumT) -> TfmValue<BaseNumT> {
+        TfmValue {
             value,
             interval: NumInterval::new(-127.0, 127.0),
             relativity: Relativity::Rel,
@@ -86,8 +86,8 @@ mod steering_tfm_deserialization_and_exec_tests {
     }
 
     /// Simulate a zero-input idle tick.
-    fn idle_input() -> MappedValue<BaseNumT> {
-        MappedValue {
+    fn idle_input() -> TfmValue<BaseNumT> {
+        TfmValue {
             value: 0.0,
             interval: NumInterval::new(-127.0, 127.0),
             relativity: Relativity::Rel,

@@ -15,7 +15,7 @@ use crate::schemas_transform::{
     RaiseFallCfg, SCurveCfg, ScriptCfg, SignedPowerCfg, SmoothstepCfg, SteeringCfg, TfmSeqCfg, TfmStepCfg,
 };
 use crate::schemas_value::{DynValueRefs, ValueDsts, WithNumInterval, WithRelativity};
-use crate::schemas_value::{MappedValue, WithNumericValue};
+use crate::schemas_value::{TfmValue, WithNumericValue};
 
 #[cfg(feature = "gui")]
 use crate::tracing::GraphDisplayStyle;
@@ -90,11 +90,11 @@ pub(crate) trait TfmExecCtx {
 }
 
 pub(crate) trait WithTfmExec {
-    fn exec(&self, input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT>;
+    fn exec(&self, input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT>;
 }
 
 impl WithTfmExec for TfmSeqCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
         for step in &self.steps {
             input = step.exec(input, ctx);
             if !input.interval.contains_value_closed(input.value) {
@@ -114,7 +114,7 @@ impl WithTfmExec for TfmSeqCfg {
 }
 
 impl WithTfmExec for ClampCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, _ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: TfmValue<BaseNumT>, _ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
         if !self.enabled {
             return input;
         }
@@ -143,7 +143,7 @@ impl TfmExeState for OneEuroFilterCfg {
 }
 
 impl WithTfmExec for OneEuroFilterCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
         if self.enabled
             && (!ctx.is_idle_tick() || input.relativity == Relativity::Abs || self.on_relative_input_feed_on_idle)
         {
@@ -187,7 +187,7 @@ impl TfmExeState for RaiseFallCfg {
 }
 
 impl WithTfmExec for RaiseFallCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
         if !self.enabled {
             return input;
         }
@@ -282,7 +282,7 @@ impl TfmExeState for EmaFilterCfg {
 }
 
 impl WithTfmExec for EmaFilterCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
         if self.enabled
             && (!ctx.is_idle_tick() || input.relativity == Relativity::Abs || self.on_relative_input_feed_on_idle)
         {
@@ -295,7 +295,7 @@ impl WithTfmExec for EmaFilterCfg {
 }
 
 impl WithTfmExec for TfmStepCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
         self.common_state_ref().last_in.store(input.value, Relaxed);
         #[cfg(feature = "gui")]
         self.common_state_ref()
@@ -330,7 +330,7 @@ impl WithTfmExec for TfmStepCfg {
 }
 
 impl WithTfmExec for SignedPowerCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
         if !(self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
             return input;
         }
@@ -355,7 +355,7 @@ impl WithTfmExec for SignedPowerCfg {
 }
 
 impl WithTfmExec for NormExpCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
         if !(self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
             return input;
         }
@@ -380,7 +380,7 @@ impl WithTfmExec for NormExpCfg {
 }
 
 impl WithTfmExec for SCurveCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
         if !(self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
             return input;
         }
@@ -396,7 +396,7 @@ impl WithTfmExec for SCurveCfg {
 }
 
 impl WithTfmExec for SmoothstepCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
         if !(self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
             return input;
         }
@@ -409,7 +409,7 @@ impl WithTfmExec for SmoothstepCfg {
 }
 
 impl WithTfmExec for LinearCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
         if !(self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
             return input;
         }
@@ -500,7 +500,7 @@ impl TfmExeState for ScriptCfg {
 
 impl WithTfmExec for ScriptCfg {
     #[inline]
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
         if !self.enabled {
             return input;
         }
@@ -519,7 +519,7 @@ impl WithTfmExec for ScriptCfg {
                     move |_lua: &mlua::Lua, args: (String, BaseNumT)| -> std::result::Result<BaseNumT, mlua::Error> {
                         if let Some(tfm) = self.aux_transformations.get(&args.0) {
                             let ret = tfm.exec(
-                                MappedValue {
+                                TfmValue {
                                     value: args.1,
                                     interval: tfm.get_interval(),
                                     relativity: tfm.get_relativity(),
@@ -735,7 +735,7 @@ impl WithTfmExec for ScriptCfg {
 }
 
 impl WithTfmExec for InvertCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, _ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: TfmValue<BaseNumT>, _ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
         if !self.enabled {
             return input;
         }
@@ -770,7 +770,7 @@ impl TfmExeState for IntegrateCfg {
 }
 
 impl WithTfmExec for IntegrateCfg {
-    fn exec(&self, mut input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
         if !(self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
             return input;
         }
@@ -779,7 +779,7 @@ impl WithTfmExec for IntegrateCfg {
             input.value = 0.0;
         }
         state.prev_val = self.range.clamp(state.prev_val + input.value * self.smoothing_alpha);
-        MappedValue::<BaseNumT> {
+        TfmValue::<BaseNumT> {
             value: state.prev_val,
             interval: self.range,
             relativity: Relativity::Abs,
@@ -805,7 +805,7 @@ impl Default for SteeringExeState {
 }
 
 impl WithTfmExec for SteeringCfg {
-    fn exec(&self, input: MappedValue<BaseNumT>, ctx: &impl TfmExecCtx) -> MappedValue<BaseNumT> {
+    fn exec(&self, input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
         if !self.enabled {
             return input;
         }
@@ -847,7 +847,7 @@ impl WithTfmExec for SteeringCfg {
                         .with_color(Color32::BROWN.gamma_multiply(0.7))
                         .with_width(1.2),
                 ),
-                &MappedValue::<BaseNumT> {
+                &TfmValue::<BaseNumT> {
                     value: delta,
                     interval: SYMM_UNIT_INTERVAL,
                     relativity: Relativity::Rel,
@@ -859,7 +859,7 @@ impl WithTfmExec for SteeringCfg {
         #[cfg(feature = "gui")]
         self.common_state_ref().gui_trace(
             TfmStepTraceStage::Custom(GraphDisplayStyle::as_filled().with_color(Color32::BLUE).with_width(1.5)),
-            &MappedValue::<BaseNumT> {
+            &TfmValue::<BaseNumT> {
                 value: state.pre_filter,
                 interval: SYMM_UNIT_INTERVAL,
                 relativity: Relativity::Abs,
@@ -872,7 +872,7 @@ impl WithTfmExec for SteeringCfg {
                 state.post_filter = self
                     .integrated_user_input_transform
                     .exec(
-                        MappedValue {
+                        TfmValue {
                             value: state.pre_filter,
                             interval: SYMM_UNIT_INTERVAL,
                             relativity: Relativity::Abs,
@@ -892,7 +892,7 @@ impl WithTfmExec for SteeringCfg {
                     .with_color(Color32::MAGENTA)
                     .with_width(1.2),
             ),
-            &MappedValue::<BaseNumT> {
+            &TfmValue::<BaseNumT> {
                 value: state.post_filter,
                 interval: SYMM_UNIT_INTERVAL,
                 relativity: Relativity::Abs,
@@ -944,7 +944,7 @@ impl WithTfmExec for SteeringCfg {
 
                     let filtered_force = if !ff_config.transformation.steps.is_empty() {
                         let ret = ff_config.transformation.exec(
-                            MappedValue {
+                            TfmValue {
                                 value: raw_force,
                                 interval: SYMM_UNIT_INTERVAL,
                                 relativity: Relativity::Rel,
@@ -991,7 +991,7 @@ impl WithTfmExec for SteeringCfg {
                             .with_color(Color32::GREEN.gamma_multiply((1.0 - hold_factor_unit as f32).max(0.4)))
                             .with_width(1.7),
                     ),
-                    &MappedValue::<BaseNumT> {
+                    &TfmValue::<BaseNumT> {
                         value: ff_force_symm_norm,
                         interval: SYMM_UNIT_INTERVAL,
                         relativity: Relativity::Abs,
@@ -1023,7 +1023,7 @@ impl WithTfmExec for SteeringCfg {
         state.pre_filter = SYMM_UNIT_INTERVAL.clamp(state.pre_filter);
         state.post_filter = SYMM_UNIT_INTERVAL.clamp(state.post_filter);
 
-        let out = MappedValue::<BaseNumT> {
+        let out = TfmValue::<BaseNumT> {
             value: state.post_filter,
             interval: SYMM_UNIT_INTERVAL,
             relativity: Relativity::Abs,

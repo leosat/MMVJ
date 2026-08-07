@@ -19,7 +19,7 @@ use crate::schemas_transform::{DynValFilter, collect_dynamic_value_matchers};
 use crate::schemas_value::{
     DynValueRefs, ValueDsts, WithLastKnownIOSettable, WithNumInterval, WithNumericValueSettable,
 };
-use crate::schemas_value::{MappedValue, WithNumericValue};
+use crate::schemas_value::{TfmValue, WithNumericValue};
 use crate::schemas_value::{ValueSrcs, WithRelativity};
 
 use crate::tfm_exec::{TfmExecCtx, WithTfmExec};
@@ -478,7 +478,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         value: BaseNumT,
         is_idle_tick: bool,
     ) -> BaseNumT {
-        let mut vd = MappedValue::<BaseNumT> {
+        let mut vd = TfmValue::<BaseNumT> {
             value,
             interval: mapping.src.get_interval(),
             relativity: mapping.src.get_relativity(),
