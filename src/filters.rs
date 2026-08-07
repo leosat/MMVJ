@@ -3,7 +3,16 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::base_num::BaseNumT;
+use crate::{base_num::BaseNumT, config::MIN_BASE_FREQ_HZ};
+
+//-----------------------------------------
+pub(crate) const MIN_DT: BaseNumT = 1.0e-6;
+pub(crate) const fn clamp_dt_by_min_and_max_period(v: BaseNumT) -> BaseNumT {
+    v.clamp(MIN_DT as BaseNumT, 1.0 / MIN_BASE_FREQ_HZ as BaseNumT)
+}
+pub(crate) const fn clamp_dt_by_zero_and_max_period(v: BaseNumT) -> BaseNumT {
+    v.clamp(0.0 as BaseNumT, 1.0 / MIN_BASE_FREQ_HZ as BaseNumT)
+}
 
 //-----------------------------------------
 #[allow(unused)]
@@ -29,7 +38,8 @@ impl MAWeighted {
             let (t0, val) = history[i];
             let (t1, _) = history[i + 1];
             let start = t0.max(window_limit);
-            let dt = t1.duration_since(start).as_secs_f32() as BaseNumT;
+            let dt = clamp_dt_by_zero_and_max_period(t1.duration_since(start).as_secs_f32() as BaseNumT);
+
             if dt > 0.0 {
                 area += val * dt;
                 total_dt += dt;
@@ -72,7 +82,7 @@ impl EmaFilter {
             log::error!("Tau must be > 0.0"); // TODO: config schema valiadation at config-time!
             return val;
         }
-        let dt = now.duration_since(self.prev_time).as_secs_f32() as BaseNumT;
+        let dt = clamp_dt_by_zero_and_max_period(now.duration_since(self.prev_time).as_secs_f32() as BaseNumT);
         self.prev_time = now;
         let alpha = 1.0 - (-dt / tau).exp();
         self.prev_val = self.prev_val + alpha * (val - self.prev_val);
@@ -125,14 +135,11 @@ impl OneEuroFilter {
         beta: BaseNumT,
         d_cutoff: BaseNumT,
     ) -> BaseNumT {
-        let dt = now.duration_since(self.prev_time).as_secs_f32() as BaseNumT;
+        let dt = clamp_dt_by_min_and_max_period(now.duration_since(self.prev_time).as_secs_f32() as BaseNumT);
 
-        if !dt.is_finite() {
-            return val;
-        }
+        debug_assert!(dt > 0.0 as BaseNumT);
 
         let val_d = (val - self.prev_val) / dt;
-
         let val_d_filtered = self.prev_val_d + Self::smoothing_factor(dt, d_cutoff) * (val_d - self.prev_val_d);
 
         let val_filtered = self.prev_val
