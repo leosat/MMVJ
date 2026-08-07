@@ -242,6 +242,9 @@ pub async fn run(
     let hid_mgr = HidManager::new(debug, debug_ff)?;
     let mut is_first_run = true;
 
+    //------------------------ LUA VM ------------------------------------------------
+    let lua = mlua::Lua::new();
+
     //----------------------------- COMMAND BUFFERS ----------------------------------
     let mut cmd_rx_buf: Vec<DriverCmd> = Vec::with_capacity(COMMAND_RECV_CAPACITY);
     let (cmd_channel_tx, mut cmd_channel_rx) = tokio::sync::mpsc::unbounded_channel::<DriverCmd>();
@@ -304,6 +307,7 @@ pub async fn run(
             // TODO: perf: maybe use shared memory and left-right pattern
             cfg_mgr.cfg_ref().clone(),
             &hid_mgr,
+            &lua,
             #[cfg(feature = "midi")]
             MidiManager::new(debug)?,
         )?;
