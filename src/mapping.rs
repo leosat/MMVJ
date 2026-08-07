@@ -269,7 +269,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                 .map(|(i, _)| i)
                 .collect::<Vec<_>>(),
         );
-        self.run_mappings__(ObjId::from(intern_str("Init")));
+        self.run_input_triggered_mappings(ObjId::from(intern_str("Init")));
         self.router_buff_mappings_to_execute.clear();
 
         Ok(())
@@ -359,7 +359,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             let dedup = cms.len() > 1;
             let shuffle = self.router_buff_mappings_to_execute.len() > 1;
             Self::dedup_and_shuffle(&mut self.router_buff_mappings_to_execute, dedup, shuffle);
-            self.run_mappings__(msg.device_id);
+            self.run_input_triggered_mappings(msg.device_id);
             self.router_buff_mappings_to_execute.clear();
         }
     }
@@ -400,7 +400,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             let dedup = cms.len() > 1;
             let shuffle = self.router_buff_mappings_to_execute.len() > 1;
             Self::dedup_and_shuffle(&mut self.router_buff_mappings_to_execute, dedup, shuffle);
-            self.run_mappings__(device_id);
+            self.run_input_triggered_mappings(device_id);
             self.router_buff_mappings_to_execute.clear();
 
             if control_type.is_relative() {
@@ -409,36 +409,29 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         }
     }
 
-    fn run_mappings__(&self, triggering_device_id: ObjId) {
+    fn run_input_triggered_mappings(&self, triggering_device_id: ObjId) {
         for mapping_idx in self.router_buff_mappings_to_execute.iter() {
             let mapping = &self.cfg.mappings[*mapping_idx];
-            self.execute_mapping_on_active_input(triggering_device_id, mapping, mapping.src.get_numeric_value());
-        }
-    }
+            let input_value = mapping.src.get_numeric_value();
 
-    fn execute_mapping_on_active_input(
-        &self,
-        runtime_input_device_id: ObjId,
-        mapping: &Mapping,
-        input_value: BaseNumT,
-    ) {
-        mapping.set_last_known_io((Some(input_value), None));
-        let final_value = self.apply_transformation_for_mapping(runtime_input_device_id, mapping, input_value, false);
-        mapping.set_last_known_io((None, Some(final_value)));
+            mapping.set_last_known_io((Some(input_value), None));
+            let final_value = self.apply_transformation_for_mapping(triggering_device_id, mapping, input_value, false);
+            mapping.set_last_known_io((None, Some(final_value)));
 
-        match &mapping.dst {
-            ValueDsts::Void => {}
-            ValueDsts::Dynamic(d) => {
-                self.set_dyn_value(d, final_value, self.debug);
-                self.set_idle_tick_enabled_on_device_control_for_mapping(mapping);
+            match &mapping.dst {
+                ValueDsts::Void => {}
+                ValueDsts::Dynamic(d) => {
+                    self.set_dyn_value(d, final_value, self.debug);
+                    self.set_idle_tick_enabled_on_device_control_for_mapping(mapping);
+                }
             }
-        }
 
-        if self.debug.is_on() {
-            debug!(
-                "Mapped {} ({}): {} -> {}",
-                mapping.name, mapping, input_value, final_value
-            );
+            if self.debug.is_on() {
+                debug!(
+                    "Mapped {} ({}): {} -> {}",
+                    mapping.name, mapping, input_value, final_value
+                );
+            }
         }
     }
 
