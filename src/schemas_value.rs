@@ -58,7 +58,7 @@ pub(crate) trait _WithDstRefCount {
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
-pub(crate) struct MappedValue<ValueT: NumIntervalValue> {
+pub(crate) struct TfmValue<ValueT: NumIntervalValue> {
     pub(crate) value: ValueT,
     pub(crate) interval: NumInterval<ValueT>,
     pub(crate) relativity: Relativity,
@@ -72,7 +72,7 @@ pub(crate) struct InputValueMetadata<ValueT: NumIntervalValue> {
     pub(crate) relativity: Relativity,
 }
 
-impl<ValueT: NumIntervalValue> WithNumericValue for MappedValue<ValueT> {
+impl<ValueT: NumIntervalValue> WithNumericValue for TfmValue<ValueT> {
     fn get_numeric_value(&self) -> ValueT {
         self.value
     }
@@ -80,19 +80,19 @@ impl<ValueT: NumIntervalValue> WithNumericValue for MappedValue<ValueT> {
     type ValueT = ValueT;
 }
 
-impl<ValueT: NumIntervalValue> WithRelativityRef for MappedValue<ValueT> {
+impl<ValueT: NumIntervalValue> WithRelativityRef for TfmValue<ValueT> {
     fn relativity_ref(&self) -> &Relativity {
         &self.relativity
     }
 }
 
-impl<ValueT: NumIntervalValue> _WithRelativityMut for MappedValue<ValueT> {
+impl<ValueT: NumIntervalValue> _WithRelativityMut for TfmValue<ValueT> {
     fn relativity_mut(&mut self) -> &mut Relativity {
         &mut self.relativity
     }
 }
 
-impl<ValueT: NumIntervalValue> WithNumInterval for MappedValue<ValueT> {
+impl<ValueT: NumIntervalValue> WithNumInterval for TfmValue<ValueT> {
     type ValueT = ValueT;
     fn get_interval(&self) -> NumInterval<Self::ValueT> {
         self.interval
