@@ -61,7 +61,7 @@ pub(crate) struct MappingEngine<'driver_loop> {
     info_sysdev_to_enabled_mappings: HashMap<ObjId, Vec<usize>>, // NB: this is only used in mappings init routine, but leaving here for potential future use in other places.
     // ---
     idle_tick_mappings: Vec<usize>,
-    lua: mlua::Lua,
+    lua: &'driver_loop mlua::Lua,
 }
 
 impl<'driver_loop> MappingEngine<'driver_loop> {
@@ -71,6 +71,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         debug_idle_tick: bool,
         cfg: Config,
         hid_mgr: &'driver_loop HidManager,
+        lua: &'driver_loop mlua::Lua,
         #[cfg(feature = "midi")] midi_mgr: MidiManager,
     ) -> Result<Self> {
         Ok(Self {
@@ -91,7 +92,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             info_sysdev_to_enabled_mappings: Default::default(),
             // ---
             idle_tick_mappings: Default::default(),
-            lua: mlua::Lua::new(),
+            lua,
         })
     }
 

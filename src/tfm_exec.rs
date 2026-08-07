@@ -685,13 +685,14 @@ impl WithTfmExec for ScriptCfg {
                     stats_post_closure_setup = (Instant::now() - now).as_secs_f64();
                 }
 
+                let env = exe_state.compiled.environment().unwrap();
+
                 let _ = ctx.get_lua().scope(|s| {
                     if NAIVE_BENCH {
                         stats_post_scope_setup = (Instant::now() - now).as_secs_f64();
                     }
 
                     // TODO: consider using Lua userdata ref and setup those routines only once on state reset.
-                    let env = exe_state.compiled.environment().unwrap();
                     let _ = env.set("transform", s.create_function(transform_closure).unwrap());
                     let _ = env.set("is_idle", s.create_function(is_idle_closure).unwrap());
                     let _ = env.set("base_rate", s.create_function(base_tick_closure).unwrap());
