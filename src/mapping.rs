@@ -590,7 +590,9 @@ impl<
                 match d.control_matcher {
                     #[cfg(feature = "midi")]
                     ControlMatchers::Midi(_) => {
-                        log::warn!("Only supporting variables and owned virtual joysticks as destinations.")
+                        log::warn!(
+                            "MIDI is not yet supported as a destination device. Only supporting variables and HID destinations."
+                        )
                     }
                     ControlMatchers::Hid(_) => self.hid_mgr.set_control_matcher_and_broadcast(
                         &d.device_matcher_key,
