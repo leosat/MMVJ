@@ -156,7 +156,10 @@ impl<'s> DrawEgui<'s> for MidiControlMatcherCfg {
             egui::ComboBox::from_label("")
                 .selected_text(&current_type_str)
                 .show_ui(ui, |ui| {
-                    for mct in MappedCtlsMidi::iter().collect::<Vec<_>>() {
+                    for mct in MappedCtlsMidi::iter()
+                        .filter(|c| !MappedCtls::from(*c).is_unhandled())
+                        .collect::<Vec<_>>()
+                    {
                         let ctrl = MappedCtls::from(mct);
                         let label = ctrl.to_string();
                         if ui.selectable_label(current_type_str == label, &label).clicked()
