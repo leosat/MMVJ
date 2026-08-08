@@ -1,17 +1,15 @@
 use crate::base_num::BaseNumT;
-use crate::hid_device::HidEvent;
+use crate::hid_device::HidDeviceEvent;
 use crate::interner::{get_interned_str, intern_str};
 
 use crate::debug::DebugLevel;
 use crate::debug::get_debug_level;
 use crate::device_and_device_manager::WithDeviceClassification;
-use crate::device_and_device_manager::{
-    AvailableDeviceInfoIface, DeviceEvent, DeviceManagerCommon, DeviceManagerWithFfb,
-};
+use crate::device_and_device_manager::{AvailableDeviceInfoIface, DeviceManagerCommon, DeviceManagerWithFfb};
 use crate::device_and_device_manager::{DeviceKind, OpenedDeviceInfoIface};
 use crate::mapped_controls::MappedCtls;
 #[cfg(feature = "midi")]
-use crate::midi::MappedMidiMessage;
+use crate::midi::MidiDeviceEvent;
 use crate::num_interval::{NumInterval, OutOfRangePolicy};
 use crate::schemas_cfg::Config;
 use crate::schemas_common::{ObjId, WithRuntimeId};
@@ -48,13 +46,13 @@ pub(crate) enum MappingEngineCmd {
 }
 
 pub(crate) trait MappedHidManager:
-    DeviceManagerCommon<DeviceCfgT = HidDeviceCfg, DeviceEventT = DeviceEvent<HidEvent>> + DeviceManagerWithFfb
+    DeviceManagerCommon<DeviceCfgT = HidDeviceCfg, DeviceEventT = HidDeviceEvent> + DeviceManagerWithFfb
 {
 }
 
 #[cfg(feature = "midi")]
 pub(crate) trait MappedMidiManager:
-    DeviceManagerCommon<DeviceCfgT = MidiMatcherCfg, DeviceEventT = MappedMidiMessage>
+    DeviceManagerCommon<DeviceCfgT = MidiMatcherCfg, DeviceEventT = MidiDeviceEvent>
 {
 }
 
@@ -366,13 +364,13 @@ impl<
 
             #[cfg(feature = "midi")]
             select! {
-            Some(midi_msg) = self.midi_mgr.consume_any_opened_device_event()=> self.map_midi_message(midi_msg),
-            Some(hid_event) =  self.hid_mgr.consume_any_opened_device_event() => self.map_hid_event(hid_event),
+            Some(event) = self.midi_mgr.consume_any_opened_device_event()=> self.map_midi_event(event),
+            Some(event) =  self.hid_mgr.consume_any_opened_device_event() => self.map_hid_event(event),
             _ = ticker.tick() => self.process_idle_tick() }
 
             #[cfg(not(feature = "midi"))]
             select! {
-            Some(hid_event) =  self.hid_mgr.consume_any_opened_device_event() => self.map_hid_event(hid_event),
+            Some(event) =  self.hid_mgr.consume_any_opened_device_event() => self.map_hid_event(event),
             _ = ticker.tick() => self.process_idle_tick()}
 
             if DEBUG_MAIN_LOOP_LATENCY {
@@ -415,19 +413,19 @@ impl<
     }
 
     #[cfg(feature = "midi")]
-    fn map_midi_message(&mut self, msg: MappedMidiMessage) {
+    fn map_midi_event(&mut self, event: MidiDeviceEvent) {
         if let Some((cms, mappings)) = self
             .router_index_sysdev_and_ctl_type_to_cms_and_mappings
-            .get(&(msg.device_id, msg.message_type.into()))
+            .get(&(event.device_id, event.data.message_type.into()))
         {
             cms.iter()
                 .enumerate()
                 .filter(|(_, cm)| {
                     let ControlMatchers::Midi(cm) = cm else { unreachable!() };
-                    msg.matches_control_matcher(cm)
+                    event.data.matches_control_matcher(cm)
                 })
                 .for_each(|(cm_idx, cm)| {
-                    cm.set_numeric_value(msg.get_operational_value());
+                    cm.set_numeric_value(event.data.get_operational_value());
                     if !mappings.is_empty() {
                         self.router_buff_mappings_to_execute.extend(&mappings[cm_idx]);
                     }
@@ -436,7 +434,7 @@ impl<
             let dedup = cms.len() > 1;
             let shuffle = self.router_buff_mappings_to_execute.len() > 1;
             Self::dedup_and_shuffle(&mut self.router_buff_mappings_to_execute, dedup, shuffle);
-            self.run_input_triggered_mappings(msg.device_id);
+            self.run_input_triggered_mappings(event.device_id);
             self.router_buff_mappings_to_execute.clear();
         }
     }
@@ -451,7 +449,7 @@ impl<
         }
     }
 
-    fn map_hid_event(&mut self, event: DeviceEvent<HidEvent>) {
+    fn map_hid_event(&mut self, event: HidDeviceEvent) {
         if let Some((cms, mappings)) = self
             .router_index_sysdev_and_ctl_type_to_cms_and_mappings
             .get(&(event.device_id, event.data.control_type))

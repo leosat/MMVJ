@@ -1,9 +1,9 @@
 use crate::base_num::BaseNumT;
 use crate::debug::DebugLevel;
 use crate::device_and_device_manager::{
-    AvailableDeviceInfoIface, DeviceKind, DeviceManagerCommon, OpenedDeviceInfo, OpenedDeviceInfoIface,
+    AvailableDeviceInfoIface, DeviceEvent, DeviceKind, DeviceManagerCommon, OpenedDeviceInfo, OpenedDeviceInfoIface,
 };
-use crate::interner::{get_interned_str, intern_str};
+use crate::interner::intern_str;
 use crate::mapped_controls::MappedCtlsMidi;
 use crate::num_interval::NumInterval;
 use crate::schemas_common::ObjId;
@@ -24,30 +24,30 @@ pub(crate) struct AvailableMidiDeviceInfo {
     pub(crate) port_index: usize,
 }
 
+pub(crate) type MidiDeviceEvent = DeviceEvent<MidiMessage>;
+
 #[derive(Debug, Clone)]
-pub(crate) struct MappedMidiMessage {
-    // pub(crate) device_name_todo_newapi_remove: String,
-    pub(crate) device_id: ObjId,
+pub(crate) struct MidiMessage {
     pub(crate) message_type: MidiMessageType,
     pub(crate) channel: u8,
-    pub(crate) value: MappedMidiMessageValue,
+    pub(crate) value: MidiMessagePayload,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum MappedMidiMessageValue {
+pub(crate) enum MidiMessagePayload {
     Value(u8),
     KnobNumAndOperationalValue(u8, u8),
     Pitch(i16),
 }
 
-impl Default for MappedMidiMessageValue {
+impl Default for MidiMessagePayload {
     fn default() -> Self {
         Self::Value(Default::default())
     }
 }
 
-impl MappedMidiMessage {
-    pub(crate) fn from_raw_data(data: &[u8], device_id: ObjId, debug: DebugLevel) -> Option<Self> {
+impl MidiMessage {
+    pub(crate) fn from_raw_data(data: &[u8], debug: DebugLevel) -> Option<Self> {
         let status = *data.first()?;
         let data1 = data.get(1).copied();
         let data2 = data.get(2).copied();
@@ -59,7 +59,6 @@ impl MappedMidiMessage {
         let type_code = status & 0xF0;
 
         let mut m = Self {
-            device_id,
             channel,
             /* overriden below */
             message_type: Default::default(),
@@ -71,7 +70,7 @@ impl MappedMidiMessage {
                 m.message_type = MidiMessageType::NoteOff;
                 // NB: for note-off messages, the operational value is set to 0, ignoring the "note off velocity" value.
                 // NB: alternative interpretations are possible, but, for now, not considered feasible for our purpose.
-                m.value = MappedMidiMessageValue::KnobNumAndOperationalValue(note, 0);
+                m.value = MidiMessagePayload::KnobNumAndOperationalValue(note, 0);
             }
             (0x90, Some(note), Some(velocity)) => {
                 m.message_type = if velocity == 0 {
@@ -79,28 +78,28 @@ impl MappedMidiMessage {
                 } else {
                     MidiMessageType::NoteOn
                 };
-                m.value = MappedMidiMessageValue::KnobNumAndOperationalValue(note, velocity);
+                m.value = MidiMessagePayload::KnobNumAndOperationalValue(note, velocity);
             }
             (0x0B0, Some(control), Some(value)) => {
                 m.message_type = MidiMessageType::ControlChange;
-                m.value = MappedMidiMessageValue::KnobNumAndOperationalValue(control, value);
+                m.value = MidiMessagePayload::KnobNumAndOperationalValue(control, value);
             }
             (0x0E0, Some(lsb), Some(msb)) => {
                 m.message_type = MidiMessageType::PitchWheel;
                 let value = ((msb as i16) << 7) | (lsb as i16);
-                m.value = MappedMidiMessageValue::Pitch(value - 8192); // Centered at 0
+                m.value = MidiMessagePayload::Pitch(value - 8192); // Centered at 0
             }
             (0x0A0, Some(note), Some(pressure)) => {
                 m.message_type = MidiMessageType::PolyAftertouch;
-                m.value = MappedMidiMessageValue::KnobNumAndOperationalValue(note, pressure);
+                m.value = MidiMessagePayload::KnobNumAndOperationalValue(note, pressure);
             }
             (0x0D0, Some(value), None | Some(_)) => {
                 m.message_type = MidiMessageType::Aftertouch;
-                m.value = MappedMidiMessageValue::Value(value);
+                m.value = MidiMessagePayload::Value(value);
             }
             (0x0C0, Some(value), None | Some(_)) => {
                 m.message_type = MidiMessageType::ProgramChange;
-                m.value = MappedMidiMessageValue::Value(value);
+                m.value = MidiMessagePayload::Value(value);
             }
             _ => {
                 if debug.is_on() {
@@ -138,17 +137,17 @@ impl MappedMidiMessage {
 
     pub(crate) fn get_operational_value(&self) -> BaseNumT {
         match self.value {
-            MappedMidiMessageValue::Value(v) => v as BaseNumT,
-            MappedMidiMessageValue::KnobNumAndOperationalValue(_, v) => v as BaseNumT,
-            MappedMidiMessageValue::Pitch(v) => v as BaseNumT,
+            MidiMessagePayload::Value(v) => v as BaseNumT,
+            MidiMessagePayload::KnobNumAndOperationalValue(_, v) => v as BaseNumT,
+            MidiMessagePayload::Pitch(v) => v as BaseNumT,
         }
     }
 
     pub(crate) fn get_knob_number(&self) -> Option<u8> {
         match self.value {
-            MappedMidiMessageValue::Value(_) => None,
-            MappedMidiMessageValue::KnobNumAndOperationalValue(c, _) => Some(c),
-            MappedMidiMessageValue::Pitch(_) => None,
+            MidiMessagePayload::Value(_) => None,
+            MidiMessagePayload::KnobNumAndOperationalValue(c, _) => Some(c),
+            MidiMessagePayload::Pitch(_) => None,
         }
     }
 
@@ -162,7 +161,7 @@ impl MappedMidiMessage {
 
     pub(crate) fn pretty_print(&self, device_name: Option<&str>) {
         let timestamp = chrono::Local::now().format("%H:%M:%S%.3f");
-        let knob_num = self.get_knob_number().unwrap();
+        let knob_num = self.get_knob_number().unwrap_or_default();
         let variable_value = self.get_operational_value();
         let cc_name = Self::get_cc_name(knob_num);
 
@@ -179,9 +178,8 @@ impl MappedMidiMessage {
                     };
 
                     info!(
-                        "[{}][device id: {}, device name: {}] Note {}: {}{} (note={}, vel={}, ch={})",
+                        "[{}][ device name: {}] Note {}: {}{} (note={}, vel={}, ch={})",
                         timestamp,
-                        self.device_id,
                         device_name.unwrap_or_default(),
                         on_off,
                         note_name,
@@ -195,7 +193,12 @@ impl MappedMidiMessage {
             MidiMessageType::ControlChange => {
                 info!(
                     "[{}][{}] CC: {} (cc={}, val={}, ch={})",
-                    timestamp, self.device_id, cc_name, knob_num, variable_value, self.channel
+                    timestamp,
+                    device_name.unwrap_or_default(),
+                    cc_name,
+                    knob_num,
+                    variable_value,
+                    self.channel
                 );
             }
             MidiMessageType::PitchWheel => {
@@ -243,9 +246,9 @@ pub(crate) struct MidiManager {
     debug: DebugLevel,
     midi_input: MidiInput,
     connections: UncheckedRefCell<HashMap<ObjId, (String, MidiInputConnection<()>)>>,
-    message_sender: mpsc::UnboundedSender<MappedMidiMessage>,
+    message_sender: mpsc::UnboundedSender<MidiDeviceEvent>,
     _engine_stop_token: CancellationToken,
-    all_devices_rx: UncheckedRefCell<mpsc::UnboundedReceiver<MappedMidiMessage>>,
+    all_devices_rx: UncheckedRefCell<mpsc::UnboundedReceiver<MidiDeviceEvent>>,
     note_states: UncheckedRefCell<HashMap<ObjId, HashSet<u8>>>,
 }
 
@@ -319,17 +322,13 @@ impl MidiManager {
             let connection = midi_in
                 .connect(
                     &port,
-                    &device_name,
+                    &device_name.clone(),
                     move |_stamp, message, _| {
-                        if let Some(msg) = MappedMidiMessage::from_raw_data(message, device_id, debug) {
+                        if let Some(msg) = MidiMessage::from_raw_data(message, debug) {
                             if debug.is_on() {
-                                debug!(
-                                    "MIDI {}: {:?}",
-                                    get_interned_str(*msg.device_id).unwrap_or_default(),
-                                    msg
-                                );
+                                debug!("MIDI {}: {:?}", &device_name, msg);
                             }
-                            let _ = sender.send(msg);
+                            let _ = sender.send(MidiDeviceEvent { device_id, data: msg });
                         }
                     },
                     (),
@@ -338,9 +337,9 @@ impl MidiManager {
 
             self.connections
                 .borrow_mut()
-                .insert(device_id, (device_name.to_string(), connection));
+                .insert(device_id, (device.name.to_string(), connection));
 
-            info!("Opened MIDI device: {}", device_name);
+            info!("Opened MIDI device: {}", device.name);
 
             Ok(device_id)
         } else {
@@ -351,7 +350,7 @@ impl MidiManager {
 
 pub(crate) struct MidiLearnMode {
     midi_manager: MidiManager,
-    learned_controls: HashMap<ObjId, HashMap<String, MappedMidiMessage>>,
+    learned_controls: HashMap<ObjId, HashMap<String, MidiMessage>>,
     start_time: std::time::Instant,
 }
 
@@ -391,37 +390,37 @@ impl MidiLearnMode {
         }
         info!("");
 
-        while let Some(msg) = self.midi_manager.consume_any_opened_device_event().await {
-            self.process_learn_message(&msg);
+        while let Some(event) = self.midi_manager.consume_any_opened_device_event().await {
+            self.process_learn_message(&event);
         }
 
         Ok(())
     }
 
-    fn process_learn_message(&mut self, msg: &MappedMidiMessage) {
-        let device_controls = self.learned_controls.entry(msg.device_id).or_default();
+    fn process_learn_message(&mut self, event: &MidiDeviceEvent) {
+        let device_controls = self.learned_controls.entry(event.device_id).or_default();
 
-        let control_str = match msg.message_type {
+        let control_str = match event.data.message_type {
             MidiMessageType::NoteOn => {
-                format!("Note number {}", msg.get_knob_number().unwrap())
+                format!("Note number {}", event.data.get_knob_number().unwrap())
             }
             MidiMessageType::NoteOff => return,
             MidiMessageType::ControlChange => {
-                let control = msg.get_knob_number().unwrap();
+                let control = event.data.get_knob_number().unwrap();
                 if control == 1 {
                     format!("Control Change, Modulation Wheel, control number {}", control)
                 } else {
                     format!("Control Change, control number {}", control)
                 }
             }
-            _ => msg.message_type.to_string(),
+            _ => event.data.message_type.to_string(),
         };
 
         if let std::collections::hash_map::Entry::Vacant(e) = device_controls.entry(control_str.clone()) {
             let elapsed = self.start_time.elapsed().as_secs_f32();
-            info!("[{:6.1}s] Learned: [{}] {}", elapsed, msg.device_id, control_str);
+            info!("[{:6.1}s] Learned: [{}] {}", elapsed, event.device_id, control_str);
 
-            e.insert(msg.clone());
+            e.insert(event.data.clone());
         }
     }
 }
@@ -451,7 +450,7 @@ impl DeviceManagerCommon for MidiManager {
     type AvailableDeviceInfoT = AvailableMidiDeviceInfo;
     type DeviceCfgT = MidiMatcherCfg;
     type DeviceKindFilterT = BitFlags<DeviceKind>;
-    type DeviceEventT = MappedMidiMessage;
+    type DeviceEventT = MidiDeviceEvent;
     type EventsListenerT = tokio::sync::mpsc::UnboundedSender<Self::DeviceEventT>;
     type OpenedDeviceInfoT = OpenedDeviceInfo<Self::AvailableDeviceInfoT>;
 
@@ -468,25 +467,25 @@ impl DeviceManagerCommon for MidiManager {
     }
 
     async fn consume_any_opened_device_event(&self) -> Option<Self::DeviceEventT> {
-        if let Some(msg) = self.all_devices_rx.borrow_mut().recv().await {
-            if msg.message_type == MidiMessageType::NoteOn {
-                let note = msg.get_knob_number().unwrap();
-                if let Some(val) = self.note_states.borrow_mut().get_mut(&msg.device_id) {
+        if let Some(event) = self.all_devices_rx.borrow_mut().recv().await {
+            if event.data.message_type == MidiMessageType::NoteOn {
+                let note = event.data.get_knob_number().unwrap();
+                if let Some(val) = self.note_states.borrow_mut().get_mut(&event.device_id) {
                     val.insert(note);
                 } else {
                     self.note_states
                         .borrow_mut()
-                        .entry(msg.device_id)
+                        .entry(event.device_id)
                         .or_default()
                         .insert(note);
                 }
-            } else if msg.message_type == MidiMessageType::NoteOff
-                && let Some(notes) = self.note_states.borrow_mut().get_mut(&msg.device_id)
+            } else if event.data.message_type == MidiMessageType::NoteOff
+                && let Some(notes) = self.note_states.borrow_mut().get_mut(&event.device_id)
             {
-                notes.remove(&msg.get_knob_number().unwrap());
+                notes.remove(&event.data.get_knob_number().unwrap());
             }
 
-            return Some(msg);
+            return Some(event);
         }
         None
     }
@@ -510,12 +509,12 @@ impl DeviceManagerCommon for MidiManager {
             self.open(device_name)?;
         }
 
-        while let Some(msg) = self.consume_any_opened_device_event().await {
-            msg.pretty_print(Some(
+        while let Some(event) = self.consume_any_opened_device_event().await {
+            event.data.pretty_print(Some(
                 &self
                     .connections
                     .borrow()
-                    .get(&msg.device_id)
+                    .get(&event.device_id)
                     .expect(
                         "Trying to resolve device name from device id \
                             but it's not found among opened ones...",

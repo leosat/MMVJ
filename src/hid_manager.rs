@@ -6,7 +6,7 @@ use crate::device_and_device_manager::{
     AvailableDeviceInfoIface, Device, DeviceClassification, DeviceEvent, DeviceKind, DeviceManagerCommon,
     DeviceManagerWithFfb, OpenedDeviceInfo, OpenedDeviceInfoIface, WithDeviceClassification,
 };
-use crate::hid_device::{HidDevice, HidEvent, HidVirtualDeviceCreationSpec};
+use crate::hid_device::{HidDevice, HidDeviceEvent, HidVirtualDeviceCreationSpec};
 use crate::hid_owned_and_ffb::{X_AXIS_IDX, Y_AXIS_IDX};
 use crate::num_interval::{NumInterval, OutOfRangePolicy};
 use crate::schemas_common::ObjId;
@@ -37,8 +37,8 @@ pub(crate) struct HidManager {
     debug_ff: bool,
     #[allow(clippy::type_complexity)]
     device_key_to_devices: UncheckedRefCell<HashMap<String, Vec<(Rc<UncheckedRefCell<HidDevice>>, HidDeviceCfg)>>>,
-    per_device_event_notification_tx: tokio::sync::mpsc::UnboundedSender<DeviceEvent<HidEvent>>,
-    all_devices_rx: UncheckedRefCell<tokio::sync::mpsc::UnboundedReceiver<DeviceEvent<HidEvent>>>,
+    per_device_event_notification_tx: tokio::sync::mpsc::UnboundedSender<HidDeviceEvent>,
+    all_devices_rx: UncheckedRefCell<tokio::sync::mpsc::UnboundedReceiver<HidDeviceEvent>>,
 }
 
 impl HidManager {
@@ -94,7 +94,7 @@ impl HidManager {
     }
 
     pub(crate) fn new(debug: DebugLevel, debug_ff: bool) -> Result<Self> {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<DeviceEvent<HidEvent>>();
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<HidDeviceEvent>();
         Ok(Self {
             debug,
             debug_ff,
@@ -394,7 +394,7 @@ impl DeviceManagerCommon for HidManager {
     type AvailableDeviceInfoT = AvailableHIDDeviceInfo;
     type DeviceCfgT = HidDeviceCfg;
     type DeviceKindFilterT = BitFlags<DeviceKind>;
-    type DeviceEventT = DeviceEvent<HidEvent>;
+    type DeviceEventT = HidDeviceEvent;
     type EventsListenerT = tokio::sync::mpsc::UnboundedSender<Self::DeviceEventT>;
     type OpenedDeviceInfoT = OpenedDeviceInfo<Self::AvailableDeviceInfoT>;
     fn open_device(
