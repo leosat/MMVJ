@@ -1,17 +1,22 @@
 use crate::base_num::BaseNumT;
 use crate::debug::DebugLevel;
+use crate::device_and_device_manager::{
+    AvailableDeviceInfoIface, DeviceKind, DeviceManagerCommon, OpenedDeviceInfo, OpenedDeviceInfoIface,
+};
 use crate::interner::{get_interned_str, intern_str};
 use crate::mapped_controls::MappedCtlsMidi;
 use crate::num_interval::NumInterval;
 use crate::schemas_common::ObjId;
-use crate::schemas_midi::{MidiChannelCfg, MidiControlMatcherCfg, MidiNumberCfg, MidiNumberSpecial};
+use crate::schemas_midi::{MidiChannelCfg, MidiControlMatcherCfg, MidiMatcherCfg, MidiNumberCfg, MidiNumberSpecial};
 use crate::schemas_midi::{MidiControlCode, MidiMessageType};
 use anyhow::{Context, Result, bail};
+use enumflags2::BitFlags;
 use log::{debug, info, warn};
 use midir::{MidiInput, MidiInputConnection};
 use std::collections::{HashMap, HashSet};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+use unchecked_refcell::UncheckedRefCell;
 
 #[derive(Debug, Clone)]
 pub(crate) struct AvailableMidiDeviceInfo {
@@ -237,11 +242,11 @@ impl MappedMidiMessage {
 pub(crate) struct MidiManager {
     debug: DebugLevel,
     midi_input: MidiInput,
-    connections: HashMap<ObjId, (String, MidiInputConnection<()>)>,
+    connections: UncheckedRefCell<HashMap<ObjId, (String, MidiInputConnection<()>)>>,
     message_sender: mpsc::UnboundedSender<MappedMidiMessage>,
     _engine_stop_token: CancellationToken,
-    all_devices_rx: mpsc::UnboundedReceiver<MappedMidiMessage>,
-    note_states: HashMap<ObjId, HashSet<u8>>,
+    all_devices_rx: UncheckedRefCell<mpsc::UnboundedReceiver<MappedMidiMessage>>,
+    note_states: UncheckedRefCell<HashMap<ObjId, HashSet<u8>>>,
 }
 
 #[allow(non_upper_case_globals)]
@@ -271,28 +276,12 @@ impl MidiManager {
         Ok(Self {
             debug,
             midi_input,
-            connections: HashMap::default(),
+            connections: Default::default(),
             _engine_stop_token: CancellationToken::new(),
             message_sender: tx,
-            all_devices_rx: rx,
-            note_states: HashMap::new(),
+            all_devices_rx: rx.into(),
+            note_states: Default::default(),
         })
-    }
-
-    pub(crate) fn enumerate_available_devices(&self) -> Vec<AvailableMidiDeviceInfo> {
-        let ports = self.midi_input.ports();
-        let mut devices = Vec::new();
-        for (i, port) in ports.iter().enumerate() {
-            match self.midi_input.port_name(port) {
-                Ok(name) => {
-                    devices.push(AvailableMidiDeviceInfo { name, port_index: i });
-                }
-                Err(error) => {
-                    log::warn!("Can't open MIDI device port: {error}.");
-                }
-            }
-        }
-        devices
     }
 
     pub(crate) fn filter_by_name_pattern(
@@ -309,13 +298,13 @@ impl MidiManager {
         matched
     }
 
-    pub(crate) fn open(&mut self, device_name: &str) -> Result<ObjId> {
-        if let Some(d) = self.connections.iter().find(|v| v.1.0 == device_name) {
+    pub(crate) fn open(&self, device_name: &str) -> Result<ObjId> {
+        if let Some(d) = self.connections.borrow().iter().find(|v| v.1.0 == device_name) {
             log::info!("MIDI device {} already opened.", device_name);
             return Ok(*d.0);
         }
 
-        let devices = self.enumerate_available_devices();
+        let devices = self.enumerate_available_devices(None);
         if let Some(device) = devices.iter().find(|d| d.name == device_name) {
             let sender = self.message_sender.clone();
             let debug = self.debug;
@@ -348,6 +337,7 @@ impl MidiManager {
                 .map_err(|e| anyhow::anyhow!("Failed to connect to MIDI device: {}", e))?;
 
             self.connections
+                .borrow_mut()
                 .insert(device_id, (device_name.to_string(), connection));
 
             info!("Opened MIDI device: {}", device_name);
@@ -356,62 +346,6 @@ impl MidiManager {
         } else {
             bail!("MIDI device not found: {}", device_name)
         }
-    }
-
-    pub(crate) async fn consume_any_opened_device_message(&mut self) -> Option<MappedMidiMessage> {
-        if let Some(msg) = self.all_devices_rx.recv().await {
-            if msg.message_type == MidiMessageType::NoteOn {
-                let note = msg.get_knob_number().unwrap();
-                if let Some(val) = self.note_states.get_mut(&msg.device_id) {
-                    val.insert(note);
-                } else {
-                    self.note_states.entry(msg.device_id).or_default().insert(note);
-                }
-            } else if msg.message_type == MidiMessageType::NoteOff
-                && let Some(notes) = self.note_states.get_mut(&msg.device_id)
-            {
-                notes.remove(&msg.get_knob_number().unwrap());
-            }
-
-            return Some(msg);
-        }
-        None
-    }
-
-    pub(crate) async fn monitor(&mut self, name_regex: &regex::Regex) -> Result<()> {
-        let matched_devices = self.filter_by_name_pattern(name_regex, &self.enumerate_available_devices());
-
-        if matched_devices.is_empty() {
-            bail!("No devices found matching '{}'", name_regex);
-        }
-
-        info!("Monitoring devices: {:?}", matched_devices);
-        info!("Press Ctrl+C to stop monitoring...");
-        info!("{}", "=".repeat(60));
-
-        for device_name in &matched_devices {
-            self.open(device_name)?;
-        }
-
-        while let Some(msg) = self.consume_any_opened_device_message().await {
-            msg.pretty_print(Some(
-                &self
-                    .connections
-                    .get(&msg.device_id)
-                    .expect(
-                        "Trying to resolve device name from device id \
-                            but it's not found among opened ones...",
-                    )
-                    .0,
-            ));
-        }
-
-        Ok(())
-    }
-
-    pub(crate) fn stop(&mut self) -> Result<()> {
-        self.connections.clear();
-        Ok(())
     }
 }
 
@@ -443,7 +377,7 @@ impl MidiLearnMode {
         info!("{}", "=".repeat(60));
         info!("");
 
-        let devices = self.midi_manager.enumerate_available_devices();
+        let devices = self.midi_manager.enumerate_available_devices(None);
 
         if devices.is_empty() {
             warn!("No MIDI devices found!");
@@ -457,14 +391,13 @@ impl MidiLearnMode {
         }
         info!("");
 
-        while let Some(msg) = self.midi_manager.consume_any_opened_device_message().await {
+        while let Some(msg) = self.midi_manager.consume_any_opened_device_event().await {
             self.process_learn_message(&msg);
         }
 
         Ok(())
     }
 
-    // TODO: create YAML configuration and later save it.
     fn process_learn_message(&mut self, msg: &MappedMidiMessage) {
         let device_controls = self.learned_controls.entry(msg.device_id).or_default();
 
@@ -490,6 +423,137 @@ impl MidiLearnMode {
 
             e.insert(msg.clone());
         }
+    }
+}
+// -------------------------------------------------------------
+
+impl AvailableDeviceInfoIface for AvailableMidiDeviceInfo {
+    fn get_name(&self) -> &str {
+        &self.name
+    }
+
+    fn get_classification(&self) -> crate::device_and_device_manager::DeviceClassification {
+        crate::device_and_device_manager::DeviceClassification::empty()
+    }
+}
+
+impl OpenedDeviceInfoIface for OpenedDeviceInfo<AvailableMidiDeviceInfo> {
+    fn get_opened_device_id(&self) -> ObjId {
+        self.opened_device_id
+    }
+
+    fn get_available_device_info(&self) -> &impl AvailableDeviceInfoIface {
+        &self.available_device_info
+    }
+}
+
+impl DeviceManagerCommon for MidiManager {
+    type AvailableDeviceInfoT = AvailableMidiDeviceInfo;
+    type DeviceCfgT = MidiMatcherCfg;
+    type DeviceKindFilterT = BitFlags<DeviceKind>;
+    type DeviceEventT = MappedMidiMessage;
+    type EventsListenerT = tokio::sync::mpsc::UnboundedSender<Self::DeviceEventT>;
+    type OpenedDeviceInfoT = OpenedDeviceInfo<Self::AvailableDeviceInfoT>;
+
+    fn open_device(
+        &self,
+        device_info: &Self::AvailableDeviceInfoT,
+        _device_matcher_key: &str,
+        _device_cfg: &Self::DeviceCfgT,
+    ) -> anyhow::Result<Self::OpenedDeviceInfoT> {
+        Ok(OpenedDeviceInfo {
+            opened_device_id: Self::open(self, device_info.get_name())?,
+            available_device_info: device_info.clone(),
+        })
+    }
+
+    async fn consume_any_opened_device_event(&self) -> Option<Self::DeviceEventT> {
+        if let Some(msg) = self.all_devices_rx.borrow_mut().recv().await {
+            if msg.message_type == MidiMessageType::NoteOn {
+                let note = msg.get_knob_number().unwrap();
+                if let Some(val) = self.note_states.borrow_mut().get_mut(&msg.device_id) {
+                    val.insert(note);
+                } else {
+                    self.note_states
+                        .borrow_mut()
+                        .entry(msg.device_id)
+                        .or_default()
+                        .insert(note);
+                }
+            } else if msg.message_type == MidiMessageType::NoteOff
+                && let Some(notes) = self.note_states.borrow_mut().get_mut(&msg.device_id)
+            {
+                notes.remove(&msg.get_knob_number().unwrap());
+            }
+
+            return Some(msg);
+        }
+        None
+    }
+
+    async fn device_monitor(
+        &self,
+        name_regex: &regex::Regex,
+        _filter: Option<Self::DeviceKindFilterT>,
+    ) -> anyhow::Result<()> {
+        let matched_devices = self.filter_by_name_pattern(name_regex, &self.enumerate_available_devices(None));
+
+        if matched_devices.is_empty() {
+            bail!("No devices found matching '{}'", name_regex);
+        }
+
+        info!("Monitoring devices: {:?}", matched_devices);
+        info!("Press Ctrl+C to stop monitoring...");
+        info!("{}", "=".repeat(60));
+
+        for device_name in &matched_devices {
+            self.open(device_name)?;
+        }
+
+        while let Some(msg) = self.consume_any_opened_device_event().await {
+            msg.pretty_print(Some(
+                &self
+                    .connections
+                    .borrow()
+                    .get(&msg.device_id)
+                    .expect(
+                        "Trying to resolve device name from device id \
+                            but it's not found among opened ones...",
+                    )
+                    .0,
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn _set_events_listenter(&self, _tx: Self::EventsListenerT) {
+        todo!()
+    }
+
+    fn enumerate_available_devices(&self, _filter: Option<Self::DeviceKindFilterT>) -> Vec<Self::AvailableDeviceInfoT> {
+        let ports = self.midi_input.ports();
+        let mut devices = Vec::new();
+        for (i, port) in ports.iter().enumerate() {
+            match self.midi_input.port_name(port) {
+                Ok(name) => {
+                    devices.push(AvailableMidiDeviceInfo { name, port_index: i });
+                }
+                Err(error) => {
+                    log::warn!("Can't open MIDI device port: {error}.");
+                }
+            }
+        }
+        devices
+    }
+
+    fn set_control_matcher_and_broadcast(&self, _dev_key: &str, _ctl_key: &str, _value: BaseNumT, _silent: bool) {
+        unreachable!("Midi devices are not yet writeable.")
+    }
+
+    fn stop(&self, _full_shutdown: bool) -> anyhow::Result<()> {
+        self.connections.borrow_mut().clear();
+        Ok(())
     }
 }
 

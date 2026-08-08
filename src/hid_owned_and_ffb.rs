@@ -7,12 +7,12 @@ use tokio_util::future::FutureExt;
 use crate::num_interval::SYMM_UNIT_INTERVAL;
 
 use crate::base_num::BaseNumT;
+use crate::device_and_device_manager::{DeviceEvent, DeviceEvents};
 use crate::filters::OneEuroFilter;
-use crate::hid_device::HID_AXIS_MAX_INTERVAL;
 use crate::hid_device::{
     DeviceControlStates, DeviceThreadCmd, OwnedVirtualHIDDeviceThreadIO, set_hid_control_virtual_owned_device,
 };
-use crate::mapped_device::{MappedDeviceEvent, MappedEvents, MappedHidEvent};
+use crate::hid_device::{HID_AXIS_MAX_INTERVAL, HidEvent};
 use crate::num_interval::{NumInterval, from_type_interval_to_symm_unit_clamping, from_type_interval_to_unit_clamping};
 use crate::schemas_common::ObjId;
 use std::collections::BTreeMap;
@@ -457,7 +457,7 @@ pub(crate) async fn owned_hid_device_thread(
     // NB: acquiring here so that AsyncFd would associate with current runtime.
     let mut platform_device_stream = platform_device.into_event_stream().unwrap();
 
-    let mut external_notification_tx: Option<tokio::sync::mpsc::UnboundedSender<MappedDeviceEvent>> = None;
+    let mut external_notification_tx: Option<tokio::sync::mpsc::UnboundedSender<DeviceEvent>> = None;
     let mut uploaded_effects_buffer: Vec<Option<FfEffect>> = Vec::new();
     uploaded_effects_buffer.resize_with(max_effects, || None);
     let mut played_effects = PlayedEffects::new();
@@ -502,9 +502,9 @@ pub(crate) async fn owned_hid_device_thread(
                     if let Some(tx) = &mut external_notification_tx
                         && play_sums[axis_idx] != owned_virtual_device_thread_io.force_sum[axis_idx].load(Ordering::Relaxed) as BaseNumT
                     {
-                        let _ = tx.send(MappedDeviceEvent {
+                        let _ = tx.send(DeviceEvent {
                             device_id: virtual_device_id,
-                            event: MappedEvents::Hid(MappedHidEvent {
+                            event: DeviceEvents::Hid(HidEvent {
                                 control_type: if axis_idx == X_AXIS_IDX {
                                     crate::mapped_controls::MappedCtls::ForceFeedbackX
                                 } else {

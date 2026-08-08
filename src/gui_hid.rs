@@ -1,10 +1,11 @@
+use crate::device_and_device_manager::WithDeviceClassification;
+use crate::gui_common::GuiDeviceClassifications;
 use crate::gui_common::{DrawEgui, GuiCmd, GuiCmdControlMatcherChange, GuiCmdControlMatcherRemove, draw_collapsing_ui};
 use crate::gui_device::{GuiInDeviceCfg, draw_create_control_matcher_gui};
 use crate::gui_value::GuiInInterval;
 use crate::hid_device::HID_AXIS_MAX_RANGE;
-use crate::hid_manager::{AvailableHIDDeviceInfo, WithDeviceClassification};
+use crate::hid_manager::AvailableHIDDeviceInfo;
 use crate::hid_owned_and_ffb::{X_AXIS_IDX, Y_AXIS_IDX};
-use crate::mapped_device::MappedDeviceClassification;
 use crate::schemas_control_matcher::ControlMatchers;
 use crate::schemas_hid::{HIDDeviceForceFeedbackCfg, HidControlMatcherCfg, HidDeviceCfg};
 use crate::schemas_value::WithLastKnownIO;
@@ -298,7 +299,7 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                     }
 
                     if let Some((n, ControlMatchers::Hid(cm))) =
-                        draw_create_control_matcher_gui(ui, MappedDeviceClassification::Hid(self.get_classification()))
+                        draw_create_control_matcher_gui(ui, GuiDeviceClassifications::Hid(self.get_classification()))
                         && self.controls.insert(n, cm).is_none()
                     {
                         update_classification = true;

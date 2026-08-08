@@ -1,5 +1,5 @@
 use crate::debug::DebugLevel;
-use crate::hid_manager::WithDeviceClassification;
+use crate::device_and_device_manager::WithDeviceClassification;
 use crate::schemas_cfg::*;
 use crate::schemas_control_matcher::ControlMatchers;
 use crate::schemas_hid::{HidControlMatcherCfg, HidDeviceCfg};

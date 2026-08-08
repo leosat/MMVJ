@@ -1,15 +1,15 @@
 use crate::base_num::BaseAtomicT;
 use crate::base_num::BaseNumT;
 use crate::debug::DebugLevel;
-use crate::hid_manager::WithDeviceClassification;
+use crate::device_and_device_manager::Device;
+use crate::device_and_device_manager::DeviceEvent;
+use crate::device_and_device_manager::DeviceEvents;
+use crate::device_and_device_manager::DeviceKind;
+use crate::device_and_device_manager::WithDeviceClassification;
 use crate::hid_owned_and_ffb::X_AXIS_IDX;
 use crate::hid_owned_and_ffb::Y_AXIS_IDX;
 use crate::interner::intern_str;
 use crate::mapped_controls::MappedCtls;
-use crate::mapped_device::MappedDevice;
-use crate::mapped_device::MappedDeviceEvent;
-use crate::mapped_device::MappedEvents;
-use crate::mapped_device::MappedHidEvent;
 use crate::num_interval::NumInterval;
 use crate::num_interval::ZERO_INTERVAL;
 use crate::schemas_common::ObjId;
@@ -23,11 +23,10 @@ use crate::schemas_hid::HidFfEffect;
 use crate::schemas_hid::HidVirtualParamsCfg;
 use anyhow::Context;
 use crossbeam_utils::CachePadded;
+
 use enumflags2::BitFlags;
-use enumflags2::bitflags;
 use evdev::AbsInfo;
 use evdev::AttributeSet;
-use evdev::Device;
 use evdev::FFEffectCode;
 use evdev::InputEvent;
 use evdev::KeyCode;
@@ -37,9 +36,6 @@ use evdev::SynchronizationEvent;
 use evdev::UinputAbsSetup;
 use evdev::uinput::VirtualDevice;
 use nix::libc::UINPUT_MAX_NAME_SIZE;
-use schemars::JsonSchema;
-use serde::Deserialize;
-use serde::Serialize;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::path::Path;
@@ -56,28 +52,21 @@ use tokio_util::sync::CancellationToken;
 
 #[derive(Debug)]
 pub(crate) enum DeviceThreadCmd {
-    SetExternalNotification(tokio::sync::mpsc::UnboundedSender<MappedDeviceEvent>),
+    SetExternalNotification(tokio::sync::mpsc::UnboundedSender<DeviceEvent>),
     SetControlValue(MappedCtls, BaseNumT),
 }
 
 //----------------------------------------------------------
-#[bitflags]
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub(crate) enum HidDeviceKind {
-    Keyboard = 1,
-    Joystick = 1 << 1,
-    Gamepad = 1 << 2,
-    Mouse = 1 << 3,
-    MiscMappable = 1 << 4,
-    Misc = 1 << 5,
-    Virtual = 1 << 6,
+#[derive(Debug, Clone)]
+pub(crate) struct HidEvent {
+    pub(crate) control_type: MappedCtls,
+    pub(crate) value: BaseNumT,
 }
+//----------------------------------------------------------
 
 #[derive(Debug)]
 #[allow(unused)]
 pub(crate) struct HidVirtualDeviceCreationSpec {
-    pub(crate) device_kind: HidDeviceKind,
     pub(crate) cfg_spec: HidDeviceCfg,
     pub(crate) debug: DebugLevel,
     pub(crate) debug_ff: bool,
@@ -147,7 +136,7 @@ pub(crate) type DeviceComm = (
 // -----------------------------------------------------
 
 impl WithDeviceClassification for HidDevice {
-    fn get_classification(&self) -> BitFlags<HidDeviceKind> {
+    fn get_classification(&self) -> BitFlags<DeviceKind> {
         self.classification
     }
 
@@ -205,11 +194,11 @@ pub(crate) struct HidDevice {
     owned_virtual_device: Option<VirtualDevice>,
     owned_virtual_device_cmd: Option<tokio::sync::mpsc::UnboundedSender<DeviceThreadCmd>>,
     cfg_key: String,
-    classification: BitFlags<HidDeviceKind>,
+    classification: BitFlags<DeviceKind>,
     name: String,
     _client_side_path: PathBuf,
     client_side_thread_rx_tx: DeviceComm,
-    events_listener: Option<tokio::sync::mpsc::UnboundedSender<MappedDeviceEvent>>,
+    events_listener: Option<tokio::sync::mpsc::UnboundedSender<DeviceEvent>>,
     client_side_thread_cancellation: CancellationToken,
     ctl_states: Arc<DeviceControlStates>,
     is_owned_virtual_device_persistent: bool,
@@ -463,7 +452,7 @@ impl HidDevice {
 
         let mut device = Self::open_from_path(client_side_path.to_str().unwrap(), ctl_states, creation_spec.debug)?;
 
-        device.classification.insert(HidDeviceKind::Virtual);
+        device.classification.insert(DeviceKind::Virtual);
         device.is_owned_virtual_device = true;
         device.ff_enabled = ff_enabled;
         device.ff_is_a_condition_effect_enabled = creation_spec.cfg_spec.virtual_device_fake_accepting_all_effects()
@@ -546,7 +535,7 @@ impl HidDevice {
         opened_device_id: ObjId,
         event: evdev::InputEvent,
         debug: DebugLevel,
-    ) -> Option<MappedDeviceEvent> {
+    ) -> Option<DeviceEvent> {
         let control_type = crate::mapped_controls::MappedCtls::from(event);
         if control_type.is_unhandled() {
             if debug.is_on() && event.event_type() != evdev::EventType::SYNCHRONIZATION {
@@ -554,9 +543,9 @@ impl HidDevice {
             }
             None
         } else {
-            MappedDeviceEvent {
+            DeviceEvent {
                 device_id: opened_device_id,
-                event: crate::mapped_device::MappedEvents::Hid(MappedHidEvent {
+                event: crate::device_and_device_manager::DeviceEvents::Hid(HidEvent {
                     control_type,
                     value: event.value() as BaseNumT,
                 }),
@@ -595,9 +584,9 @@ impl HidDevice {
                 Some(Ok(evdev_event)) = platform_device_stream.next_event().with_cancellation_token(&cancellation_token) => {
                     let event =
                         Self::evdev_event_to_hid_device_event(device_name, opened_device_id, evdev_event, debug);
-                    if let Some(MappedDeviceEvent {
+                    if let Some(DeviceEvent {
                         device_id: _,
-                        event: MappedEvents::Hid(MappedHidEvent { control_type, value }),
+                        event: DeviceEvents::Hid(HidEvent { control_type, value }),
                     }) = event
                     {
                         ctl_states[control_type as usize].store(value, std::sync::atomic::Ordering::Relaxed);
@@ -639,7 +628,11 @@ pub(crate) fn control_value_to_evdev_event(control_type: MappedCtls, control_val
     }
 }
 
-pub(crate) fn set_hid_control_unowned_device(device: &mut Device, control_type: MappedCtls, control_value: BaseNumT) {
+pub(crate) fn set_hid_control_unowned_device(
+    device: &mut evdev::Device,
+    control_type: MappedCtls,
+    control_value: BaseNumT,
+) {
     if device
         .send_events(&[
             control_value_to_evdev_event(control_type, control_value),
@@ -683,7 +676,7 @@ fn test_virtual_joystick_internal(with_ff: bool) {
                     });
                     controls
                 },
-                classification: Some(HidDeviceClassificationCfg(BitFlags::from_flag(HidDeviceKind::Joystick))),
+                classification: Some(HidDeviceClassificationCfg(BitFlags::from_flag(DeviceKind::Joystick))),
                 params__: crate::schemas_hid::HidVirtualOrMatcherParamsCfg::VirtualDevice(HidVirtualParamsCfg {
                     persistent: true,
                     name: "MMVJ Test Virtual Joystick".to_string(),
@@ -706,13 +699,12 @@ fn test_virtual_joystick_internal(with_ff: bool) {
             debug: DebugLevel::Low,
             debug_ff: true,
             is_persistent: true,
-            device_kind: HidDeviceKind::Joystick,
         },
         true,
     )
     .unwrap();
 
-    let (notification_tx, mut notification_rx) = unbounded_channel::<MappedDeviceEvent>();
+    let (notification_tx, mut notification_rx) = unbounded_channel::<DeviceEvent>();
 
     vjk.attach_events_listener(Some(notification_tx));
 
@@ -885,8 +877,8 @@ impl Drop for HidDevice {
     }
 }
 
-impl MappedDevice for HidDevice {
-    type EventsListener = tokio::sync::mpsc::UnboundedSender<MappedDeviceEvent>;
+impl Device for HidDevice {
+    type EventsListener = tokio::sync::mpsc::UnboundedSender<DeviceEvent>;
 
     fn close(&self) -> anyhow::Result<()> {
         self.client_side_thread_cancellation.cancel();
@@ -902,7 +894,7 @@ impl MappedDevice for HidDevice {
         self.id
     }
 
-    fn attach_events_listener(&mut self, listener: Option<tokio::sync::mpsc::UnboundedSender<MappedDeviceEvent>>) {
+    fn attach_events_listener(&mut self, listener: Option<tokio::sync::mpsc::UnboundedSender<DeviceEvent>>) {
         if let Some(listener) = &listener {
             self.client_side_thread_rx_tx
                 .1

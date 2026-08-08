@@ -2,15 +2,19 @@ use crate::base_num::BaseNumT;
 use crate::interner::get_interned_str;
 
 use crate::debug::DebugLevel;
-use crate::hid_device::{HidDevice, HidDeviceKind, HidVirtualDeviceCreationSpec};
+use crate::device_and_device_manager::{
+    AvailableDeviceInfoIface, Device, DeviceClassification, DeviceEvent, DeviceEvents, DeviceKind, DeviceManagerCommon,
+    DeviceManagerWithFfb, OpenedDeviceInfo, OpenedDeviceInfoIface, WithDeviceClassification,
+};
+use crate::hid_device::{HidDevice, HidVirtualDeviceCreationSpec};
 use crate::hid_owned_and_ffb::{X_AXIS_IDX, Y_AXIS_IDX};
-use crate::mapped_device::{MappedDevice, MappedDeviceEvent, MappedDeviceManager, MappedEvents, OpenedDeviceInfo};
+use crate::mapping::MappedHidManager;
 use crate::num_interval::{NumInterval, OutOfRangePolicy};
 use crate::schemas_common::ObjId;
 use crate::schemas_hid::{HidDeviceCfg, HidDeviceClassificationCfg, HidVirtualOrMatcherParamsCfg};
 use anyhow::{Result, bail};
 use enumflags2::BitFlags;
-use evdev::{BusType, Device, EventType};
+use evdev::{BusType, EventType};
 use std::collections::HashMap;
 use std::future::poll_fn;
 use std::path::PathBuf;
@@ -24,7 +28,7 @@ use unchecked_refcell::UncheckedRefCell;
 pub(crate) struct AvailableHIDDeviceInfo {
     pub(crate) name: String,
     pub(crate) path: PathBuf,
-    pub(crate) classification: HidDeviceClassification,
+    pub(crate) classification: DeviceClassification,
 }
 
 // ----------------------------
@@ -34,12 +38,18 @@ pub(crate) struct HidManager {
     debug_ff: bool,
     #[allow(clippy::type_complexity)]
     device_key_to_devices: UncheckedRefCell<HashMap<String, Vec<(Rc<UncheckedRefCell<HidDevice>>, HidDeviceCfg)>>>,
-    per_device_event_notification_tx: tokio::sync::mpsc::UnboundedSender<MappedDeviceEvent>,
-    all_devices_rx: UncheckedRefCell<tokio::sync::mpsc::UnboundedReceiver<MappedDeviceEvent>>,
+    per_device_event_notification_tx: tokio::sync::mpsc::UnboundedSender<DeviceEvent>,
+    all_devices_rx: UncheckedRefCell<tokio::sync::mpsc::UnboundedReceiver<DeviceEvent>>,
 }
 
 impl HidManager {
-    pub(crate) fn set_control_value(&self, device_key: &str, ctl_key: &str, value: BaseNumT, _silent: bool) {
+    pub(crate) fn set_control_matcher_and_broadcast(
+        &self,
+        device_key: &str,
+        ctl_key: &str,
+        value: BaseNumT,
+        _silent: bool,
+    ) {
         if self.debug.is_hi() {
             log::debug!("Request to set device matcher control {device_key} {ctl_key}");
         }
@@ -85,7 +95,7 @@ impl HidManager {
     }
 
     pub(crate) fn new(debug: DebugLevel, debug_ff: bool) -> Result<Self> {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<MappedDeviceEvent>();
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<DeviceEvent>();
         Ok(Self {
             debug,
             debug_ff,
@@ -176,7 +186,6 @@ impl HidManager {
                 debug: self.debug,
                 debug_ff: self.debug_ff,
                 is_persistent,
-                device_kind: HidDeviceKind::Joystick,
             },
             self.debug.is_on(),
         )?;
@@ -207,83 +216,35 @@ impl HidManager {
     }
 }
 
-pub(crate) trait WithDeviceClassification {
-    fn get_classification(&self) -> BitFlags<HidDeviceKind>;
-    fn update_classification(&mut self);
-    fn is_a_joystick(&self) -> bool;
-    #[allow(unused)]
-    fn is_a_keyboard(&self) -> bool;
-    #[allow(unused)]
-    fn is_a_gamepad(&self) -> bool;
-    fn is_a_mouse(&self) -> bool;
-    fn is_a_virtual(&self) -> bool;
-    #[allow(unused)]
-    fn is_a_misc_mappable(&self) -> bool;
-}
-
-impl WithDeviceClassification for BitFlags<HidDeviceKind> {
-    fn get_classification(&self) -> BitFlags<HidDeviceKind> {
-        *self
-    }
-
-    fn is_a_joystick(&self) -> bool {
-        self.contains(HidDeviceKind::Joystick)
-    }
-
-    fn is_a_keyboard(&self) -> bool {
-        self.contains(HidDeviceKind::Keyboard)
-    }
-
-    fn is_a_gamepad(&self) -> bool {
-        self.contains(HidDeviceKind::Gamepad)
-    }
-
-    fn is_a_mouse(&self) -> bool {
-        self.contains(HidDeviceKind::Mouse)
-    }
-
-    fn is_a_misc_mappable(&self) -> bool {
-        self.contains(HidDeviceKind::MiscMappable)
-    }
-
-    fn is_a_virtual(&self) -> bool {
-        self.contains(HidDeviceKind::Virtual)
-    }
-
-    fn update_classification(&mut self) {}
-}
-
-pub(crate) type HidDeviceClassification = BitFlags<HidDeviceKind>;
-
 impl WithDeviceClassification for HidDeviceCfg {
-    fn get_classification(&self) -> BitFlags<HidDeviceKind> {
+    fn get_classification(&self) -> BitFlags<DeviceKind> {
         if let Some(classification) = &self.classification {
             return classification.0;
         }
 
-        let mut flags: BitFlags<HidDeviceKind> = BitFlags::empty();
+        let mut flags: BitFlags<DeviceKind> = BitFlags::empty();
         if self.controls.iter().any(|c| c.1.r#type.is_a_joystick_control()) {
-            flags.insert(HidDeviceKind::Joystick);
+            flags.insert(DeviceKind::Joystick);
         }
 
         if self.controls.iter().any(|c| c.1.r#type.is_a_gamepad_control()) {
-            flags.insert(HidDeviceKind::Gamepad);
+            flags.insert(DeviceKind::Gamepad);
         }
 
         if self.controls.iter().any(|c| c.1.r#type.is_a_keyboard_control()) {
-            flags.insert(HidDeviceKind::Keyboard);
+            flags.insert(DeviceKind::Keyboard);
         }
 
         if self.controls.iter().any(|c| c.1.r#type.is_a_mouse_control()) {
-            flags.insert(HidDeviceKind::Mouse);
+            flags.insert(DeviceKind::Mouse);
         }
 
         if flags.is_empty() && !self.controls.is_empty() {
-            flags.insert(HidDeviceKind::MiscMappable);
+            flags.insert(DeviceKind::MiscMappable);
         }
 
         if self.is_a_virtual() {
-            flags.insert(HidDeviceKind::Virtual);
+            flags.insert(DeviceKind::Virtual);
         }
 
         flags
@@ -323,20 +284,20 @@ impl WithDeviceClassification for HidDeviceCfg {
 }
 
 impl WithDeviceClassification for evdev::Device {
-    fn get_classification(&self) -> BitFlags<HidDeviceKind> {
-        let mut flags: BitFlags<HidDeviceKind> = BitFlags::empty();
+    fn get_classification(&self) -> BitFlags<DeviceKind> {
+        let mut flags: BitFlags<DeviceKind> = BitFlags::empty();
         if self.supported_absolute_axes().is_some()
             || self
                 .supported_keys()
                 .is_some_and(|k| k.contains(evdev::KeyCode::BTN_TRIGGER))
         {
-            flags.insert(HidDeviceKind::Joystick);
+            flags.insert(DeviceKind::Joystick);
         }
 
         if let Some(keys) = self.supported_keys()
             && keys.contains(evdev::KeyCode::BTN_SOUTH)
         {
-            flags.insert(HidDeviceKind::Gamepad);
+            flags.insert(DeviceKind::Gamepad);
         }
 
         if let Some(keys) = self.supported_keys()
@@ -344,14 +305,14 @@ impl WithDeviceClassification for evdev::Device {
                 || keys.contains(evdev::KeyCode::KEY_SPACE)
                 || keys.contains(evdev::KeyCode::KEY_ENTER))
         {
-            flags.insert(HidDeviceKind::Keyboard);
+            flags.insert(DeviceKind::Keyboard);
         }
 
         if let Some(rel) = self.supported_relative_axes()
             && rel.contains(evdev::RelativeAxisCode::REL_X)
             && rel.contains(evdev::RelativeAxisCode::REL_Y)
         {
-            flags.insert(HidDeviceKind::Mouse);
+            flags.insert(DeviceKind::Mouse);
         }
 
         if flags.is_empty()
@@ -363,7 +324,7 @@ impl WithDeviceClassification for evdev::Device {
             // Let's make some noize
             || self.supported_sounds().is_some()
         {
-            flags.insert(HidDeviceKind::MiscMappable);
+            flags.insert(DeviceKind::MiscMappable);
         }
 
         if self.input_id().bus_type() == BusType::BUS_VIRTUAL
@@ -376,7 +337,7 @@ impl WithDeviceClassification for evdev::Device {
             })
         //  || self.unique_name().is_some()
         {
-            flags.insert(HidDeviceKind::Virtual);
+            flags.insert(DeviceKind::Virtual);
         }
 
         flags
@@ -410,19 +371,39 @@ impl WithDeviceClassification for evdev::Device {
     }
 }
 
-impl MappedDeviceManager for HidManager {
-    type AvailableDeviceInfo = AvailableHIDDeviceInfo;
-    type DeviceCfg = HidDeviceCfg;
-    type DeviceKindFilter = Option<BitFlags<HidDeviceKind>>;
-    type DeviceEvent = MappedDeviceEvent;
-    type EventsListener = tokio::sync::mpsc::UnboundedSender<Self::DeviceEvent>;
+impl AvailableDeviceInfoIface for AvailableHIDDeviceInfo {
+    fn get_name(&self) -> &str {
+        &self.name
+    }
 
-    fn open(
+    fn get_classification(&self) -> DeviceClassification {
+        self.classification
+    }
+}
+
+impl OpenedDeviceInfoIface for OpenedDeviceInfo<AvailableHIDDeviceInfo> {
+    fn get_opened_device_id(&self) -> ObjId {
+        self.opened_device_id
+    }
+
+    fn get_available_device_info(&self) -> &impl AvailableDeviceInfoIface {
+        &self.available_device_info
+    }
+}
+
+impl DeviceManagerCommon for HidManager {
+    type AvailableDeviceInfoT = AvailableHIDDeviceInfo;
+    type DeviceCfgT = HidDeviceCfg;
+    type DeviceKindFilterT = BitFlags<DeviceKind>;
+    type DeviceEventT = DeviceEvent;
+    type EventsListenerT = tokio::sync::mpsc::UnboundedSender<Self::DeviceEventT>;
+    type OpenedDeviceInfoT = OpenedDeviceInfo<Self::AvailableDeviceInfoT>;
+    fn open_device(
         &self,
-        device_info: Self::AvailableDeviceInfo,
+        device_info: &Self::AvailableDeviceInfoT,
         device_matcher_key: &str,
         device_cfg: &HidDeviceCfg,
-    ) -> Result<OpenedDeviceInfo<Self::AvailableDeviceInfo>> {
+    ) -> Result<OpenedDeviceInfo<Self::AvailableDeviceInfoT>> {
         let mut devices = self.device_key_to_devices.borrow_mut();
 
         let opened_device: Option<Rc<UncheckedRefCell<HidDevice>>> = {
@@ -456,8 +437,8 @@ impl MappedDeviceManager for HidManager {
             }
 
             Ok(OpenedDeviceInfo {
-                id: opened_device.borrow().get_id(),
-                info: device_info.clone(),
+                opened_device_id: opened_device.borrow().get_id(),
+                available_device_info: device_info.clone(),
             })
         } else if let Ok(mut d) = HidDevice::open_from_path(device_info.path.to_str().unwrap(), None, self.debug) {
             log::info!(
@@ -472,19 +453,19 @@ impl MappedDeviceManager for HidManager {
                 .or_default()
                 .push((Rc::new(UncheckedRefCell::new(d)), device_cfg.clone()));
             Ok(OpenedDeviceInfo {
-                id,
-                info: device_info.clone(),
+                opened_device_id: id,
+                available_device_info: device_info.clone(),
             })
         } else {
             bail!("Can't open device {device_info:?}")
         }
     }
 
-    async fn consume_any_opened_device_event(&self) -> Option<Self::DeviceEvent> {
+    async fn consume_any_opened_device_event(&self) -> Option<Self::DeviceEventT> {
         poll_fn(|cx| self.all_devices_rx.borrow_mut().poll_recv(cx)).await
     }
 
-    fn enumerate_available_devices(&self, filter: Self::DeviceKindFilter) -> Vec<Self::AvailableDeviceInfo> {
+    fn enumerate_available_devices(&self, filter: Option<Self::DeviceKindFilterT>) -> Vec<Self::AvailableDeviceInfoT> {
         let Ok(rd) = std::fs::read_dir("/dev/input").inspect_err(|e| log::error!("{e}")) else {
             return Vec::new();
         };
@@ -497,7 +478,7 @@ impl MappedDeviceManager for HidManager {
                 return None;
             }
 
-            let device = Device::open(&path).inspect_err(|e| log::error!("{e}")).ok()?;
+            let device = evdev::Device::open(&path).inspect_err(|e| log::error!("{e}")).ok()?;
 
             let device_kind = device.get_classification();
 
@@ -543,7 +524,11 @@ impl MappedDeviceManager for HidManager {
         Ok(())
     }
 
-    async fn monitor(&self, match_name_regex: &regex::Regex, filter: Self::DeviceKindFilter) -> anyhow::Result<()> {
+    async fn device_monitor(
+        &self,
+        match_name_regex: &regex::Regex,
+        filter: Option<Self::DeviceKindFilterT>,
+    ) -> anyhow::Result<()> {
         let devices = self.enumerate_available_devices(filter);
         let matched = devices
             .iter()
@@ -561,15 +546,15 @@ impl MappedDeviceManager for HidManager {
 
         for device_info in matched {
             println!("  - {} @ {}", device_info.name, device_info.path.display());
-            self.open(device_info.clone(), &device_info.name, &Default::default())?;
+            self.open_device(&device_info.clone(), &device_info.name, &Default::default())?;
         }
 
         println!("Press Ctrl+C to stop monitoring...");
 
         loop {
-            if let Some(MappedDeviceEvent {
+            if let Some(DeviceEvent {
                 device_id,
-                event: MappedEvents::Hid(control_state),
+                event: DeviceEvents::Hid(control_state),
             }) = self.consume_any_opened_device_event().await
             {
                 log::info!(
@@ -583,11 +568,33 @@ impl MappedDeviceManager for HidManager {
         }
     }
 
-    fn _set_events_listenter(&self, tx: tokio::sync::mpsc::UnboundedSender<Self::DeviceEvent>) {
+    fn _set_events_listenter(&self, tx: tokio::sync::mpsc::UnboundedSender<Self::DeviceEventT>) {
         for device_data in &mut *self.device_key_to_devices.borrow_mut() {
             for device in device_data.1 {
                 device.0.borrow_mut().attach_events_listener(Some(tx.clone()));
             }
         }
+    }
+
+    fn set_control_matcher_and_broadcast(&self, device_key: &str, ctl_key: &str, value: BaseNumT, silent: bool) {
+        self.set_control_matcher_and_broadcast(device_key, ctl_key, value, silent);
+    }
+}
+
+impl DeviceManagerWithFfb for HidManager {
+    fn ff_set_x_axis_pos(&self, device_key: &str, ctl_key: &str, control_interval: NumInterval<BaseNumT>) {
+        self.ff_set_x_axis_pos(device_key, ctl_key, control_interval);
+    }
+
+    fn ff_set_y_axis_pos(&self, device_key: &str, ctl_key: &str, control_interval: NumInterval<BaseNumT>) {
+        self.ff_set_y_axis_pos(device_key, ctl_key, control_interval);
+    }
+
+    fn ff_get_x_sum_symm_norm(&self, device_key: &str) -> BaseNumT {
+        self.ff_get_x_sum_symm_norm(device_key)
+    }
+
+    fn ff_get_y_sum_symm_norm(&self, device_key: &str) -> BaseNumT {
+        self.ff_get_y_sum_symm_norm(device_key)
     }
 }

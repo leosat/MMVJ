@@ -6,10 +6,10 @@ use crate::relativity::Relativity;
 
 use crate::{
     base_num::BaseNumT,
+    device_and_device_manager::WithDeviceClassification,
     gui_common::{DrawEgui, GuiInKinds},
     gui_mapping::ValueRefChoiceContext,
     hid_device::HID_AXIS_MAX_RANGE,
-    hid_manager::WithDeviceClassification,
     num_interval::NumInterval,
     schemas_cfg::{DevicesCfgNew, VariablesCfg},
     schemas_control_matcher::ControlMatchers,

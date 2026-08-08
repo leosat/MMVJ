@@ -19,7 +19,7 @@ pub(crate) mod hid_manager;
 #[cfg(feature = "midi")]
 pub(crate) mod midi;
 //--------------------------------
-pub(crate) mod mapped_device;
+pub(crate) mod device_and_device_manager;
 #[macro_use]
 pub(crate) mod mapped_controls_macro;
 pub(crate) mod mapped_controls;

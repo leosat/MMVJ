@@ -1,5 +1,5 @@
-use crate::hid_device::HidDeviceKind;
-use crate::hid_manager::WithDeviceClassification;
+use crate::device_and_device_manager::DeviceKind;
+use crate::device_and_device_manager::WithDeviceClassification;
 use crate::schemas_hid::HidDeviceCfg;
 use crate::schemas_mapping::Mapping;
 #[cfg(feature = "midi")]
@@ -84,13 +84,13 @@ impl From<DevicesCfgNew> for DevicesCfgLegacy {
             mice: value
                 .hid
                 .iter()
-                .filter(|cfg| cfg.1.get_classification().contains(HidDeviceKind::Mouse))
+                .filter(|cfg| cfg.1.get_classification().contains(DeviceKind::Mouse))
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect::<BTreeMap<_, _>>(),
             virtual_joysticks: value
                 .hid
                 .iter()
-                .filter(|cfg| cfg.1.get_classification().contains(HidDeviceKind::Joystick))
+                .filter(|cfg| cfg.1.get_classification().contains(DeviceKind::Joystick))
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect::<BTreeMap<_, _>>(),
         }

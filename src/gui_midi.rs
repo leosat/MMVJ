@@ -1,8 +1,8 @@
+use crate::gui_common::GuiDeviceClassifications;
 use crate::gui_common::{DrawEgui, GuiCmd, GuiCmdControlMatcherChange, GuiCmdControlMatcherRemove, draw_collapsing_ui};
 use crate::gui_device::{GuiInDeviceCfg, draw_create_control_matcher_gui};
 use crate::gui_value::GuiInInterval;
 use crate::mapped_controls::{MappedCtls, MappedCtlsMidi};
-use crate::mapped_device::MappedDeviceClassification;
 use crate::midi::{AvailableMidiDeviceInfo, MIDIv1_CONTROL_RANGE, MIDIv1_PITCH_WHEEL_RANGE};
 use crate::schemas_common::WithRuntimeId;
 use crate::schemas_control_matcher::ControlMatchers;
@@ -264,7 +264,7 @@ impl<'s> DrawEgui<'s> for MidiMatcherCfg {
                     }
 
                     if let Some((n, ControlMatchers::Midi(cm))) =
-                        draw_create_control_matcher_gui(ui, MappedDeviceClassification::Midi)
+                        draw_create_control_matcher_gui(ui, GuiDeviceClassifications::Midi)
                         && self.controls.insert(n, cm).is_none()
                     {
                         changed = true;

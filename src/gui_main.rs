@@ -1,5 +1,8 @@
 use crate::config::MORE_DEBUG;
 use crate::debug::DebugLevel;
+use crate::device_and_device_manager::DeviceKind;
+use crate::device_and_device_manager::DeviceManagerCommon;
+use crate::device_and_device_manager::WithDeviceClassification;
 use crate::driver::DriverCmd;
 use crate::gui_common::{
     DrawEgui, GuiCmd, GuiCmdVariableChange, GuiCmdVariableRemove, GuiCmdVirtualDeviceChange, GuiInKinds, ScriptAuxKind,
@@ -8,9 +11,7 @@ use crate::gui_common::{
 use crate::gui_common::{GuiCmdDeviceKeyRename, GuiCmdDeviceMatcherRemove};
 use crate::gui_device::GuiInDeviceCfg;
 use crate::gui_telemetry_graph::GuiTelemetryGraphStates;
-use crate::hid_device::HidDeviceKind;
-use crate::hid_manager::{AvailableHIDDeviceInfo, HidManager, WithDeviceClassification};
-use crate::mapped_device::MappedDeviceManager;
+use crate::hid_manager::{AvailableHIDDeviceInfo, HidManager};
 #[cfg(feature = "midi")]
 use crate::midi::{AvailableMidiDeviceInfo, MidiManager};
 use crate::schemas_cfg::Config;
@@ -995,7 +996,7 @@ impl GuiMain {
                         });
                     }
                 } else {
-                    self.available_midi = Some(self.midi_mgr.enumerate_available_devices());
+                    self.available_midi = Some(self.midi_mgr.enumerate_available_devices(None));
                 }
             });
         });
@@ -1062,8 +1063,8 @@ impl GuiMain {
                 }
             } else {
                 self.available_hid = Some(self.hid_mgr.enumerate_available_devices(Some(
-                    HidDeviceKind::Mouse | HidDeviceKind::Keyboard | HidDeviceKind::Joystick | HidDeviceKind::Gamepad, //  HidDeviceKind::Misc |
-                                                                                                                       //  HidDeviceKind::MiscMappable
+                    DeviceKind::Mouse | DeviceKind::Keyboard | DeviceKind::Joystick | DeviceKind::Gamepad, //  HidDeviceKind::Misc |
+                                                                                                           //  HidDeviceKind::MiscMappable
                 )))
             }
         });

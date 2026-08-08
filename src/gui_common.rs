@@ -1,3 +1,4 @@
+use crate::device_and_device_manager::DeviceKind;
 use crate::mapping::MappingEngineCmd;
 use crate::{schemas_common::ObjId, schemas_control_matcher::ControlMatchers};
 use crate::{
@@ -12,12 +13,22 @@ use egui::{
     Ui,
     collapsing_header::{CollapsingState, HeaderResponse},
 };
+use enumflags2::BitFlags;
 use std::{any::Any, path::PathBuf};
 
 pub(crate) enum GuiInKinds {
     Edit,
     #[allow(unused)]
     Display,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub(crate) enum GuiDeviceClassifications {
+    #[cfg(feature = "midi")]
+    Midi,
+    Hid(BitFlags<DeviceKind>),
+    #[default]
+    Unsupported,
 }
 
 #[derive(Debug, Clone, PartialEq)]
