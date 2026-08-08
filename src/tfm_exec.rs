@@ -237,7 +237,7 @@ impl WithTfmExec for RaiseFallCfg {
                 let mut fall_hold_factor = UNIT_INTERVAL.map_from(
                     self.fall_hold_factor.get_numeric_value(),
                     &self.fall_hold_factor.get_interval(),
-                    OutOfRangePolicy::WarnAndClamp,
+                    OutOfRangePolicy::WarnIfDebugAndClamp,
                 );
 
                 if self.invert_fall_hold_factor {
@@ -347,15 +347,17 @@ impl WithTfmExec for SignedPowerCfg {
                 input.value,
                 input.interval,
                 |v_abs| Curves::signed_power(v_abs, self.power),
-                OutOfRangePolicy::WarnAndClamp,
+                OutOfRangePolicy::WarnIfDebugAndClamp,
             )
         } else {
             input.interval.map_from_unit(
                 Curves::signed_power(
-                    input.interval.map_to_unit(input.value, OutOfRangePolicy::WarnAndClamp),
+                    input
+                        .interval
+                        .map_to_unit(input.value, OutOfRangePolicy::WarnIfDebugAndClamp),
                     self.power,
                 ),
-                OutOfRangePolicy::WarnAndClamp,
+                OutOfRangePolicy::WarnIfDebugAndClamp,
             )
         };
         input
@@ -372,15 +374,17 @@ impl WithTfmExec for NormExpCfg {
                 input.value,
                 input.interval,
                 |v_abs| Curves::exp_curve(v_abs, self.base),
-                OutOfRangePolicy::WarnAndClamp,
+                OutOfRangePolicy::WarnIfDebugAndClamp,
             )
         } else {
             input.interval.map_from_unit(
                 Curves::exp_curve(
-                    input.interval.map_to_unit(input.value, OutOfRangePolicy::WarnAndClamp),
+                    input
+                        .interval
+                        .map_to_unit(input.value, OutOfRangePolicy::WarnIfDebugAndClamp),
                     self.base,
                 ),
-                OutOfRangePolicy::WarnAndClamp,
+                OutOfRangePolicy::WarnIfDebugAndClamp,
             )
         };
         input
@@ -394,10 +398,12 @@ impl WithTfmExec for SCurveCfg {
         }
         input.value = input.interval.map_from_unit(
             Curves::s_curve(
-                input.interval.map_to_unit(input.value, OutOfRangePolicy::WarnAndClamp),
+                input
+                    .interval
+                    .map_to_unit(input.value, OutOfRangePolicy::WarnIfDebugAndClamp),
                 self.steepness,
             ),
-            OutOfRangePolicy::WarnAndClamp,
+            OutOfRangePolicy::WarnIfDebugAndClamp,
         );
         input
     }
@@ -409,8 +415,12 @@ impl WithTfmExec for SmoothstepCfg {
             return input;
         }
         input.value = input.interval.map_from_unit(
-            Curves::smoothstep(input.interval.map_to_unit(input.value, OutOfRangePolicy::WarnAndClamp)),
-            OutOfRangePolicy::WarnAndClamp,
+            Curves::smoothstep(
+                input
+                    .interval
+                    .map_to_unit(input.value, OutOfRangePolicy::WarnIfDebugAndClamp),
+            ),
+            OutOfRangePolicy::WarnIfDebugAndClamp,
         );
         input
     }
@@ -504,16 +514,12 @@ impl TfmExeState for ScriptCfg {
                 log::info!("Initializing lua script exe state!");
                 let mut exe_state = ScriptExeState::new(lua);
                 script_compile(&mut exe_state);
-                let env = lua
-                    .create_table()
-                    .context("Can't create environment table {err_suffix}.")?;
-                let meta = lua
-                    .create_table()
-                    .context("Can't create environment metatable {err_suffix}.")?;
+                let env = lua.create_table().context("Can't create environment table.")?;
+                let meta = lua.create_table().context("Can't create environment metatable.")?;
                 meta.set("__index", lua.globals())
-                    .context("Can't set environment metadata {err_suffix}.")?;
+                    .context("Can't set environment metadata.")?;
                 env.set_metatable(meta.into())
-                    .context("Can't set environment metatable {err_suffix}.")?;
+                    .context("Can't set environment metatable.")?;
                 exe_state
                     .compiled
                     .set_environment(env.clone())
@@ -853,13 +859,13 @@ impl WithTfmExec for SteeringCfg {
             * UNIT_INTERVAL.map_from(
                 self.input_gain.get_numeric_value(),
                 &self.input_gain.get_interval(),
-                OutOfRangePolicy::WarnAndClamp,
+                OutOfRangePolicy::WarnIfDebugAndClamp,
             );
 
         let auto_center_along_force_feedback = UNIT_INTERVAL.map_from(
             self.auto_center_along_force_feedback.get_numeric_value(),
             &self.auto_center_along_force_feedback.get_interval(),
-            OutOfRangePolicy::WarnAndClamp,
+            OutOfRangePolicy::WarnIfDebugAndClamp,
         );
 
         let dt = clamp_dt_by_min_and_max_period((now - state.last_time).as_secs_f32() as BaseNumT);
@@ -871,7 +877,7 @@ impl WithTfmExec for SteeringCfg {
             state.pre_filter = SYMM_UNIT_INTERVAL.map_from(
                 acc.get_numeric_value(),
                 &acc.get_interval(),
-                OutOfRangePolicy::WarnAndClamp,
+                OutOfRangePolicy::WarnIfDebugAndClamp,
             );
         }
 
@@ -943,7 +949,7 @@ impl WithTfmExec for SteeringCfg {
         let hold_factor_unit = UNIT_INTERVAL.map_from(
             self.hold_factor.get_numeric_value(),
             &self.hold_factor.get_interval(),
-            OutOfRangePolicy::WarnAndClamp,
+            OutOfRangePolicy::WarnIfDebugAndClamp,
         );
 
         '_FFB_and_autocentering: {
@@ -953,7 +959,7 @@ impl WithTfmExec for SteeringCfg {
                         SYMM_UNIT_INTERVAL.map_from(
                             custom_src.get_numeric_value(),
                             &custom_src.get_interval(),
-                            OutOfRangePolicy::WarnAndClamp,
+                            OutOfRangePolicy::WarnIfDebugAndClamp,
                         )
                     } else {
                         match &ctx.get_main_dst() {

@@ -128,7 +128,7 @@ impl GuiGraphState {
             && interval.contains_value_closed(0.0 as BaseNumT)
         {
             let zero_y = rect.max.y
-                - (interval.map_to_unit::<f32>(0.0 as BaseNumT, OutOfRangePolicy::WarnAndClamp) * rect.height());
+                - (interval.map_to_unit::<f32>(0.0 as BaseNumT, OutOfRangePolicy::WarnIfDebugAndClamp) * rect.height());
             painter.line_segment(
                 [egui::pos2(rect.min.x, zero_y), egui::pos2(rect.max.x, zero_y)],
                 Stroke::new(1.0_f32, Color32::from_white_alpha(180)),
@@ -199,7 +199,7 @@ impl GuiGraphState {
             let x = rect.max.x - (age / self.time_window_sec) * rect.width();
             let norm = event
                 .interval
-                .map_to_unit::<f32>(event.value, OutOfRangePolicy::WarnAndClamp)
+                .map_to_unit::<f32>(event.value, OutOfRangePolicy::WarnIfDebugAndClamp)
                 .clamp(0.0, 1.0);
             let y = rect.max.y - (norm * rect.height()); // screen coords, 0 is top left, Y points down.
             let current_pos = Pos2::new(x, y);

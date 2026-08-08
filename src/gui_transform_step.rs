@@ -1336,7 +1336,7 @@ impl TfmStepCommonState {
                     SYMM_UNIT_INTERVAL.map_from(
                         vd.value,
                         &vd.interval,
-                        crate::num_interval::OutOfRangePolicy::WarnAndClamp,
+                        crate::num_interval::OutOfRangePolicy::WarnIfDebugAndClamp,
                     ),
                     SYMM_UNIT_INTERVAL,
                     timestamp,

@@ -38,7 +38,9 @@ pub(crate) enum OutOfRangePolicy {
     #[allow(unused)]
     Allow,
     Clamp,
+    #[allow(unused)]
     WarnAndClamp,
+    WarnIfDebugAndClamp,
     _Panic,
 }
 
@@ -166,11 +168,11 @@ pub(crate) fn symm_unit_to_unit<T: NumIntervalValue + Float>(val: T, allow_extra
 }
 
 pub(crate) fn from_type_interval_to_symm_unit_clamping<T: NumIntervalValue /*+ ToNumInterval<T>*/>(v: T) -> BaseNumT {
-    num_interval_from_type_of(v).map_to_symm_unit(v, OutOfRangePolicy::WarnAndClamp)
+    num_interval_from_type_of(v).map_to_symm_unit(v, OutOfRangePolicy::WarnIfDebugAndClamp)
 }
 
-pub(crate) fn from_type_interval_to_unit<T: NumIntervalValue /*+ ToNumInterval<T>*/>(v: T) -> BaseNumT {
-    num_interval_from_type_of(v).map_to_unit(v, OutOfRangePolicy::WarnAndClamp)
+pub(crate) fn from_type_interval_to_unit_clamping<T: NumIntervalValue /*+ ToNumInterval<T>*/>(v: T) -> BaseNumT {
+    num_interval_from_type_of(v).map_to_unit(v, OutOfRangePolicy::WarnIfDebugAndClamp)
 }
 
 //-------------------------------------------------------------
@@ -347,8 +349,12 @@ impl<T: NumIntervalValue> NumInterval<T> {
                         }
                     }
                 },
-                OutOfRangePolicy::Clamp | OutOfRangePolicy::WarnAndClamp => {
-                    if let OutOfRangePolicy::WarnAndClamp = out_of_range_policy {
+                OutOfRangePolicy::Clamp | OutOfRangePolicy::WarnAndClamp | OutOfRangePolicy::WarnIfDebugAndClamp => {
+                    if matches!(
+                        out_of_range_policy,
+                        OutOfRangePolicy::WarnAndClamp
+                        | OutOfRangePolicy::WarnIfDebugAndClamp if cfg!(debug_assertions)
+                    ) {
                         log::warn!(
                             "{} is out of {:?} interval is not expected here. {}.\nValue clamped, running...",
                             value,

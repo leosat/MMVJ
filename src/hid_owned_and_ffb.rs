@@ -13,7 +13,7 @@ use crate::hid_device::{
     DeviceControlStates, DeviceThreadCmd, OwnedVirtualHIDDeviceThreadIO, set_hid_control_virtual_owned_device,
 };
 use crate::mapped_device::{MappedDeviceEvent, MappedEvents, MappedHidEvent};
-use crate::num_interval::{NumInterval, from_type_interval_to_symm_unit_clamping, from_type_interval_to_unit};
+use crate::num_interval::{NumInterval, from_type_interval_to_symm_unit_clamping, from_type_interval_to_unit_clamping};
 use crate::schemas_common::ObjId;
 use std::collections::BTreeMap;
 use std::ops::Neg;
@@ -118,14 +118,14 @@ impl From<evdev::FFCondition> for FfEffectCondition {
     fn from(cond: evdev::FFCondition) -> Self {
         Self {
             saturation_interval_symm_norm: NumInterval::new(
-                from_type_interval_to_unit(cond.left_saturation).neg(),
-                from_type_interval_to_unit(cond.right_saturation),
+                from_type_interval_to_unit_clamping(cond.left_saturation).neg(),
+                from_type_interval_to_unit_clamping(cond.right_saturation),
             ),
             left_coeff_symm_norm: from_type_interval_to_symm_unit_clamping(cond.left_coefficient),
             right_coeff_symm_norm: from_type_interval_to_symm_unit_clamping(cond.right_coefficient),
             // considering deadband to be "half" here as source is of unsigned type...
             // there might be interpretetions though.
-            half_deadband_norm: from_type_interval_to_unit(cond.deadband),
+            half_deadband_norm: from_type_interval_to_unit_clamping(cond.deadband),
             center_symm_norm: from_type_interval_to_symm_unit_clamping(cond.center),
         }
     }
@@ -513,7 +513,7 @@ pub(crate) async fn owned_hid_device_thread(
                                 value: HID_AXIS_MAX_INTERVAL.map_from(
                                     play_sums[axis_idx],
                                     &SYMM_UNIT_INTERVAL,
-                                    crate::num_interval::OutOfRangePolicy::WarnAndClamp,
+                                    crate::num_interval::OutOfRangePolicy::WarnIfDebugAndClamp,
                                 ),
                             }),
                         });
@@ -530,7 +530,7 @@ pub(crate) async fn owned_hid_device_thread(
                             HID_AXIS_MAX_INTERVAL.map_from(
                                 play_sums[axis_idx],
                                 &SYMM_UNIT_INTERVAL,
-                                crate::num_interval::OutOfRangePolicy::WarnAndClamp,
+                                crate::num_interval::OutOfRangePolicy::WarnIfDebugAndClamp,
                             ) as BaseNumT,
                             Ordering::Relaxed,
                         );

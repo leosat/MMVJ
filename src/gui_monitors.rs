@@ -75,7 +75,7 @@ impl<'s> DrawEgui<'s> for UiAxisMonitorCfg {
                             );
 
                             v.get_interval()
-                                .map_to_unit::<BaseNumT>(v.get_last_known_io(), OutOfRangePolicy::WarnAndClamp)
+                                .map_to_unit::<BaseNumT>(v.get_last_known_io(), OutOfRangePolicy::WarnIfDebugAndClamp)
                         })
                         .unwrap_or_default(),
                 )

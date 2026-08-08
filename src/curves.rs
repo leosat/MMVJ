@@ -93,7 +93,7 @@ mod tests {
                 1.2345,
                 UNIT_INTERVAL,
                 |v_abs| { v_abs },
-                OutOfRangePolicy::WarnAndClamp,
+                OutOfRangePolicy::WarnIfDebugAndClamp,
             ),
             1.0
         );

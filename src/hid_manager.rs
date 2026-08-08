@@ -109,7 +109,7 @@ impl HidManager {
                     io.axis_pos_symm_norm[axis_idx].store(
                         control_interval.map_to_symm_unit(
                             self.get_control_value(device_key, ctl_key),
-                            OutOfRangePolicy::WarnAndClamp,
+                            OutOfRangePolicy::WarnIfDebugAndClamp,
                         ),
                         Ordering::Relaxed,
                     );
