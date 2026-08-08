@@ -527,10 +527,6 @@ impl DeviceManagerCommon for MidiManager {
         Ok(())
     }
 
-    fn _set_events_listenter(&self, _tx: Self::EventsListenerT) {
-        todo!()
-    }
-
     fn enumerate_available_devices(&self, _filter: Option<Self::DeviceKindFilterT>) -> Vec<Self::AvailableDeviceInfoT> {
         let ports = self.midi_input.ports();
         let mut devices = Vec::new();

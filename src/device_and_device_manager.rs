@@ -116,20 +116,13 @@ pub(crate) trait DeviceManagerCommon {
         device_matcher_key: &str,
         device_cfg: &Self::DeviceCfgT,
     ) -> anyhow::Result<Self::OpenedDeviceInfoT>;
-    // NB/TODO: API: this consumes any message and that's it... which suggests one consumer.
-    // NB/TODO: API: but if one consumer, why to keep the rx channel end, maybe just make an API
-    // NB/TODO: API: to attach any external channel and not bother about serving rx end from here.
-    // NB/TODO: API: this API is not mut for interior mutability, any impl. must be clever
-    //          to keep borrows etc across await points...
-    // https://github.com/leosat/MMVJ/issues/72
+    // NB: https://github.com/leosat/MMVJ/issues/72
     async fn consume_any_opened_device_event(&self) -> Option<Self::DeviceEventT>;
     async fn device_monitor(
         &self,
         match_name_regex: &regex::Regex,
         filter: Option<Self::DeviceKindFilterT>,
     ) -> anyhow::Result<()>;
-    // TODO: https://github.com/leosat/MMVJ/issues/72
-    fn _set_events_listenter(&self, tx: Self::EventsListenerT);
     fn enumerate_available_devices(&self, filter: Option<Self::DeviceKindFilterT>) -> Vec<Self::AvailableDeviceInfoT>;
     fn set_control_matcher_and_broadcast(&self, dev_key: &str, ctl_key: &str, value: BaseNumT, silent: bool);
     fn stop(&self, full_shutdown: bool) -> anyhow::Result<()>;

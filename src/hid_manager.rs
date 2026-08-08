@@ -567,14 +567,6 @@ impl DeviceManagerCommon for HidManager {
         }
     }
 
-    fn _set_events_listenter(&self, tx: tokio::sync::mpsc::UnboundedSender<Self::DeviceEventT>) {
-        for device_data in &mut *self.device_key_to_devices.borrow_mut() {
-            for device in device_data.1 {
-                device.0.borrow_mut().attach_events_listener(Some(tx.clone()));
-            }
-        }
-    }
-
     fn set_control_matcher_and_broadcast(&self, device_key: &str, ctl_key: &str, value: BaseNumT, silent: bool) {
         self.set_control_matcher_and_broadcast(device_key, ctl_key, value, silent);
     }
