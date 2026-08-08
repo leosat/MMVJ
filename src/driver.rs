@@ -1,8 +1,13 @@
 use crate::config::ConfigManager;
 use crate::config::MORE_DEBUG;
 use crate::debug::DebugLevel;
-use crate::hid_manager::{HidManager, WithDeviceClassification};
-use crate::mapped_device::MappedDeviceManager;
+use crate::device_and_device_manager::DeviceManagerCommon;
+use crate::device_and_device_manager::WithDeviceClassification;
+use crate::hid_manager::HidManager;
+use crate::mapping::MappedHidManager;
+#[cfg(feature = "midi")]
+use crate::mapping::MappedMidiManager;
+use crate::mapping::Mapper;
 use crate::mapping::MappingEngine;
 use crate::mapping::MappingEngineCmd;
 #[cfg(feature = "midi")]
@@ -119,7 +124,7 @@ pub async fn run_aux_task(aux_task: &AuxDriverTask, cfg_file_path: &Path, debug:
         #[cfg(feature = "midi")]
         AuxDriverTask::EnumMidi => {
             info!("\n-------------------------\nAvailable MIDI devices:\n-------------------------");
-            for device in MidiManager::new(debug)?.enumerate_available_devices() {
+            for device in MidiManager::new(debug)?.enumerate_available_devices(None) {
                 info!("Name: {}", device.name);
             }
         }
@@ -139,12 +144,12 @@ pub async fn run_aux_task(aux_task: &AuxDriverTask, cfg_file_path: &Path, debug:
         #[cfg(feature = "midi")]
         AuxDriverTask::MonitorMidi { name_regex: device } => {
             MidiManager::new(debug)?
-                .monitor(&regex::Regex::new(&device.clone().unwrap_or(".*".to_string()))?)
+                .device_monitor(&regex::Regex::new(&device.clone().unwrap_or(".*".to_string()))?, None)
                 .await?;
         }
         AuxDriverTask::MonitorHid { name_regex: device } => {
             HidManager::new(debug, debug.is_on())?
-                .monitor(&regex::Regex::new(&device.clone().unwrap_or(".*".to_string()))?, None)
+                .device_monitor(&regex::Regex::new(&device.clone().unwrap_or(".*".to_string()))?, None)
                 .await?;
         }
         #[cfg(feature = "midi")]
@@ -211,6 +216,10 @@ fn check_and_load_new_cfg(cfg_mgr: &mut ConfigManager, new_cfg_file: &Path, debu
     }
 }
 
+impl MappedHidManager for HidManager {}
+#[cfg(feature = "midi")]
+impl MappedMidiManager for MidiManager {}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn run(
     cfg_file_path: &Path,
@@ -238,11 +247,15 @@ pub async fn run(
     let (cfg_watcher_tx, mut cfg_watcher_rx) = tokio::sync::mpsc::channel::<()>(1);
     watch_config_file(cfg_file_path, cfg_watcher_tx)?;
 
+    //----------------------------- CFG MANAGER --------------------------------------
     let mut cfg_mgr = ConfigManager::new(cfg_file_path, debug)?;
-    let hid_mgr = HidManager::new(debug, debug_ff)?;
-    let mut is_first_run = true;
 
-    //------------------------ LUA VM ------------------------------------------------
+    //----------------------------- DEVICE MANAGERS ---------------------------------
+    let hid_mgr = HidManager::new(debug, debug_ff)?;
+    #[cfg(feature = "midi")]
+    let midi_mgr = MidiManager::new(debug)?;
+
+    //----------------------------- LUA VM -------------------------------------------
     let lua = mlua::Lua::new();
 
     //----------------------------- COMMAND BUFFERS ----------------------------------
@@ -267,6 +280,7 @@ pub async fn run(
         None
     };
 
+    let mut is_first_run = true;
     'restart_mapping_engine: loop {
         // ------------------
         // shared_atomic_state.clear();
@@ -307,9 +321,9 @@ pub async fn run(
             // TODO: perf: maybe use shared memory and left-right pattern
             cfg_mgr.cfg_ref().clone(),
             &hid_mgr,
-            &lua,
             #[cfg(feature = "midi")]
-            MidiManager::new(debug)?,
+            &midi_mgr,
+            &lua,
         )?;
 
         if debug.is_on() {
@@ -483,10 +497,11 @@ enum DriverMainLoopAction {
     Halt,
 }
 
-fn handle_cmd(
+fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManagerT: MappedMidiManager>(
     cfg_mgr: &mut ConfigManager,
-    hid_mgr: &HidManager,
-    mapping_engine: &mut MappingEngine,
+    hid_mgr: &HidManagerT,
+    #[cfg(feature = "midi")] mapping_engine: &mut MappingEngine<HidManagerT, MidiManagerT>,
+    #[cfg(not(feature = "midi"))] mapping_engine: &mut MappingEngine<HidManagerT, ()>,
     cmd_rx_count: usize,
     cmd_rx_buf: &mut Vec<DriverCmd>,
     debug: DebugLevel,

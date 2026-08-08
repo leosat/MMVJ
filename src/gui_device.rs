@@ -1,12 +1,12 @@
 use crate::schemas_control_matcher::ControlMatchers;
-use crate::{mapped_device::MappedDeviceClassification, schemas_predefined::HidControlPredefined};
+use crate::{gui_common::GuiDeviceClassifications, schemas_predefined::HidControlPredefined};
 use eframe::egui;
 
 // --------------------------------------------------------
 
 pub(crate) fn draw_create_control_matcher_gui(
     ui: &mut egui::Ui,
-    device_type: MappedDeviceClassification,
+    device_type: GuiDeviceClassifications,
 ) -> Option<(String, ControlMatchers)> {
     let is_win_opened_egui_id = ui.make_persistent_id("new control");
     let is_win_opened = &mut ui.data_mut(|d| d.get_temp::<bool>(is_win_opened_egui_id).unwrap_or(false));
@@ -24,7 +24,7 @@ pub(crate) fn draw_create_control_matcher_gui(
             ui.separator();
             match device_type {
                 #[cfg(feature = "midi")]
-                MappedDeviceClassification::Midi => {
+                GuiDeviceClassifications::Midi => {
                     for c in &crate::config::PREDEF_CONTROLS.midi_controls {
                         ui.separator();
                         if ui.button(c.0).clicked() {
@@ -32,7 +32,7 @@ pub(crate) fn draw_create_control_matcher_gui(
                         }
                     }
                 }
-                MappedDeviceClassification::Hid(classif_filter) => {
+                GuiDeviceClassifications::Hid(classif_filter) => {
                     ui.label(format!("Current device matcher classification is: {}", classif_filter));
                     ui.separator();
 
@@ -64,7 +64,7 @@ pub(crate) fn draw_create_control_matcher_gui(
                         });
                     }
                 }
-                MappedDeviceClassification::Unsupported => {}
+                GuiDeviceClassifications::Unsupported => {}
             }
             ui.separator();
         });

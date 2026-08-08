@@ -1,20 +1,26 @@
 use crate::base_num::BaseNumT;
+use crate::hid_device::HidEvent;
 use crate::interner::{get_interned_str, intern_str};
 
 use crate::debug::DebugLevel;
 use crate::debug::get_debug_level;
-use crate::hid_device::HidDeviceKind;
-use crate::hid_manager::{HidManager, WithDeviceClassification};
+use crate::device_and_device_manager::WithDeviceClassification;
+use crate::device_and_device_manager::{
+    AvailableDeviceInfoIface, DeviceEvent, DeviceEvents, DeviceManagerCommon, DeviceManagerWithFfb,
+};
+use crate::device_and_device_manager::{DeviceKind, OpenedDeviceInfoIface};
 use crate::mapped_controls::MappedCtls;
-use crate::mapped_device::{MappedDeviceEvent, MappedDeviceManager, MappedEvents, MappedHidEvent};
 #[cfg(feature = "midi")]
-use crate::midi::{MappedMidiMessage, MidiManager};
+use crate::midi::MappedMidiMessage;
 use crate::num_interval::{NumInterval, OutOfRangePolicy};
 use crate::schemas_cfg::Config;
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_control_matcher::ControlMatchers;
 
+use crate::schemas_hid::HidDeviceCfg;
 use crate::schemas_mapping::Mapping;
+#[cfg(feature = "midi")]
+use crate::schemas_midi::MidiMatcherCfg;
 use crate::schemas_transform::{DynValFilter, collect_dynamic_value_matchers};
 use crate::schemas_value::{
     DynValueRefs, ValueDsts, WithLastKnownIOSettable, WithNumInterval, WithNumericValueSettable,
@@ -27,6 +33,8 @@ use anyhow::Result;
 use log::{debug, info, warn};
 use std::collections::HashMap;
 use std::fs;
+#[cfg(not(feature = "midi"))]
+use std::marker::PhantomData;
 use std::sync::atomic::Ordering::Relaxed;
 use tokio::select;
 use tokio::time::{Duration, MissedTickBehavior, interval};
@@ -39,7 +47,23 @@ pub(crate) enum MappingEngineCmd {
     UpdateMappingRouter,
 }
 
-pub(crate) struct MappingEngine<'driver_loop> {
+pub(crate) trait MappedHidManager:
+    DeviceManagerCommon<DeviceCfgT = HidDeviceCfg, DeviceEventT = DeviceEvent> + DeviceManagerWithFfb
+{
+}
+
+#[cfg(feature = "midi")]
+pub(crate) trait MappedMidiManager:
+    DeviceManagerCommon<DeviceCfgT = MidiMatcherCfg, DeviceEventT = MappedMidiMessage>
+{
+}
+
+pub(crate) struct MappingEngine<
+    'd,
+    HidManagerT: MappedHidManager,
+    #[cfg(feature = "midi")] MidiManagerT: MappedMidiManager,
+    #[cfg(not(feature = "midi"))] MidiManagerT,
+> {
     running: bool,
     idle_tick_rate: u32,
     // ---
@@ -47,9 +71,11 @@ pub(crate) struct MappingEngine<'driver_loop> {
     debug_idle_tick: bool,
     // ---
     cfg: Config,
-    hid_mgr: &'driver_loop HidManager,
+    hid_mgr: &'d HidManagerT,
     #[cfg(feature = "midi")]
-    midi_mgr: MidiManager,
+    midi_mgr: &'d MidiManagerT,
+    #[cfg(not(feature = "midi"))]
+    midi_mgr_placeholder: PhantomData<MidiManagerT>,
     // ---
     //  Mapping router algorithm index and runtime buffer.
     // ---
@@ -58,21 +84,59 @@ pub(crate) struct MappingEngine<'driver_loop> {
         HashMap<(ObjId, MappedCtls), (Vec<ControlMatchers>, Vec<Vec<usize>>)>,
     router_buff_mappings_to_execute: Vec<usize>,
     // ---
-    info_sysdev_to_enabled_mappings: HashMap<ObjId, Vec<usize>>, // NB: this is only used in mappings init routine, but leaving here for potential future use in other places.
-    // ---
     idle_tick_mappings: Vec<usize>,
-    lua: &'driver_loop mlua::Lua,
+    lua: &'d mlua::Lua,
 }
 
-impl<'driver_loop> MappingEngine<'driver_loop> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
+pub(crate) trait Mapper<'d> {
+    type HidManagerT: MappedHidManager;
+    #[cfg(feature = "midi")]
+    type MidiManagerT: MappedMidiManager;
+
+    fn new(
         debug: DebugLevel,
         debug_idle_tick: bool,
         cfg: Config,
-        hid_mgr: &'driver_loop HidManager,
-        lua: &'driver_loop mlua::Lua,
-        #[cfg(feature = "midi")] midi_mgr: MidiManager,
+        hid_mgr: &'d Self::HidManagerT,
+        #[cfg(feature = "midi")] midi_mgr: &'d Self::MidiManagerT,
+        lua: &'d mlua::Lua,
+    ) -> Result<Self>
+    where
+        Self: Sized;
+
+    fn set_cfg(&mut self, cfg: Config);
+    fn set_mappings(&mut self, mappings: &[Mapping]);
+    fn active_mappings_count(&self) -> usize;
+
+    fn get_idle_tick_rate(&self) -> u32;
+    fn set_idle_tick_rate(&mut self, rate: u32);
+
+    fn init(&mut self) -> Result<()>;
+    fn idle_tick_mappings_reset(&mut self);
+
+    async fn run(&mut self);
+    fn stop(&mut self) -> Result<()>;
+}
+
+impl<
+    'd,
+    HidManagerT: MappedHidManager,
+    #[cfg(feature = "midi")] MidiManagerT: MappedMidiManager,
+    #[cfg(not(feature = "midi"))] MidiManagerT,
+> Mapper<'d> for MappingEngine<'d, HidManagerT, MidiManagerT>
+{
+    type HidManagerT = HidManagerT;
+    #[cfg(feature = "midi")]
+    type MidiManagerT = MidiManagerT;
+
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        debug: DebugLevel,
+        debug_idle_tick: bool,
+        cfg: Config,
+        hid_mgr: &'d Self::HidManagerT,
+        #[cfg(feature = "midi")] midi_mgr: &'d Self::MidiManagerT,
+        lua: &'d mlua::Lua,
     ) -> Result<Self> {
         Ok(Self {
             // ---
@@ -86,34 +150,35 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             hid_mgr,
             #[cfg(feature = "midi")]
             midi_mgr,
+            #[cfg(not(feature = "midi"))]
+            midi_mgr_placeholder: PhantomData,
             // ---
             router_index_sysdev_and_ctl_type_to_cms_and_mappings: Default::default(),
             router_buff_mappings_to_execute: Default::default(),
-            info_sysdev_to_enabled_mappings: Default::default(),
             // ---
             idle_tick_mappings: Default::default(),
             lua,
         })
     }
 
-    pub(crate) fn set_cfg(&mut self, cfg: Config) {
+    fn set_cfg(&mut self, cfg: Config) {
         self.cfg = cfg;
     }
 
-    pub(crate) fn set_mappings(&mut self, mappings: &[Mapping]) {
+    fn set_mappings(&mut self, mappings: &[Mapping]) {
         self.cfg.mappings = mappings.to_vec();
     }
 
-    pub(crate) fn get_idle_tick_rate(&self) -> u32 {
+    fn get_idle_tick_rate(&self) -> u32 {
         self.idle_tick_rate
     }
 
-    pub(crate) fn set_idle_tick_rate(&mut self, rate: u32) {
+    fn set_idle_tick_rate(&mut self, rate: u32) {
         self.idle_tick_rate = rate.clamp(crate::config::MIN_BASE_FREQ_HZ, crate::config::MAX_BASE_FREQ_HZ);
         log::info!("Set base (idle tick) update rate to {}", self.idle_tick_rate);
     }
 
-    pub(crate) fn active_mappings_count(&self) -> usize {
+    fn active_mappings_count(&self) -> usize {
         self.cfg.mappings.iter().filter(|m| m.enabled).count()
     }
 
@@ -123,7 +188,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
     // dm: Device matcher.
     // cmk: Control matcher key.
     // cm: Control matcher.
-    pub(crate) fn init(&mut self) -> Result<()> {
+    fn init(&mut self) -> Result<()> {
         info!("Initializing mapping engine router.");
 
         self.idle_tick_mappings_reset();
@@ -131,13 +196,13 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         // ---
         self.router_index_sysdev_and_ctl_type_to_cms_and_mappings.clear();
         self.router_buff_mappings_to_execute.clear();
-        // ---
-        self.info_sysdev_to_enabled_mappings.clear();
 
         // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         let available_hid_devices = self.hid_mgr.enumerate_available_devices(Some(
-            HidDeviceKind::Mouse | HidDeviceKind::Keyboard | HidDeviceKind::Gamepad | HidDeviceKind::Joystick,
+            (DeviceKind::Mouse | DeviceKind::Keyboard | DeviceKind::Gamepad | DeviceKind::Joystick).into(),
         ));
+
+        let mut info_sysdev_to_enabled_mappings: HashMap<ObjId, Vec<usize>> = Default::default();
 
         let mut collect_enabled_mappings_for_dmk_and_cm =
             |dmk: &str, cm_id: ObjId, cm_idx, mappings: &mut Vec<Vec<usize>>, opened_device_id: ObjId| {
@@ -161,7 +226,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                             q.sort();
                             q.dedup();
 
-                            self.info_sysdev_to_enabled_mappings
+                            info_sysdev_to_enabled_mappings
                                 .entry(opened_device_id)
                                 .or_default()
                                 .push(mapping_idx);
@@ -181,18 +246,18 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     // TODO: will go to a reusable routine for reuse in other parts, e.g. in Gui.
                     v.is_enabled()
                         && v.matcher_name_regex_ref()
-                            .map(|r| r.is_match(&available_hid_device_info.name))
-                            .or(v
-                                .virtual_device_name_ref()
-                                .map(|n| crate::hid_device::sanitize_hid_name(n) == available_hid_device_info.name))
+                            .map(|r| r.is_match(&available_hid_device_info.get_name()))
+                            .or(v.virtual_device_name_ref().map(|n| {
+                                crate::hid_device::sanitize_hid_name(n) == available_hid_device_info.get_name()
+                            }))
                             .unwrap_or_default()
                         && v.get_classification()
-                            .intersects(available_hid_device_info.classification)
+                            .intersects(available_hid_device_info.get_classification())
                 })
                 .collect::<Vec<(_, _)>>()
             {
-                let opened_device_info = self.hid_mgr.open(available_hid_device_info.clone(), dmk, dm)?;
-                let opened_device_id = opened_device_info.id;
+                let opened_device_info = self.hid_mgr.open_device(available_hid_device_info, dmk, dm)?;
+                let opened_device_id = opened_device_info.get_opened_device_id();
 
                 for cm in dm.controls.values() {
                     let (cms, mappings) = self
@@ -212,7 +277,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         }
 
         #[cfg(feature = "midi")]
-        let available_midi_devices = self.midi_mgr.enumerate_available_devices();
+        let available_midi_devices = self.midi_mgr.enumerate_available_devices(None);
         #[cfg(feature = "midi")]
         for available_midi_device_info in &available_midi_devices {
             for (dmk, dm) in self
@@ -220,10 +285,13 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                 .devices
                 .midi
                 .iter()
-                .filter(|(_, v)| v.enabled && v.match_name_regex.is_match(&available_midi_device_info.name))
+                .filter(|(_, v)| v.enabled && v.match_name_regex.is_match(&available_midi_device_info.get_name()))
                 .collect::<Vec<(_, _)>>()
             {
-                let opened_device_id = self.midi_mgr.open(&available_midi_device_info.name)?;
+                let opened_device_id = self
+                    .midi_mgr
+                    .open_device(&available_midi_device_info, dmk, dm)?
+                    .get_opened_device_id();
 
                 for cm in dm.controls.values() {
                     let (cms, mappings) = self
@@ -242,7 +310,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             }
         }
 
-        for v in self.info_sysdev_to_enabled_mappings.values_mut() {
+        for v in info_sysdev_to_enabled_mappings.values_mut() {
             v.sort();
             v.dedup();
         }
@@ -250,7 +318,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         info!(
             "Mapping Router built. Mapped source devices: {}",
-            self.info_sysdev_to_enabled_mappings.len()
+            info_sysdev_to_enabled_mappings.len()
         );
 
         if self.debug.is_on() {
@@ -276,7 +344,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         Ok(())
     }
 
-    pub(crate) fn idle_tick_mappings_reset(&mut self) {
+    fn idle_tick_mappings_reset(&mut self) {
         self.idle_tick_mappings.clear();
         self.cfg
             .mappings
@@ -286,7 +354,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
             .for_each(|(idx, _)| self.idle_tick_mappings.push(idx));
     }
 
-    pub(crate) async fn run(&mut self) {
+    async fn run(&mut self) {
         self.running = true;
         let mut ticker = interval(Duration::from_secs_f64(1.0 / self.idle_tick_rate as f64));
         ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
@@ -298,7 +366,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
 
             #[cfg(feature = "midi")]
             select! {
-            Some(midi_msg) = self.midi_mgr.consume_any_opened_device_message()=> self.map_midi_message(midi_msg),
+            Some(midi_msg) = self.midi_mgr.consume_any_opened_device_event()=> self.map_midi_message(midi_msg),
             Some(hid_event) =  self.hid_mgr.consume_any_opened_device_event() => self.map_hid_event(hid_event),
             _ = ticker.tick() => self.process_idle_tick() }
 
@@ -313,13 +381,21 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
         }
     }
 
-    pub(crate) fn stop(&mut self) -> Result<()> {
+    fn stop(&mut self) -> Result<()> {
         self.running = false;
         #[cfg(feature = "midi")]
-        self.midi_mgr.stop()?;
+        self.midi_mgr.stop(true)?;
         Ok(())
     }
+}
 
+impl<
+    'd,
+    HidManagerT: MappedHidManager,
+    #[cfg(feature = "midi")] MidiManagerT: MappedMidiManager,
+    #[cfg(not(feature = "midi"))] MidiManagerT,
+> MappingEngine<'d, HidManagerT, MidiManagerT>
+{
     fn set_idle_tick_enabled_on_device_control_for_mapping(&self, mapping: &Mapping) {
         if let Some(flag) = mapping.dst.get_idle_tick_enabled_flag()
             && let Ok(prev) = flag.compare_exchange(
@@ -377,11 +453,11 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
 
     fn map_hid_event(
         &mut self,
-        event: MappedDeviceEvent, /* TODO: API! provide device_id within MappedHidEvent and simplify */
+        event: DeviceEvent, /* TODO: API! provide device_id within MappedHidEvent and simplify */
     ) {
-        if let MappedDeviceEvent {
+        if let DeviceEvent {
             device_id,
-            event: MappedEvents::Hid(MappedHidEvent { control_type, value }),
+            event: DeviceEvents::Hid(HidEvent { control_type, value }),
         } = event
             && let Some((cms, mappings)) = self
                 .router_index_sysdev_and_ctl_type_to_cms_and_mappings
@@ -525,10 +601,12 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
                     ControlMatchers::Midi(_) => {
                         log::warn!("Only supporting variables and owned virtual joysticks as destinations.")
                     }
-                    ControlMatchers::Hid(_) => {
-                        self.hid_mgr
-                            .set_control_value(&d.device_matcher_key, &d.control_key, val, !debug.is_on())
-                    }
+                    ControlMatchers::Hid(_) => self.hid_mgr.set_control_matcher_and_broadcast(
+                        &d.device_matcher_key,
+                        &d.control_key,
+                        val,
+                        !debug.is_on(),
+                    ),
                 }
             }
             DynValueRefs::Variable(v) => v.variable.value.store(v.variable.interval.clamp(val), Relaxed),
@@ -536,8 +614,14 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
     }
 }
 
-pub(crate) struct MappingTfmExecCtx<'m, 'driver_loop> {
-    mapping_engine: &'m MappingEngine<'driver_loop>,
+pub(crate) struct MappingTfmExecCtx<
+    'm,
+    'd,
+    HidManagerT: MappedHidManager,
+    #[cfg(feature = "midi")] MidiManagerT: MappedMidiManager,
+    #[cfg(not(feature = "midi"))] MidiManagerT,
+> {
+    mapping_engine: &'m MappingEngine<'d, HidManagerT, MidiManagerT>,
     #[allow(unused)]
     current_mapping_src: &'m ValueSrcs,
     current_mapping_dst: &'m ValueDsts,
@@ -545,7 +629,16 @@ pub(crate) struct MappingTfmExecCtx<'m, 'driver_loop> {
     lua: &'m mlua::Lua,
 }
 
-impl<'m, 'driver_loop> TfmExecCtx for MappingTfmExecCtx<'m, 'driver_loop> {
+impl<
+    'm,
+    'd,
+    HidManagerT: MappedHidManager,
+    #[cfg(feature = "midi")] MidiManagerT: MappedMidiManager,
+    #[cfg(not(feature = "midi"))] MidiManagerT,
+> TfmExecCtx for MappingTfmExecCtx<'m, 'd, HidManagerT, MidiManagerT>
+where
+    HidManagerT: MappedHidManager,
+{
     fn get_main_dst(&self) -> &ValueDsts {
         self.current_mapping_dst
     }

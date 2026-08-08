@@ -1,7 +1,7 @@
 use crate::{
     base_num::{BaseAtomicT, BaseNumT},
+    device_and_device_manager::{DeviceClassification, WithDeviceClassification},
     hid_device::HID_AXIS_MAX_INTERVAL,
-    hid_manager::{HidDeviceClassification, WithDeviceClassification},
     mapped_controls::MappedCtls,
     num_interval::NumInterval,
     schemas_common::{
@@ -124,7 +124,7 @@ impl Default for HidVirtualOrMatcherParamsCfg {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub(crate) struct HidDeviceClassificationCfg(pub(crate) HidDeviceClassification);
+pub(crate) struct HidDeviceClassificationCfg(pub(crate) DeviceClassification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TraversableMut, Traversable, JsonSchema, Default, PartialEq)]
 // NB/TODO?: this will not work along with variable params__ deserialization... find out, why #[serde(deny_unknown_fields)]
