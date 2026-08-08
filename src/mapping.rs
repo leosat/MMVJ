@@ -506,7 +506,7 @@ impl<'driver_loop> MappingEngine<'driver_loop> {
 
         let dst_interval = mapping.dst.get_interval();
         if vd.interval != dst_interval {
-            vd.value = dst_interval.map_from(vd.value, &vd.interval, OutOfRangePolicy::WarnAndClamp);
+            vd.value = dst_interval.map_from(vd.value, &vd.interval, OutOfRangePolicy::WarnIfDebugAndClamp);
         }
 
         vd.value
