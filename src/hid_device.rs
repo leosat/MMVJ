@@ -49,9 +49,11 @@ use tokio::sync::mpsc::unbounded_channel;
 use tokio_util::future::FutureExt;
 use tokio_util::sync::CancellationToken;
 
+pub(crate) type HidDeviceEvent = DeviceEvent<HidEvent>;
+
 #[derive(Debug)]
 pub(crate) enum DeviceThreadCmd {
-    SetExternalNotification(tokio::sync::mpsc::UnboundedSender<DeviceEvent<HidEvent>>),
+    SetExternalNotification(tokio::sync::mpsc::UnboundedSender<HidDeviceEvent>),
     SetControlValue(MappedCtls, BaseNumT),
 }
 
@@ -197,7 +199,7 @@ pub(crate) struct HidDevice {
     name: String,
     _client_side_path: PathBuf,
     client_side_thread_rx_tx: DeviceComm,
-    events_listener: Option<tokio::sync::mpsc::UnboundedSender<DeviceEvent<HidEvent>>>,
+    events_listener: Option<tokio::sync::mpsc::UnboundedSender<HidDeviceEvent>>,
     client_side_thread_cancellation: CancellationToken,
     ctl_states: Arc<DeviceControlStates>,
     is_owned_virtual_device_persistent: bool,
@@ -534,7 +536,7 @@ impl HidDevice {
         opened_device_id: ObjId,
         event: evdev::InputEvent,
         debug: DebugLevel,
-    ) -> Option<DeviceEvent<HidEvent>> {
+    ) -> Option<HidDeviceEvent> {
         let control_type = crate::mapped_controls::MappedCtls::from(event);
         if control_type.is_unhandled() {
             if debug.is_on() && event.event_type() != evdev::EventType::SYNCHRONIZATION {
@@ -563,7 +565,7 @@ impl HidDevice {
         mut app_comm: DeviceComm,
         debug: DebugLevel,
     ) {
-        let mut external_notification_tx: Option<tokio::sync::mpsc::UnboundedSender<DeviceEvent<HidEvent>>> = None;
+        let mut external_notification_tx: Option<tokio::sync::mpsc::UnboundedSender<HidDeviceEvent>> = None;
 
         // NB: acquiring here so that AsyncFd would associate with current runtime.
         let mut platform_device_stream = platform_device.into_event_stream().unwrap();
@@ -703,7 +705,7 @@ fn test_virtual_joystick_internal(with_ff: bool) {
     )
     .unwrap();
 
-    let (notification_tx, mut notification_rx) = unbounded_channel::<DeviceEvent<HidEvent>>();
+    let (notification_tx, mut notification_rx) = unbounded_channel::<HidDeviceEvent>();
 
     vjk.attach_events_listener(Some(notification_tx));
 
@@ -877,7 +879,7 @@ impl Drop for HidDevice {
 }
 
 impl Device for HidDevice {
-    type EventsListener = tokio::sync::mpsc::UnboundedSender<DeviceEvent<HidEvent>>;
+    type EventsListener = tokio::sync::mpsc::UnboundedSender<HidDeviceEvent>;
 
     fn close(&self) -> anyhow::Result<()> {
         self.client_side_thread_cancellation.cancel();
@@ -893,7 +895,7 @@ impl Device for HidDevice {
         self.id
     }
 
-    fn attach_events_listener(&mut self, listener: Option<tokio::sync::mpsc::UnboundedSender<DeviceEvent<HidEvent>>>) {
+    fn attach_events_listener(&mut self, listener: Option<tokio::sync::mpsc::UnboundedSender<HidDeviceEvent>>) {
         if let Some(listener) = &listener {
             self.client_side_thread_rx_tx
                 .1

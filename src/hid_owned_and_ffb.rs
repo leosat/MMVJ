@@ -10,7 +10,8 @@ use crate::base_num::BaseNumT;
 use crate::device_and_device_manager::DeviceEvent;
 use crate::filters::OneEuroFilter;
 use crate::hid_device::{
-    DeviceControlStates, DeviceThreadCmd, OwnedVirtualHIDDeviceThreadIO, set_hid_control_virtual_owned_device,
+    DeviceControlStates, DeviceThreadCmd, HidDeviceEvent, OwnedVirtualHIDDeviceThreadIO,
+    set_hid_control_virtual_owned_device,
 };
 use crate::hid_device::{HID_AXIS_MAX_INTERVAL, HidEvent};
 use crate::num_interval::{NumInterval, from_type_interval_to_symm_unit_clamping, from_type_interval_to_unit_clamping};
@@ -457,7 +458,7 @@ pub(crate) async fn owned_hid_device_thread(
     // NB: acquiring here so that AsyncFd would associate with current runtime.
     let mut platform_device_stream = platform_device.into_event_stream().unwrap();
 
-    let mut external_notification_tx: Option<tokio::sync::mpsc::UnboundedSender<DeviceEvent<HidEvent>>> = None;
+    let mut external_notification_tx: Option<tokio::sync::mpsc::UnboundedSender<HidDeviceEvent>> = None;
     let mut uploaded_effects_buffer: Vec<Option<FfEffect>> = Vec::new();
     uploaded_effects_buffer.resize_with(max_effects, || None);
     let mut played_effects = PlayedEffects::new();
