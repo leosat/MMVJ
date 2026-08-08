@@ -3,7 +3,6 @@ use crate::base_num::BaseNumT;
 use crate::debug::DebugLevel;
 use crate::device_and_device_manager::Device;
 use crate::device_and_device_manager::DeviceEvent;
-use crate::device_and_device_manager::DeviceEvents;
 use crate::device_and_device_manager::DeviceKind;
 use crate::device_and_device_manager::WithDeviceClassification;
 use crate::hid_owned_and_ffb::X_AXIS_IDX;
@@ -52,7 +51,7 @@ use tokio_util::sync::CancellationToken;
 
 #[derive(Debug)]
 pub(crate) enum DeviceThreadCmd {
-    SetExternalNotification(tokio::sync::mpsc::UnboundedSender<DeviceEvent>),
+    SetExternalNotification(tokio::sync::mpsc::UnboundedSender<DeviceEvent<HidEvent>>),
     SetControlValue(MappedCtls, BaseNumT),
 }
 
@@ -198,7 +197,7 @@ pub(crate) struct HidDevice {
     name: String,
     _client_side_path: PathBuf,
     client_side_thread_rx_tx: DeviceComm,
-    events_listener: Option<tokio::sync::mpsc::UnboundedSender<DeviceEvent>>,
+    events_listener: Option<tokio::sync::mpsc::UnboundedSender<DeviceEvent<HidEvent>>>,
     client_side_thread_cancellation: CancellationToken,
     ctl_states: Arc<DeviceControlStates>,
     is_owned_virtual_device_persistent: bool,
@@ -535,7 +534,7 @@ impl HidDevice {
         opened_device_id: ObjId,
         event: evdev::InputEvent,
         debug: DebugLevel,
-    ) -> Option<DeviceEvent> {
+    ) -> Option<DeviceEvent<HidEvent>> {
         let control_type = crate::mapped_controls::MappedCtls::from(event);
         if control_type.is_unhandled() {
             if debug.is_on() && event.event_type() != evdev::EventType::SYNCHRONIZATION {
@@ -545,10 +544,10 @@ impl HidDevice {
         } else {
             DeviceEvent {
                 device_id: opened_device_id,
-                event: crate::device_and_device_manager::DeviceEvents::Hid(HidEvent {
+                data: HidEvent {
                     control_type,
                     value: event.value() as BaseNumT,
-                }),
+                },
             }
             .into()
         }
@@ -564,7 +563,7 @@ impl HidDevice {
         mut app_comm: DeviceComm,
         debug: DebugLevel,
     ) {
-        let mut external_notification_tx = None;
+        let mut external_notification_tx: Option<tokio::sync::mpsc::UnboundedSender<DeviceEvent<HidEvent>>> = None;
 
         // NB: acquiring here so that AsyncFd would associate with current runtime.
         let mut platform_device_stream = platform_device.into_event_stream().unwrap();
@@ -586,7 +585,7 @@ impl HidDevice {
                         Self::evdev_event_to_hid_device_event(device_name, opened_device_id, evdev_event, debug);
                     if let Some(DeviceEvent {
                         device_id: _,
-                        event: DeviceEvents::Hid(HidEvent { control_type, value }),
+                        data: HidEvent { control_type, value },
                     }) = event
                     {
                         ctl_states[control_type as usize].store(value, std::sync::atomic::Ordering::Relaxed);
@@ -704,7 +703,7 @@ fn test_virtual_joystick_internal(with_ff: bool) {
     )
     .unwrap();
 
-    let (notification_tx, mut notification_rx) = unbounded_channel::<DeviceEvent>();
+    let (notification_tx, mut notification_rx) = unbounded_channel::<DeviceEvent<HidEvent>>();
 
     vjk.attach_events_listener(Some(notification_tx));
 
@@ -878,7 +877,7 @@ impl Drop for HidDevice {
 }
 
 impl Device for HidDevice {
-    type EventsListener = tokio::sync::mpsc::UnboundedSender<DeviceEvent>;
+    type EventsListener = tokio::sync::mpsc::UnboundedSender<DeviceEvent<HidEvent>>;
 
     fn close(&self) -> anyhow::Result<()> {
         self.client_side_thread_cancellation.cancel();
@@ -894,7 +893,7 @@ impl Device for HidDevice {
         self.id
     }
 
-    fn attach_events_listener(&mut self, listener: Option<tokio::sync::mpsc::UnboundedSender<DeviceEvent>>) {
+    fn attach_events_listener(&mut self, listener: Option<tokio::sync::mpsc::UnboundedSender<DeviceEvent<HidEvent>>>) {
         if let Some(listener) = &listener {
             self.client_side_thread_rx_tx
                 .1

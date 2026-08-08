@@ -5,9 +5,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::base_num::BaseNumT;
-use crate::hid_device::HidEvent;
-#[cfg(feature = "midi")]
-use crate::midi::MappedMidiMessage;
+
 use crate::num_interval::NumInterval;
 use crate::schemas_common::ObjId;
 use std::path::Path;
@@ -145,16 +143,9 @@ pub(crate) trait DeviceManagerWithFfb {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum DeviceEvents {
-    Hid(HidEvent),
-    #[cfg(feature = "midi")]
-    _Midi(MappedMidiMessage),
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct DeviceEvent {
+pub(crate) struct DeviceEvent<T> {
     pub(crate) device_id: ObjId,
-    pub(crate) event: DeviceEvents,
+    pub(crate) data: T,
 }
 
 pub(crate) trait Device {

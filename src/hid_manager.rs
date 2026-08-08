@@ -3,12 +3,11 @@ use crate::interner::get_interned_str;
 
 use crate::debug::DebugLevel;
 use crate::device_and_device_manager::{
-    AvailableDeviceInfoIface, Device, DeviceClassification, DeviceEvent, DeviceEvents, DeviceKind, DeviceManagerCommon,
+    AvailableDeviceInfoIface, Device, DeviceClassification, DeviceEvent, DeviceKind, DeviceManagerCommon,
     DeviceManagerWithFfb, OpenedDeviceInfo, OpenedDeviceInfoIface, WithDeviceClassification,
 };
-use crate::hid_device::{HidDevice, HidVirtualDeviceCreationSpec};
+use crate::hid_device::{HidDevice, HidEvent, HidVirtualDeviceCreationSpec};
 use crate::hid_owned_and_ffb::{X_AXIS_IDX, Y_AXIS_IDX};
-use crate::mapping::MappedHidManager;
 use crate::num_interval::{NumInterval, OutOfRangePolicy};
 use crate::schemas_common::ObjId;
 use crate::schemas_hid::{HidDeviceCfg, HidDeviceClassificationCfg, HidVirtualOrMatcherParamsCfg};
@@ -38,8 +37,8 @@ pub(crate) struct HidManager {
     debug_ff: bool,
     #[allow(clippy::type_complexity)]
     device_key_to_devices: UncheckedRefCell<HashMap<String, Vec<(Rc<UncheckedRefCell<HidDevice>>, HidDeviceCfg)>>>,
-    per_device_event_notification_tx: tokio::sync::mpsc::UnboundedSender<DeviceEvent>,
-    all_devices_rx: UncheckedRefCell<tokio::sync::mpsc::UnboundedReceiver<DeviceEvent>>,
+    per_device_event_notification_tx: tokio::sync::mpsc::UnboundedSender<DeviceEvent<HidEvent>>,
+    all_devices_rx: UncheckedRefCell<tokio::sync::mpsc::UnboundedReceiver<DeviceEvent<HidEvent>>>,
 }
 
 impl HidManager {
@@ -95,7 +94,7 @@ impl HidManager {
     }
 
     pub(crate) fn new(debug: DebugLevel, debug_ff: bool) -> Result<Self> {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<DeviceEvent>();
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<DeviceEvent<HidEvent>>();
         Ok(Self {
             debug,
             debug_ff,
@@ -395,7 +394,7 @@ impl DeviceManagerCommon for HidManager {
     type AvailableDeviceInfoT = AvailableHIDDeviceInfo;
     type DeviceCfgT = HidDeviceCfg;
     type DeviceKindFilterT = BitFlags<DeviceKind>;
-    type DeviceEventT = DeviceEvent;
+    type DeviceEventT = DeviceEvent<HidEvent>;
     type EventsListenerT = tokio::sync::mpsc::UnboundedSender<Self::DeviceEventT>;
     type OpenedDeviceInfoT = OpenedDeviceInfo<Self::AvailableDeviceInfoT>;
     fn open_device(
@@ -554,7 +553,7 @@ impl DeviceManagerCommon for HidManager {
         loop {
             if let Some(DeviceEvent {
                 device_id,
-                event: DeviceEvents::Hid(control_state),
+                data: control_state,
             }) = self.consume_any_opened_device_event().await
             {
                 log::info!(

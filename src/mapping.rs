@@ -6,7 +6,7 @@ use crate::debug::DebugLevel;
 use crate::debug::get_debug_level;
 use crate::device_and_device_manager::WithDeviceClassification;
 use crate::device_and_device_manager::{
-    AvailableDeviceInfoIface, DeviceEvent, DeviceEvents, DeviceManagerCommon, DeviceManagerWithFfb,
+    AvailableDeviceInfoIface, DeviceEvent, DeviceManagerCommon, DeviceManagerWithFfb,
 };
 use crate::device_and_device_manager::{DeviceKind, OpenedDeviceInfoIface};
 use crate::mapped_controls::MappedCtls;
@@ -48,7 +48,7 @@ pub(crate) enum MappingEngineCmd {
 }
 
 pub(crate) trait MappedHidManager:
-    DeviceManagerCommon<DeviceCfgT = HidDeviceCfg, DeviceEventT = DeviceEvent> + DeviceManagerWithFfb
+    DeviceManagerCommon<DeviceCfgT = HidDeviceCfg, DeviceEventT = DeviceEvent<HidEvent>> + DeviceManagerWithFfb
 {
 }
 
@@ -451,23 +451,16 @@ impl<
         }
     }
 
-    fn map_hid_event(
-        &mut self,
-        event: DeviceEvent, /* TODO: API! provide device_id within MappedHidEvent and simplify */
-    ) {
-        if let DeviceEvent {
-            device_id,
-            event: DeviceEvents::Hid(HidEvent { control_type, value }),
-        } = event
-            && let Some((cms, mappings)) = self
-                .router_index_sysdev_and_ctl_type_to_cms_and_mappings
-                .get(&(device_id, control_type))
+    fn map_hid_event(&mut self, event: DeviceEvent<HidEvent>) {
+        if let Some((cms, mappings)) = self
+            .router_index_sysdev_and_ctl_type_to_cms_and_mappings
+            .get(&(event.device_id, event.data.control_type))
         {
             cms.iter().enumerate().for_each(|(cm_idx, cm)| {
-                cm.set_last_known_io(value);
+                cm.set_last_known_io(event.data.value);
                 cm.set_numeric_value(
-                    value, /* NB/TODO: for Rel controls in proposed "stable mode": value + cm.get_numeric_value())
-                          and safe ptr to the control to zero-out after mappings run complete*/
+                    event.data.value, /* NB/TODO: for Rel controls in proposed "stable mode": value + cm.get_numeric_value())
+                                      and safe ptr to the control to zero-out after mappings run complete*/
                 );
                 if !mappings.is_empty() {
                     self.router_buff_mappings_to_execute.extend(&mappings[cm_idx]);
@@ -477,10 +470,10 @@ impl<
             let dedup = cms.len() > 1;
             let shuffle = self.router_buff_mappings_to_execute.len() > 1;
             Self::dedup_and_shuffle(&mut self.router_buff_mappings_to_execute, dedup, shuffle);
-            self.run_input_triggered_mappings(device_id);
+            self.run_input_triggered_mappings(event.device_id);
             self.router_buff_mappings_to_execute.clear();
 
-            if control_type.is_relative() {
+            if event.data.control_type.is_relative() {
                 cms.iter().for_each(|cm| cm.set_numeric_value(0.0));
             }
         }
