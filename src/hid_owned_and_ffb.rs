@@ -7,7 +7,7 @@ use tokio_util::future::FutureExt;
 use crate::num_interval::SYMM_UNIT_INTERVAL;
 
 use crate::base_num::BaseNumT;
-use crate::device_and_device_manager::{DeviceEvent, DeviceEvents};
+use crate::device_and_device_manager::DeviceEvent;
 use crate::filters::OneEuroFilter;
 use crate::hid_device::{
     DeviceControlStates, DeviceThreadCmd, OwnedVirtualHIDDeviceThreadIO, set_hid_control_virtual_owned_device,
@@ -457,7 +457,7 @@ pub(crate) async fn owned_hid_device_thread(
     // NB: acquiring here so that AsyncFd would associate with current runtime.
     let mut platform_device_stream = platform_device.into_event_stream().unwrap();
 
-    let mut external_notification_tx: Option<tokio::sync::mpsc::UnboundedSender<DeviceEvent>> = None;
+    let mut external_notification_tx: Option<tokio::sync::mpsc::UnboundedSender<DeviceEvent<HidEvent>>> = None;
     let mut uploaded_effects_buffer: Vec<Option<FfEffect>> = Vec::new();
     uploaded_effects_buffer.resize_with(max_effects, || None);
     let mut played_effects = PlayedEffects::new();
@@ -504,7 +504,7 @@ pub(crate) async fn owned_hid_device_thread(
                     {
                         let _ = tx.send(DeviceEvent {
                             device_id: virtual_device_id,
-                            event: DeviceEvents::Hid(HidEvent {
+                            data: HidEvent {
                                 control_type: if axis_idx == X_AXIS_IDX {
                                     crate::mapped_controls::MappedCtls::ForceFeedbackX
                                 } else {
@@ -515,7 +515,7 @@ pub(crate) async fn owned_hid_device_thread(
                                     &SYMM_UNIT_INTERVAL,
                                     crate::num_interval::OutOfRangePolicy::WarnIfDebugAndClamp,
                                 ),
-                            }),
+                            },
                         });
                     }
                     // --------------------------
