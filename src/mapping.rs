@@ -629,8 +629,6 @@ impl<
     #[cfg(feature = "midi")] MidiManagerT: MappedMidiManager,
     #[cfg(not(feature = "midi"))] MidiManagerT,
 > TfmExecCtx for MappingTfmExecCtx<'m, 'd, HidManagerT, MidiManagerT>
-where
-    HidManagerT: MappedHidManager,
 {
     fn get_main_dst(&self) -> &ValueDsts {
         self.current_mapping_dst
