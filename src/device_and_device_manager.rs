@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::base_num::BaseNumT;
 use crate::hid_device::HidEvent;
-use crate::mapped_controls::MappedCtls;
 #[cfg(feature = "midi")]
 use crate::midi::MappedMidiMessage;
 use crate::num_interval::NumInterval;

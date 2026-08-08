@@ -1,0 +1,223 @@
+midi_controls:
+  FILTER_RESPONSE:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 71
+    range: [0, 127]
+    description: "Filter response (CC71)"
+
+  RELEASE_TIME:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 72
+    range: [0, 127]
+    description: "Release time (CC72)"
+
+  ATTACK_TIME:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 73
+    range: [0, 127]
+    description: "Attack time (CC73)"
+
+  FILTER_CUTOFF:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 74
+    range: [0, 127]
+    description: "Filter cutoff (CC74)"
+
+  DECAY_TIME:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 75
+    range: [0, 127]
+    description: "Decay time (CC75)"
+    
+  SUSTAIN_PEDAL:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 64
+    range: [0, 127]
+    description: "Sustain pedal (CC64)"
+
+  PORTAMENTO_PEDAL:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 65
+    range: [0, 127]
+    description: "Portamento (CC65)"
+
+  SUSTENUDO_PEDAL:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 66
+    range: [0, 127]
+    description: "Sostenudo (CC66)"
+
+  SOFT_PEDAL:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 67
+    range: [0, 127]
+    description: "Soft (CC67)"
+
+  BREATH:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 2
+    range: [0, 127]
+    description: "Breath Controller (CC2)"
+
+  PITCH_WHEEL:
+    midi_message:
+      type: pitch_wheel
+      channel: any
+    range: [-8192, 8191]
+    description: "Pitch bend wheel"
+
+  MODULATION_WHEEL:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 1
+    range: [0, 127]
+    description: "Modulation wheel (CC1)"
+
+  EXPRESSION_PEDAL:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 11
+    range: [0, 127]
+    description: "Expression pedal (CC11)"
+
+  VOLUME:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 7
+    range: [0, 127]
+    description: "Main volume (CC7)"
+
+  PAN:
+    midi_message:
+      type: control_change
+      channel: any
+      number: 10
+    range: [0, 127]
+    description: "Pan position (CC10)"
+
+  AFTERTOUCH:
+    midi_message:
+      type: aftertouch
+      channel: any
+    range: [0, 127]
+    description: "Channel aftertouch"
+
+  # Note definitions - all chromatic notes (all octaves)
+  NOTE_C:
+    midi_message:
+      type: note
+      channel: any
+      number: [0, 12, 24, 36, 48, 60, 72, 84, 96, 108, 120]
+    range: [0, 127]
+    description: "Note C (all octaves)"
+
+  NOTE_C#:
+    midi_message:
+      type: note
+      channel: any
+      number: [1, 13, 25, 37, 49, 61, 73, 85, 97, 109, 121]
+    range: [0, 127]
+    description: "Note C# (all octaves)"
+
+  NOTE_D:
+    midi_message:
+      type: note
+      channel: any
+      number: [2, 14, 26, 38, 50, 62, 74, 86, 98, 110, 122]
+    range: [0, 127]
+    description: "Note D (all octaves)"
+
+  NOTE_D#:
+    midi_message:
+      type: note
+      channel: any
+      number: [3, 15, 27, 39, 51, 63, 75, 87, 99, 111, 123]
+    range: [0, 127]
+    description: "Note D# (all octaves)"
+
+  NOTE_E:
+    midi_message:
+      type: note
+      channel: any
+      number: [4, 16, 28, 40, 52, 64, 76, 88, 100, 112, 124]
+    range: [0, 127]
+    description: "Note E (all octaves)"
+
+  NOTE_F:
+    midi_message:
+      type: note
+      channel: any
+      number: [5, 17, 29, 41, 53, 65, 77, 89, 101, 113, 125]
+    range: [0, 127]
+    description: "Note F (all octaves)"
+
+  NOTE_F#:
+    midi_message:
+      type: note
+      channel: any
+      number: [6, 18, 30, 42, 54, 66, 78, 90, 102, 114, 126]
+    range: [0, 127]
+    description: "Note F# (all octaves)"
+
+  NOTE_G:
+    midi_message:
+      type: note
+      channel: any
+      number: [7, 19, 31, 43, 55, 67, 79, 91, 103, 115, 127]
+    range: [0, 127]
+    description: "Note G (all octaves)"
+
+  NOTE_G#:
+    midi_message:
+      type: note
+      channel: any
+      number: [8, 20, 32, 44, 56, 68, 80, 92, 104, 116]
+    range: [0, 127]
+    description: "Note G# (all octaves)"
+
+  NOTE_A:
+    midi_message:
+      type: note
+      channel: any
+      number: [9, 21, 33, 45, 57, 69, 81, 93, 105, 117]
+    range: [0, 127]
+    description: "Note A (all octaves)"
+
+  NOTE_A#:
+    midi_message:
+      type: note
+      channel: any
+      number: [10, 22, 34, 46, 58, 70, 82, 94, 106, 118]
+    range: [0, 127]
+    description: "Note A# (all octaves)"
+
+  NOTE_B:
+    midi_message:
+      type: note
+      channel: any
+      number: [11, 23, 35, 47, 59, 71, 83, 95, 107, 119]
+    range: [0, 127]
+    description: "Note B (all octaves)"
