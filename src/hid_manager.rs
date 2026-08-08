@@ -395,7 +395,6 @@ impl DeviceManagerCommon for HidManager {
     type DeviceCfgT = HidDeviceCfg;
     type DeviceKindFilterT = BitFlags<DeviceKind>;
     type DeviceEventT = HidDeviceEvent;
-    type EventsListenerT = tokio::sync::mpsc::UnboundedSender<Self::DeviceEventT>;
     type OpenedDeviceInfoT = OpenedDeviceInfo<Self::AvailableDeviceInfoT>;
     fn open_device(
         &self,

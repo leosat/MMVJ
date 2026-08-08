@@ -451,7 +451,6 @@ impl DeviceManagerCommon for MidiManager {
     type DeviceCfgT = MidiMatcherCfg;
     type DeviceKindFilterT = BitFlags<DeviceKind>;
     type DeviceEventT = MidiDeviceEvent;
-    type EventsListenerT = tokio::sync::mpsc::UnboundedSender<Self::DeviceEventT>;
     type OpenedDeviceInfoT = OpenedDeviceInfo<Self::AvailableDeviceInfoT>;
 
     fn open_device(

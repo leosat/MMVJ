@@ -108,7 +108,6 @@ pub(crate) trait DeviceManagerCommon {
     type DeviceCfgT;
     type DeviceKindFilterT: From<enumflags2::BitFlags<DeviceKind, u8>>;
     type DeviceEventT;
-    type EventsListenerT;
     type OpenedDeviceInfoT: OpenedDeviceInfoIface;
     fn open_device(
         &self,
