@@ -24,6 +24,7 @@ use crate::tracing::GraphDisplayStyle;
 #[cfg(feature = "gui")]
 use eframe::egui::Color32;
 use log::debug;
+use mlua::ErrorContext;
 use mlua::{FromLua, Lua};
 use std::ops::Add;
 use std::sync::atomic::Ordering::Relaxed;
@@ -483,25 +484,52 @@ impl TfmExeState for ScriptCfg {
             exe_state.compiled = lua
                 .load(&self.script)
                 .into_function()
-                .inspect_err(|e| log::error!("{e}"))
+                .inspect_err(|e| log::error!("Failed to compile lua script. Error was:\n {e}"))
                 .unwrap_or(lua.load("").into_function().unwrap());
         };
-        if recompile_only && let Some(exe_state) = self.exe_state_mut() {
-            log::info!("Compiling Luau script!");
-            let env = exe_state.compiled.environment().unwrap();
-            script_compile(exe_state);
-            exe_state.compiled.set_environment(env).unwrap();
-        } else {
-            log::info!("Initializing Luau script exe state!");
-            let mut exe_state = ScriptExeState::new(lua);
-            script_compile(&mut exe_state);
-            let env = lua.create_table().unwrap();
-            let meta = lua.create_table().unwrap();
-            meta.set("__index", lua.globals()).unwrap();
-            env.set_metatable(meta.into()).unwrap();
-            exe_state.compiled.set_environment(env.clone()).unwrap();
-            *self.exe_state.get_mut() = Some(exe_state);
-        }
+
+        || -> mlua::Result<()> {
+            if recompile_only && let Some(exe_state) = self.exe_state_mut() {
+                log::info!("Re-compiling lua script!");
+                let env = exe_state
+                    .compiled
+                    .environment()
+                    .ok_or_else(|| mlua::Error::RuntimeError("Can't get script environment".into()))?;
+                script_compile(exe_state);
+                exe_state
+                    .compiled
+                    .set_environment(env)
+                    .context("Can't set script environment")?;
+            } else {
+                log::info!("Initializing lua script exe state!");
+                let mut exe_state = ScriptExeState::new(lua);
+                script_compile(&mut exe_state);
+                let env = lua
+                    .create_table()
+                    .context("Can't create environment table {err_suffix}.")?;
+                let meta = lua
+                    .create_table()
+                    .context("Can't create environment metatable {err_suffix}.")?;
+                meta.set("__index", lua.globals())
+                    .context("Can't set environment metadata {err_suffix}.")?;
+                env.set_metatable(meta.into())
+                    .context("Can't set environment metatable {err_suffix}.")?;
+                exe_state
+                    .compiled
+                    .set_environment(env.clone())
+                    .context("Can't set environment.")?;
+                *self.exe_state.get_mut() = Some(exe_state);
+            }
+            Ok(())
+        }()
+        .with_context(|_| {
+            if recompile_only {
+                "while recompiling lua script"
+            } else {
+                "while creating the new lua script exe state"
+            }
+        })
+        .expect("Lua script exe state creation failed");
     }
 }
 
@@ -552,6 +580,7 @@ impl WithTfmExec for ScriptCfg {
                 let exe_state = self
                     .exe_state_mut()
                     .or_else(|| {
+                        branches::mark_unlikely();
                         self.exe_state_reset((ctx.get_lua(), false));
                         self.exe_state_mut()
                     })
@@ -562,6 +591,11 @@ impl WithTfmExec for ScriptCfg {
                     self.exe_state_reset((ctx.get_lua(), true));
                     exe_state.edit_epoch = self.edit_epoch;
                 }
+
+                let env = exe_state.compiled.environment().expect(
+                    // NB: we can do a recovery with supplied Lua instance here, but generally, it must not happen, hence leaving as hard error.
+                    "Can't get lua script environment! Execution context references other Lua instance?",
+                );
 
                 #[derive(Clone)]
                 enum SrcOrDstKey {
@@ -684,8 +718,6 @@ impl WithTfmExec for ScriptCfg {
                 if NAIVE_BENCH {
                     stats_post_closure_setup = (Instant::now() - now).as_secs_f64();
                 }
-
-                let env = exe_state.compiled.environment().unwrap();
 
                 let _ = ctx.get_lua().scope(|s| {
                     if NAIVE_BENCH {
