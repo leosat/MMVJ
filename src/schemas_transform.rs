@@ -1,7 +1,6 @@
 use crate::base_num::{BaseAtomicT, BaseNumT};
 use crate::config::WithSanitize;
 use crate::filters::OneEuroFilter;
-use crate::num_interval::MAX_SPAN_POSITIVE_INTERVAL;
 use crate::relativity::Relativity;
 use crate::schemas_value::{DescriptionCfg, InputValueMetadata, WithDescriptionMut, make_static_value_src};
 use crate::schemas_value::{
@@ -51,15 +50,15 @@ const fn default_ff_gain() -> BaseNumT {
 }
 
 const fn default_1euro_beta() -> ValueSrcs {
-    make_static_value_src(0.007, MAX_SPAN_POSITIVE_INTERVAL)
+    make_static_value_src(0.007, UNIT_INTERVAL)
 }
 
 const fn default_1euro_d_cutoff_hz() -> ValueSrcs {
-    make_static_value_src(1.0, MAX_SPAN_POSITIVE_INTERVAL)
+    make_static_value_src(1.0, UNIT_INTERVAL)
 }
 
 const fn default_1euro_min_cutoff_hz() -> ValueSrcs {
-    make_static_value_src(1.0, MAX_SPAN_POSITIVE_INTERVAL)
+    make_static_value_src(1.0, UNIT_INTERVAL)
 }
 
 const fn default_clamp_transform_override_interval() -> bool {
@@ -93,10 +92,10 @@ pub(crate) const fn default_norm_exp_base() -> BaseNumT {
 const fn default_ema_tau() -> ValueSrcs {
     let src = ValueSrcs::Static(StaticValueCfg {
         value: std::cell::Cell::new(0.04),
-        interval: NumInterval {
+        interval: AutoOrManual::Auto(NumInterval {
             from: 1.0e-6,
             to: 100.0,
-        },
+        }),
     });
     // InputPort {
     //     src,
@@ -1375,14 +1374,57 @@ pub(crate) enum AutoOrManual<T: Default> {
     Auto(T),
 }
 
+impl<T: Default> From<T> for AutoOrManual<T> {
+    fn from(value: T) -> Self {
+        Self::Auto(value)
+    }
+}
+
 impl<T: Copy + Default> Copy for AutoOrManual<T> {}
 
 impl<T: Default> AutoOrManual<T> {
+    #[allow(unused)]
+    pub fn inner_ref(&self) -> &T {
+        match self {
+            Self::Manual(m) => m,
+            Self::Auto(a) => a,
+        }
+    }
+
+    #[allow(unused)]
+    pub fn inner_mut(&mut self) -> &mut T {
+        match self {
+            Self::Manual(m) => m,
+            Self::Auto(a) => a,
+        }
+    }
+
+    #[allow(unused)]
+    pub fn to_auto(self) -> AutoOrManual<T> {
+        match self {
+            Self::Manual(m) => Self::Auto(m),
+            Self::Auto(_) => self,
+        }
+    }
+
+    pub fn to_manual(self) -> AutoOrManual<T> {
+        match self {
+            Self::Manual(_) => self,
+            Self::Auto(a) => Self::Manual(a),
+        }
+    }
+
     pub(crate) fn is_auto(&self) -> bool {
         matches!(self, Self::Auto(_))
     }
 
-    pub(crate) fn _set(&mut self, other: T) {
+    #[allow(unused)]
+    pub(crate) fn is_manual(&self) -> bool {
+        matches!(self, Self::Manual(_))
+    }
+
+    #[allow(unused)]
+    pub(crate) fn set_inner(&mut self, other: T) {
         match self {
             AutoOrManual::Manual(v) => *v = other,
             AutoOrManual::Auto(v) => *v = other,
@@ -1680,19 +1722,19 @@ impl Default for SteeringCfg {
             deadzone_counts: 0.0,
             input_gain: ValueSrcs::Static(StaticValueCfg {
                 value: default_steering_smoothing_alpha().into(),
-                interval: UNIT_INTERVAL,
+                interval: UNIT_INTERVAL.into(),
             }),
             auto_center_halflife: ValueSrcs::Static(StaticValueCfg {
                 value: default_steering_transform_auto_center_halflife().into(),
-                interval: UNIT_INTERVAL,
+                interval: UNIT_INTERVAL.into(),
             }),
             auto_center_along_force_feedback: ValueSrcs::Static(StaticValueCfg {
                 value: 0.0.into(),
-                interval: UNIT_INTERVAL,
+                interval: UNIT_INTERVAL.into(),
             }),
             hold_factor: ValueSrcs::Static(StaticValueCfg {
                 value: 0.0.into(),
-                interval: UNIT_INTERVAL,
+                interval: UNIT_INTERVAL.into(),
             }),
             force_feedback: None,
             integrated_user_input_transform: TfmSeqCfg::default(),
@@ -1765,7 +1807,7 @@ impl Default for RaiseFallCfg {
             fall_delay: Default::default(),
             fall_hold_factor: ValueSrcs::Static(StaticValueCfg {
                 value: 1.0.into(),
-                interval: UNIT_INTERVAL,
+                interval: UNIT_INTERVAL.into(),
             }),
             invert_fall_hold_factor: false,
             desc: Default::default(),
@@ -1993,7 +2035,7 @@ where
     match Data::deserialize(deserializer)? {
         Data::Bool(b) => Ok(ValueSrcs::Static(StaticValueCfg {
             value: if b { 1.0 } else { 0.0 }.into(),
-            interval: UNIT_INTERVAL,
+            interval: UNIT_INTERVAL.into(),
         })),
         Data::ValueSrc(v) => Ok(v),
     }
