@@ -1064,7 +1064,7 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
                     if use_custom && self.custom_source.is_none() {
                         self.custom_source = Some(ValueSrcs::Static(StaticValueCfg {
                             value: 0.0.into(),
-                            interval: SYMM_UNIT_INTERVAL,
+                            interval: SYMM_UNIT_INTERVAL.into(),
                         }));
                         changed = true;
                     }

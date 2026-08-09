@@ -448,7 +448,7 @@ impl WithNumInterval for ValueSrcs {
     type ValueT = BaseNumT;
     fn get_interval(&self) -> NumInterval<Self::ValueT> {
         match self {
-            Self::Static(s) => s.interval,
+            Self::Static(s) => *s.interval,
             Self::Dynamic(dvr) => match dvr {
                 DynValueRefs::DeviceControlMatcher(d) => d.control_matcher.get_interval(),
                 DynValueRefs::Variable(v) => v.variable.interval,
@@ -473,7 +473,7 @@ impl DynValueRefs {
     }
 }
 
-fn default_unit_interval() -> NumInterval<BaseNumT> {
+fn default_src_value_interval() -> NumInterval<BaseNumT> {
     UNIT_INTERVAL
 }
 
@@ -484,7 +484,7 @@ enum StaticValueRtHelper {
     Simple(BaseNumT),
     Full {
         value: BaseNumT,
-        #[serde(default = "default_unit_interval")]
+        #[serde(default = "default_src_value_interval")]
         #[serde(rename = "range")]
         #[serde(alias = "interval")]
         interval: NumInterval<BaseNumT>,
@@ -501,7 +501,7 @@ pub(crate) struct StaticValueCfg {
     #[serde(rename = "range")]
     #[serde(alias = "interval")]
     #[garde(skip)]
-    pub(crate) interval: NumInterval<BaseNumT>,
+    pub(crate) interval: AutoOrManual<NumInterval<BaseNumT>>,
 }
 
 impl From<StaticValueRtHelper> for StaticValueCfg {
@@ -509,11 +509,11 @@ impl From<StaticValueRtHelper> for StaticValueCfg {
         match helper {
             StaticValueRtHelper::Simple(value) => Self {
                 value: value.into(),
-                interval: default_unit_interval(),
+                interval: AutoOrManual::Auto(default_src_value_interval()),
             },
             StaticValueRtHelper::Full { value, interval } => Self {
                 value: value.into(),
-                interval,
+                interval: AutoOrManual::Manual(interval),
             },
         }
     }
@@ -521,12 +521,14 @@ impl From<StaticValueRtHelper> for StaticValueCfg {
 
 impl From<StaticValueCfg> for StaticValueRtHelper {
     fn from(orig: StaticValueCfg) -> Self {
-        if orig.interval == default_unit_interval() {
+        if orig.interval.is_auto()
+        /* == default_src_value_interval() */
+        {
             StaticValueRtHelper::Simple(orig.value.get())
         } else {
             StaticValueRtHelper::Full {
                 value: orig.value.get(),
-                interval: orig.interval,
+                interval: *orig.interval,
             }
         }
     }
@@ -534,7 +536,7 @@ impl From<StaticValueCfg> for StaticValueRtHelper {
 
 impl std::fmt::Display for StaticValueCfg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{} {}", self.value.get(), self.interval))
+        f.write_fmt(format_args!("{} {}", self.value.get(), *self.interval))
     }
 }
 
@@ -697,7 +699,7 @@ impl Bounds for ValueSrcs {
 pub(crate) const fn make_static_value_src(value: BaseNumT, interval: NumInterval<BaseNumT>) -> ValueSrcs {
     ValueSrcs::Static(StaticValueCfg {
         value: std::cell::Cell::new(value),
-        interval,
+        interval: AutoOrManual::Auto(interval),
     })
 }
 
@@ -717,7 +719,7 @@ impl WithNumericValue for StaticValueCfg {
 impl WithNumInterval for StaticValueCfg {
     type ValueT = BaseNumT;
     fn get_interval(&self) -> NumInterval<Self::ValueT> {
-        self.interval
+        *self.interval
     }
 }
 

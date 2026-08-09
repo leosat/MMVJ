@@ -212,6 +212,10 @@ impl<'s> DrawEgui<'s> for ValueSrcs {
                         ui.separator();
                         ui.label("Range: ");
                         if params.allow_interval_edit {
+                            if s.interval.is_auto() {
+                                s.interval = s.interval.to_manual();
+                                changed = true;
+                            }
                             changed |= s.interval.egui(
                                 GuiInInterval::Edit {
                                     max_range: HID_AXIS_MAX_RANGE,
@@ -224,7 +228,7 @@ impl<'s> DrawEgui<'s> for ValueSrcs {
                             );
                             ui.label("");
                         } else {
-                            ui.label(format!("{}", s.interval));
+                            ui.label(format!("{}", s.get_interval()));
                         }
                         if changed {
                             s.value.set(s.interval.clamp(value));
@@ -241,7 +245,7 @@ impl<'s> DrawEgui<'s> for ValueSrcs {
                     Self::Static(v) => {
                         ui.horizontal(|ui| {
                             ui.label(
-                                egui::RichText::new(format!("Value: {}, Range: {}", v.value.get(), v.interval))
+                                egui::RichText::new(format!("Value: {}, Range: {}", v.value.get(), v.get_interval()))
                                     .size(14.0)
                                     .monospace()
                                     .strong(),
