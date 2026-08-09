@@ -1,8 +1,9 @@
 use crate::base_num::{BaseAtomicT, BaseNumT};
 use crate::config::WithSanitize;
 use crate::filters::OneEuroFilter;
+use crate::num_interval::MAX_SPAN_POSITIVE_INTERVAL;
 use crate::relativity::Relativity;
-use crate::schemas_value::{DescriptionCfg, InputValueMetadata, WithDescriptionMut};
+use crate::schemas_value::{DescriptionCfg, InputValueMetadata, WithDescriptionMut, make_static_value_src};
 use crate::schemas_value::{
     DeviceControlMatcherRef, DynValueRefs, ValueDsts, VariableRef, WithNumInterval, WithRelativityRef,
     serialize_value_src_rt_ignore_interval,
@@ -49,16 +50,16 @@ const fn default_ff_gain() -> BaseNumT {
     1.0
 }
 
-const fn default_1euro_beta() -> BaseNumT {
-    0.007
+const fn default_1euro_beta() -> ValueSrcs {
+    make_static_value_src(0.007, MAX_SPAN_POSITIVE_INTERVAL)
 }
 
-const fn default_1euro_d_cutoff_hz() -> BaseNumT {
-    1.0
+const fn default_1euro_d_cutoff_hz() -> ValueSrcs {
+    make_static_value_src(1.0, MAX_SPAN_POSITIVE_INTERVAL)
 }
 
-const fn default_1euro_min_cutoff_hz() -> BaseNumT {
-    1.0
+const fn default_1euro_min_cutoff_hz() -> ValueSrcs {
+    make_static_value_src(1.0, MAX_SPAN_POSITIVE_INTERVAL)
 }
 
 const fn default_clamp_transform_override_interval() -> bool {
@@ -89,8 +90,11 @@ pub(crate) const fn default_norm_exp_base() -> BaseNumT {
     1.001
 }
 
-const fn default_ema_tau() -> BaseNumT {
-    0.04
+const fn default_ema_tau() -> ValueSrcs {
+    ValueSrcs::Static(StaticValueCfg {
+        value: std::cell::Cell::new(0.04),
+        interval: UNIT_INTERVAL,
+    })
 }
 
 pub(crate) trait DuplicateWithNewState
@@ -636,7 +640,7 @@ pub(crate) struct EmaFilterCfg {
     pub(crate) on_relative_input_reset_on_idle: bool,
     #[serde(default = "default_ema_tau")]
     #[garde(range(min = 0.0))]
-    pub(crate) tau: BaseNumT,
+    pub(crate) tau: ValueSrcs,
 }
 
 impl PartialEq for EmaFilterCfg {
@@ -654,7 +658,7 @@ impl Default for EmaFilterCfg {
         Self {
             enabled: default_step_enabled(),
             on_relative_input_feed_on_idle: default_false(),
-            tau: 0.01,
+            tau: 0.01.into(),
             on_relative_input_reset_on_idle: default_false(),
             desc: Default::default(),
             common_state: Default::default(),
@@ -740,7 +744,7 @@ pub(crate) struct OneEuroFilterCfg {
     /// movements feel responsive, then back off slightly.
     #[serde(default = "default_1euro_beta")]
     #[garde(range(min = 0.0))]
-    pub(crate) beta: BaseNumT,
+    pub(crate) beta: ValueSrcs,
 
     /// Minimum cutoff frequency in Hz. The cutoff used when the input
     /// is stationary or moving very slowly.
@@ -754,7 +758,7 @@ pub(crate) struct OneEuroFilterCfg {
     /// Think of this as the **noise floor** of the filter.
     #[serde(default = "default_1euro_min_cutoff_hz")]
     #[garde(range(min = 0.0))]
-    pub(crate) min_cutoff_hz: BaseNumT,
+    pub(crate) min_cutoff_hz: ValueSrcs,
 
     /// Cutoff frequency in Hz for the derivative (speed) low-pass
     /// filter.
@@ -772,7 +776,7 @@ pub(crate) struct OneEuroFilterCfg {
     /// Rarely needs adjustment from the default.
     #[serde(default = "default_1euro_d_cutoff_hz")]
     #[garde(range(min = 0.0))]
-    pub(crate) d_cutoff_hz: BaseNumT,
+    pub(crate) d_cutoff_hz: ValueSrcs,
 }
 
 impl PartialEq for OneEuroFilterCfg {
@@ -1635,19 +1639,19 @@ impl Default for SteeringCfg {
             enabled: default_step_enabled(),
             deadzone_counts: 0.0,
             input_gain: ValueSrcs::Static(StaticValueCfg {
-                value: default_steering_smoothing_alpha(),
+                value: default_steering_smoothing_alpha().into(),
                 interval: UNIT_INTERVAL,
             }),
             auto_center_halflife: ValueSrcs::Static(StaticValueCfg {
-                value: default_steering_transform_auto_center_halflife(),
+                value: default_steering_transform_auto_center_halflife().into(),
                 interval: UNIT_INTERVAL,
             }),
             auto_center_along_force_feedback: ValueSrcs::Static(StaticValueCfg {
-                value: 0.0,
+                value: 0.0.into(),
                 interval: UNIT_INTERVAL,
             }),
             hold_factor: ValueSrcs::Static(StaticValueCfg {
-                value: 0.0,
+                value: 0.0.into(),
                 interval: UNIT_INTERVAL,
             }),
             force_feedback: None,
@@ -1720,7 +1724,7 @@ impl Default for RaiseFallCfg {
             smoothing_alpha: Default::default(),
             fall_delay: Default::default(),
             fall_hold_factor: ValueSrcs::Static(StaticValueCfg {
-                value: 1.0,
+                value: 1.0.into(),
                 interval: UNIT_INTERVAL,
             }),
             invert_fall_hold_factor: false,
@@ -1948,7 +1952,7 @@ where
     }
     match Data::deserialize(deserializer)? {
         Data::Bool(b) => Ok(ValueSrcs::Static(StaticValueCfg {
-            value: if b { 1.0 } else { 0.0 },
+            value: if b { 1.0 } else { 0.0 }.into(),
             interval: UNIT_INTERVAL,
         })),
         Data::ValueSrc(v) => Ok(v),

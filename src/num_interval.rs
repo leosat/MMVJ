@@ -14,6 +14,14 @@ pub(crate) const UNIT_INTERVAL: NumInterval<BaseNumT> = crate::num_interval!(0.0
 #[allow(unused)]
 pub(crate) const ZERO_INTERVAL: NumInterval<BaseNumT> = crate::num_interval!(0.0 as BaseNumT, 0.0 as BaseNumT);
 //-------------------------------------------------------------
+#[allow(unused)]
+pub(crate) const MAX_SPAN_POSITIVE_INTERVAL: NumInterval<BaseNumT> =
+    crate::num_interval!(0.0 as BaseNumT, BaseNumT::MAX);
+#[allow(unused)]
+pub(crate) const MAX_SPAN_NEGATIVE_INTERVAL: NumInterval<BaseNumT> =
+    crate::num_interval!(BaseNumT::MIN, 0.0 as BaseNumT);
+#[allow(unused)]
+pub(crate) const MAX_SPAN_INTERVAL: NumInterval<BaseNumT> = crate::num_interval!(BaseNumT::MIN, BaseNumT::MAX);
 
 pub(crate) trait NumIntervalSpanT {
     type ValueT: NumIntervalValue;
@@ -527,7 +535,7 @@ impl<T: NumIntervalValue> NumInterval<T> {
         self.from <= other.to && self.to >= other.from
     }
 
-    pub(crate) fn _contains_interval(&self, other: Self) -> bool {
+    pub(crate) fn contains_interval(&self, other: Self) -> bool {
         other.from >= self.from && other.to <= self.to
     }
 
@@ -605,9 +613,9 @@ mod tests {
 
     #[test]
     fn contains_interval() {
-        assert!(NumInterval::new(0.0, 1.0)._contains_interval(NumInterval::new(0.0, 1.0)));
-        assert!(NumInterval::new(0.0, 1.0)._contains_interval(NumInterval::new(0.3, 0.6)));
-        assert!(!NumInterval::new(0.0, 1.0)._contains_interval(NumInterval::new(0.3, 1.2)));
+        assert!(NumInterval::new(0.0, 1.0).contains_interval(NumInterval::new(0.0, 1.0)));
+        assert!(NumInterval::new(0.0, 1.0).contains_interval(NumInterval::new(0.3, 0.6)));
+        assert!(!NumInterval::new(0.0, 1.0).contains_interval(NumInterval::new(0.3, 1.2)));
     }
 
     #[test]

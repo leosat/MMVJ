@@ -160,7 +160,7 @@ pub(crate) fn run(
         )
     };
     log::info!("GUI closed, status: {:?}", eframe_result);
-    let _ = GuiMain::send_static_cmd(&cmd_tx, DriverCmd::StatusGuiClosed);
+    let _ = GuiMain::send_driver_cmd_static(&cmd_tx, DriverCmd::StatusGuiClosed);
     Ok(())
 }
 
@@ -679,16 +679,15 @@ impl GuiMain {
     }
 
     fn send_driver_cmd(&self, cmd: DriverCmd) {
-        if let Err(e) = self.driver_tx.send(cmd) {
-            log::error!("Failed to send command to driver: {e}");
-        }
+        Self::send_driver_cmd_static(&self.driver_tx, cmd);
     }
 
-    fn send_static_cmd(
-        tx: &UnboundedSender<DriverCmd>,
-        cmd: DriverCmd,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        tx.send(cmd).map_err(|e| Box::new(e) as _)
+    fn send_driver_cmd_static(driver_tx: &UnboundedSender<DriverCmd>, cmd: DriverCmd) {
+        let res = driver_tx
+            .send(cmd)
+            .inspect_err(|e| log::error!("Failed to send command to driver: {e}"));
+        #[cfg(debug_assertions)]
+        res.expect("Failed to send command to driver");
     }
 
     fn execute_gui_command(&mut self, mut gui_cmd: GuiCmd) -> Result<(), String> {

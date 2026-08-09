@@ -45,10 +45,23 @@ pub(crate) struct GuiDndJobNewTfmStep {
     pub(crate) step: TfmStepCfg,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub(crate) enum GuiDndJob {
     MoveTfmStep(GuiDndJobMoveTfmStep),
-    NewTfmStep(Box<GuiDndJobNewTfmStep>),
+    NewTfmStep(std::sync::Arc<std::sync::Mutex<GuiDndJobNewTfmStep>>),
+    // NewTfmStep(Box<GuiDndJobNewTfmStep>),
+}
+
+impl PartialEq for GuiDndJob {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::MoveTfmStep(l0), Self::MoveTfmStep(r0)) => l0 == r0,
+            // TODO?: ... comparing ptrs with mutex is unstable...
+            // TODO?: not critical for any of our purposes it's ok to have it returning false.
+            (Self::NewTfmStep(_), Self::NewTfmStep(_)) => false,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

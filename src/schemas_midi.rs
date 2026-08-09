@@ -281,7 +281,6 @@ pub(crate) struct MidiControlMatcherCfg {
 
 #[cfg(feature = "midi")]
 impl WithNumericValueSettable for MidiControlMatcherCfg {
-    type ValueT = BaseNumT;
     fn set_numeric_value(&self, v: Self::ValueT) {
         self.current_value.store(v, Relaxed);
     }

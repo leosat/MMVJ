@@ -1755,9 +1755,7 @@
           "type": "boolean"
         },
         "tau": {
-          "type": "number",
-          "format": "float",
-          "minimum": 0.0,
+          "$ref": "#/$defs/ValueSrcs",
           "default": 0.03999999910593033
         }
       },
@@ -1913,24 +1911,36 @@
         },
         "beta": {
           "description": "Speed coefficient (β). Controls how much the cutoff frequency\nincreases in response to fast input movement.\n\nAdaptive cutoff formula: `cutoff = min_cutoff_hz + β · |dx̂|`\n\n- `0.0` — fixed-cutoff filter (no speed adaptation).\n- `0.001 – 0.01` — gentle adaptation (recommended starting range).\n- `0.1 – 10.0` — aggressive adaptation; near-passthrough during\n  fast sweeps, may re-introduce jitter.\n\n**Tuning heuristic:** start at `0.0`, increase until fast\nmovements feel responsive, then back off slightly.",
-          "type": "number",
-          "format": "float",
-          "minimum": 0.0,
-          "default": 0.007000000216066837
+          "$ref": "#/$defs/ValueSrcs",
+          "default": {
+            "value": 0.007000000216066837,
+            "range": [
+              0.0,
+              3.4028234663852886e+38
+            ]
+          }
         },
         "min_cutoff_hz": {
           "description": "Minimum cutoff frequency in Hz. The cutoff used when the input\nis stationary or moving very slowly.\n\n- `0.1 – 0.5` — very heavy smoothing at rest (strong jitter\n  suppression, noticeable lag onset).\n- `1.0` *(default)* — moderate smoothing; good starting point.\n- `5.0 – 50.0` — light smoothing; use when input is already\n  clean or minimal latency is critical.\n\nThink of this as the **noise floor** of the filter.",
-          "type": "number",
-          "format": "float",
-          "minimum": 0.0,
-          "default": 1.0
+          "$ref": "#/$defs/ValueSrcs",
+          "default": {
+            "value": 1.0,
+            "range": [
+              0.0,
+              3.4028234663852886e+38
+            ]
+          }
         },
         "d_cutoff_hz": {
           "description": "Cutoff frequency in Hz for the derivative (speed) low-pass\nfilter.\n\nThe raw derivative `(x - x̂_prev) / dt` amplifies sensor jitter.\nThis secondary filter smooths the derivative so the adaptive\ncutoff does not oscillate.\n\n- `0.01 – 0.1` — very smooth derivative; stable but slow to\n  react to speed changes.\n- `1.0` *(default)* — balanced; works well for most devices.\n- `10.0 – 100.0` — barely filtered derivative; fast tracking\n  but may oscillate on noisy inputs.\n\nRarely needs adjustment from the default.",
-          "type": "number",
-          "format": "float",
-          "minimum": 0.0,
-          "default": 1.0
+          "$ref": "#/$defs/ValueSrcs",
+          "default": {
+            "value": 1.0,
+            "range": [
+              0.0,
+              3.4028234663852886e+38
+            ]
+          }
         }
       },
       "additionalProperties": false

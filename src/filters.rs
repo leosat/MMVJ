@@ -78,8 +78,8 @@ impl EmaFilter {
         }
     }
     pub(crate) fn filter(&mut self, val: BaseNumT, now: Instant, tau: BaseNumT) -> BaseNumT {
-        if tau <= 0.0 {
-            log::error!("Tau must be > 0.0"); // TODO: config schema valiadation at config-time!
+        if branches::unlikely(tau <= 0.0) {
+            log::error!("EMA fitler: tau must be > 0.0");
             return val;
         }
         let dt = clamp_dt_by_zero_and_max_period(now.duration_since(self.prev_time).as_secs_f32() as BaseNumT);

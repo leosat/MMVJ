@@ -17,6 +17,7 @@ use crate::num_interval::SYMM_UNIT_INTERVAL;
 use crate::schemas_cfg::{DevicesCfgNew, VariablesCfg};
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_transform::*;
+use crate::schemas_value::WithNumericValueSettable;
 use crate::schemas_value::{DescriptionCfg, StaticValueCfg, TfmValue, ValueSrcs, WithDescriptionMut, WithNumericValue};
 use crate::tracing::GraphDisplayStyle;
 // use documented::{Documented, DocumentedFields};
@@ -358,18 +359,18 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
                     .order(egui::Order::TOP)
                     .show(ui.ctx(), |ui| {
                         ui.separator();
-                        static STEPS_TEMPLATES_CACHE: std::sync::LazyLock<Vec<TfmStepCfg>> =
-                            std::sync::LazyLock::new(|| TfmStepCfg::iter().collect::<Vec<_>>());
+                        static STEPS_TEMPLATES_CACHE: std::sync::LazyLock<std::sync::Mutex<Vec<TfmStepCfg>>> =
+                            std::sync::LazyLock::new(|| TfmStepCfg::iter().collect::<Vec<_>>().into());
                         let mut step_to_add = None;
-                        for step in &*STEPS_TEMPLATES_CACHE {
+                        for step in &*STEPS_TEMPLATES_CACHE.lock().unwrap() {
                             let btn_response = ui.add(Button::new(step.to_string()).sense(Sense::click_and_drag()));
                             if btn_response.clicked() {
                                 step_to_add = Some(step.clone_with_new_state_no_recurse());
                             } else if btn_response.drag_started() {
-                                btn_response.dnd_set_drag_payload(GuiDndJob::NewTfmStep(Box::from(
-                                    GuiDndJobNewTfmStep {
+                                btn_response.dnd_set_drag_payload(GuiDndJob::NewTfmStep(std::sync::Arc::new(
+                                    std::sync::Mutex::new(GuiDndJobNewTfmStep {
                                         step: step.clone_with_new_state_no_recurse(),
-                                    },
+                                    }),
                                 )));
                                 // TODO?: maybe visual feedback of draggin the button...
                             }
@@ -438,9 +439,9 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
                     }
                     GuiDndJob::NewTfmStep(dnd_job) => {
                         if *dst_obj_idx == usize::MAX {
-                            self.steps.push(dnd_job.step.clone());
+                            self.steps.push(dnd_job.lock().unwrap().step.clone());
                         } else {
-                            self.steps.insert(*dst_obj_idx, dnd_job.step.clone());
+                            self.steps.insert(*dst_obj_idx, dnd_job.lock().unwrap().step.clone());
                         }
                         gui_out = gui_out.or(Some(GuiCmd::ConfigChangeSimple));
                     }
@@ -807,14 +808,18 @@ impl<'s> DrawEgui<'s> for EmaFilterCfg {
 
     fn egui(&mut self, in_is_relative: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut changed = false;
+        let mut tau = self.tau.get_numeric_value();
         changed |= ui
             .add(
                 // TODO: intervals, validation!
-                egui::Slider::new(&mut self.tau, 0.001..=2.0)
+                egui::Slider::new(&mut tau, 0.001..=2.0)
                     .text("Time constant")
                     .logarithmic(true),
             )
             .changed();
+        if changed {
+            self.tau.set_numeric_value(tau);
+        }
         if in_is_relative {
             ui.separator();
             changed |= draw_gui_idle_tick_params(ui, self);
@@ -935,36 +940,48 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
 
         ui.horizontal(|ui| {
             let param_name = "Lowpass base cutoff";
+            let mut min_cutoff_hz = self.min_cutoff_hz.get_numeric_value();
             changed |= ui
                 .add(
-                    egui::Slider::new(&mut self.min_cutoff_hz, 0.1..=1000.0)
+                    egui::Slider::new(&mut min_cutoff_hz, 0.1..=1000.0)
                         .suffix("Hz")
                         .logarithmic(true),
                 )
                 .on_hover_text(self.min_cutoff_hz_doc_str())
                 .changed();
+            if changed {
+                self.min_cutoff_hz.set_numeric_value(min_cutoff_hz);
+            }
             ui.label(param_name).on_hover_text(self.min_cutoff_hz_doc_str());
         });
 
         ui.horizontal(|ui| {
             let param_name = "Beta (speed coefficient)";
+            let mut beta = self.beta.get_numeric_value();
             changed |= ui
-                .add(egui::Slider::new(&mut self.beta, 0.0001..=10.0).logarithmic(true))
+                .add(egui::Slider::new(&mut beta, 0.0001..=10.0).logarithmic(true))
                 .on_hover_text(self.beta_doc_str())
                 .changed();
+            if changed {
+                self.beta.set_numeric_value(beta)
+            }
             ui.label(param_name).on_hover_text(self.beta_doc_str());
         });
 
         ui.horizontal(|ui| {
             let param_name = "Derivative cutoff";
+            let mut d_cutoff_hz = self.d_cutoff_hz.get_numeric_value();
             changed |= ui
                 .add(
-                    egui::Slider::new(&mut self.d_cutoff_hz, 0.001..=1000.0)
+                    egui::Slider::new(&mut d_cutoff_hz, 0.001..=1000.0)
                         .suffix("Hz")
                         .logarithmic(true),
                 )
                 .on_hover_text(self.d_cutoff_hz_doc_str())
                 .changed();
+            if changed {
+                self.d_cutoff_hz.set_numeric_value(d_cutoff_hz);
+            }
             ui.label(param_name).on_hover_text(self.d_cutoff_hz_doc_str());
         });
 
@@ -1022,7 +1039,7 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
                 } else {
                     if use_custom && self.custom_source.is_none() {
                         self.custom_source = Some(ValueSrcs::Static(StaticValueCfg {
-                            value: 0.0,
+                            value: 0.0.into(),
                             interval: SYMM_UNIT_INTERVAL,
                         }));
                         changed = true;
