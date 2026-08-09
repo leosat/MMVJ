@@ -851,7 +851,7 @@ impl ValueSrcs {
         }
     }
 
-    pub(crate) fn _is_static(&self) -> bool {
+    pub(crate) fn is_static(&self) -> bool {
         if let Self::Static(..) = *self {
             return true;
         }

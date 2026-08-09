@@ -158,6 +158,7 @@ impl Mapping {
                     | TfmStepCfg::Script { .. }
             )
         }) || !collect_dynamic_value_matchers(self, |ctx| ctx.contains(DynValFilter::Var)).is_empty()
+            || self.src.is_static()
     }
 }
 
