@@ -354,7 +354,9 @@ impl<
 
     async fn run(&mut self) {
         self.running = true;
-        let mut ticker = interval(Duration::from_secs_f64(1.0 / self.idle_tick_rate as f64));
+        let mut ticker = interval(Duration::from_secs_f64(
+            1.0 / (self.idle_tick_rate as f64).max(crate::config::MIN_BASE_FREQ_HZ as f64),
+        ));
         ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
         //-------------------------------- MAIN LOOP ----------------------------------
