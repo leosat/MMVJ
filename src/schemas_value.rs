@@ -6,7 +6,7 @@
 // 3. VarRef(Dynamic) or DeviceControlMatcher(Dynamic)
 
 use std::{
-    // fmt::Display,
+    cell::Cell,
     ops::{Deref, DerefMut},
     sync::{
         Arc,
@@ -19,6 +19,7 @@ use crate::num_interval::ZERO_INTERVAL;
 use crate::relativity::Relativity;
 use crossbeam_utils::CachePadded;
 use deserialize_untagged_verbose_error::DeserializeUntaggedVerboseError;
+use garde::{Validate, rules::range::Bounds};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::IntoDeserializer};
 use traversable::{Traversable, TraversableMut};
@@ -109,7 +110,7 @@ pub(crate) trait WithLastKnownIO<T> {
 }
 
 pub(crate) trait WithLastKnownIOSettable<T> {
-    fn set_last_known_io(&self, v: T);
+    fn set_last_known_io(&self, value: T);
 }
 
 pub(crate) trait WithRelativity {
@@ -150,9 +151,22 @@ pub(crate) trait WithNumericValue {
     fn get_numeric_value(&self) -> Self::ValueT;
 }
 
-pub(crate) trait WithNumericValueSettable {
-    type ValueT;
-    fn set_numeric_value(&self, v: Self::ValueT);
+#[allow(unused)]
+pub(crate) trait WithNumericValueClamped: WithNumericValue + WithNumInterval {
+    fn get_numeric_value_clamped(&self) -> <Self as WithNumericValue>::ValueT;
+}
+
+#[allow(unused)]
+pub(crate) trait WithNumericValueClampedPredicated: WithNumericValue + WithNumInterval {
+    type PredicationParamsT;
+    fn get_numeric_value_clamped_predicated(
+        &self,
+        params: Self::PredicationParamsT,
+    ) -> <Self as WithNumericValue>::ValueT;
+}
+
+pub(crate) trait WithNumericValueSettable: WithNumericValue {
+    fn set_numeric_value(&self, value: <Self as WithNumericValue>::ValueT);
 }
 
 pub(crate) trait WithNumInterval {
@@ -477,25 +491,30 @@ enum StaticValueRtHelper {
     },
 }
 
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Default, Validate)]
 #[serde(from = "StaticValueRtHelper", into = "StaticValueRtHelper")]
 #[serde(deny_unknown_fields)]
 pub(crate) struct StaticValueCfg {
-    pub(crate) value: BaseNumT,
+    #[garde(skip)]
+    pub(crate) value: Cell<BaseNumT>,
     #[serde(default = "default_unit_interval")]
     #[serde(rename = "range")]
     #[serde(alias = "interval")]
+    #[garde(skip)]
     pub(crate) interval: NumInterval<BaseNumT>,
 }
 
 impl From<StaticValueRtHelper> for StaticValueCfg {
     fn from(helper: StaticValueRtHelper) -> Self {
         match helper {
-            StaticValueRtHelper::Simple(v) => Self {
-                value: v,
+            StaticValueRtHelper::Simple(value) => Self {
+                value: value.into(),
                 interval: default_unit_interval(),
             },
-            StaticValueRtHelper::Full { value, interval } => Self { value, interval },
+            StaticValueRtHelper::Full { value, interval } => Self {
+                value: value.into(),
+                interval,
+            },
         }
     }
 }
@@ -503,10 +522,10 @@ impl From<StaticValueRtHelper> for StaticValueCfg {
 impl From<StaticValueCfg> for StaticValueRtHelper {
     fn from(orig: StaticValueCfg) -> Self {
         if orig.interval == default_unit_interval() {
-            StaticValueRtHelper::Simple(orig.value)
+            StaticValueRtHelper::Simple(orig.value.get())
         } else {
             StaticValueRtHelper::Full {
-                value: orig.value,
+                value: orig.value.get(),
                 interval: orig.interval,
             }
         }
@@ -515,20 +534,162 @@ impl From<StaticValueCfg> for StaticValueRtHelper {
 
 impl std::fmt::Display for StaticValueCfg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{} {}", self.value, self.interval))
+        f.write_fmt(format_args!("{} {}", self.value.get(), self.interval))
     }
 }
 
 // -------------------------------------------------
 #[derive(
-    JsonSchema, Debug, Clone, Serialize, DeserializeUntaggedVerboseError, PartialEq, TraversableMut, Traversable,
+    JsonSchema,
+    Debug,
+    Clone,
+    Serialize,
+    DeserializeUntaggedVerboseError,
+    PartialEq,
+    TraversableMut,
+    Traversable,
+    Validate,
 )]
 #[serde(untagged)]
 pub(crate) enum ValueSrcs {
     // Rand { distr: ... , interval: ... },
     #[traverse(skip)]
-    Static(StaticValueCfg),
-    Dynamic(DynValueRefs),
+    Static(#[garde(skip)] StaticValueCfg),
+    Dynamic(#[garde(skip)] DynValueRefs),
+}
+
+impl PartialOrd for ValueSrcs {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.get_numeric_value().partial_cmp(&other.get_numeric_value())
+    }
+}
+
+impl Bounds for ValueSrcs {
+    type Size = BaseNumT;
+    const MIN: Self::Size = BaseNumT::MIN;
+    const MAX: Self::Size = BaseNumT::MAX;
+    fn validate_bounds(
+        &self,
+        lower_bound: Self::Size,
+        upper_bound: Self::Size,
+    ) -> Result<(), garde::rules::range::OutOfBounds> {
+        let value = self.get_numeric_value();
+        let expected_interval = NumInterval::new(lower_bound, upper_bound);
+        debug_assert!(
+            self.get_interval().contains_interval(expected_interval),
+            "Interval expected in garde is not contained within the interval specified for the value source"
+        );
+        if value < expected_interval.from() {
+            Err(garde::rules::range::OutOfBounds::Lower)
+        } else if value > expected_interval.to() {
+            Err(garde::rules::range::OutOfBounds::Upper)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+pub(crate) const fn make_static_value_src(value: BaseNumT, interval: NumInterval<BaseNumT>) -> ValueSrcs {
+    ValueSrcs::Static(StaticValueCfg {
+        value: std::cell::Cell::new(value),
+        interval,
+    })
+}
+
+impl From<BaseNumT> for ValueSrcs {
+    fn from(value: BaseNumT) -> Self {
+        make_static_value_src(value, UNIT_INTERVAL)
+    }
+}
+
+impl WithNumericValue for StaticValueCfg {
+    type ValueT = BaseNumT;
+    fn get_numeric_value(&self) -> Self::ValueT {
+        self.value.get()
+    }
+}
+
+impl WithNumInterval for StaticValueCfg {
+    type ValueT = BaseNumT;
+    fn get_interval(&self) -> NumInterval<Self::ValueT> {
+        self.interval
+    }
+}
+
+#[allow(unused)]
+pub(crate) enum ClampPred {
+    IfStatic,
+    IfDynamic,
+}
+
+impl WithNumericValueClampedPredicated for ValueSrcs {
+    type PredicationParamsT = ClampPred;
+
+    fn get_numeric_value_clamped_predicated(
+        &self,
+        params: Self::PredicationParamsT,
+    ) -> <Self as WithNumericValue>::ValueT {
+        match self {
+            Self::Static(s) => match params {
+                ClampPred::IfStatic => s.get_interval().clamp(s.get_numeric_value()),
+                ClampPred::IfDynamic => s.get_numeric_value(),
+            },
+            Self::Dynamic(d) => match params {
+                ClampPred::IfDynamic => d.get_interval().clamp(d.get_numeric_value()),
+                ClampPred::IfStatic => d.get_numeric_value(),
+            },
+        }
+    }
+}
+
+impl WithNumericValueSettable for ValueSrcs {
+    fn set_numeric_value(&self, value: Self::ValueT) {
+        match self {
+            Self::Static(s) => s.value.set(value),
+            Self::Dynamic(d) => d.set_numeric_value(value),
+        }
+    }
+}
+
+impl WithNumericValueSettable for StaticValueCfg {
+    fn set_numeric_value(&self, value: Self::ValueT) {
+        self.value.set(value)
+    }
+}
+
+impl WithNumericValueSettable for DynValueRefs {
+    fn set_numeric_value(&self, value: Self::ValueT) {
+        match self {
+            Self::DeviceControlMatcher(d) => d.set_numeric_value(value),
+            Self::Variable(v) => v.set_numeric_value(value),
+        }
+    }
+}
+
+impl WithNumericValueSettable for VariableRef {
+    fn set_numeric_value(&self, value: Self::ValueT) {
+        self.variable.set_numeric_value(value);
+    }
+}
+
+impl WithNumericValue for VariableRef {
+    type ValueT = BaseNumT;
+
+    fn get_numeric_value(&self) -> Self::ValueT {
+        self.variable.get_numeric_value()
+    }
+}
+
+impl WithNumericValueSettable for VariableState {
+    fn set_numeric_value(&self, value: Self::ValueT) {
+        self.value.store(value, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+impl WithNumericValueSettable for DeviceControlMatcherRef {
+    fn set_numeric_value(&self, value: Self::ValueT) {
+        self.control_matcher.set_numeric_value(value);
+    }
 }
 
 impl WithNumericValue for ValueSrcs {
@@ -536,7 +697,7 @@ impl WithNumericValue for ValueSrcs {
 
     fn get_numeric_value(&self) -> Self::ValueT {
         match self {
-            ValueSrcs::Static(s) => s.value,
+            ValueSrcs::Static(s) => s.value.get(),
             ValueSrcs::Dynamic(d) => d.get_numeric_value(),
         }
     }
@@ -564,7 +725,7 @@ impl WithNumericValue for DeviceControlMatcherRef {
 impl WithLastKnownIO<BaseNumT> for ValueSrcs {
     fn get_last_known_io(&self) -> BaseNumT {
         match self {
-            ValueSrcs::Static(v) => v.value,
+            ValueSrcs::Static(v) => v.value.get(),
             ValueSrcs::Dynamic(d) => d.get_last_known_io(),
         }
     }
@@ -585,16 +746,16 @@ impl WithLastKnownIO<BaseNumT> for DeviceControlMatcherRef {
     }
 }
 
-pub(crate) fn serialize_value_src_rt_ignore_interval<S>(v: &ValueSrcs, serializer: S) -> Result<S::Ok, S::Error>
+pub(crate) fn serialize_value_src_rt_ignore_interval<S>(srcs: &ValueSrcs, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    match v {
+    match srcs {
         #[cfg(not(feature = "base_num_f64"))]
-        ValueSrcs::Static(v) => serializer.serialize_f32(v.value),
+        ValueSrcs::Static(s) => serializer.serialize_f32(s.get_numeric_value()),
         #[cfg(feature = "base_num_f64")]
-        ValueSrcs::Static(v) => serializer.serialize_f64(v.value),
-        ValueSrcs::Dynamic(v) => v.serialize(serializer),
+        ValueSrcs::Static(s) => serializer.serialize_f64(s.get_numeric_value()),
+        ValueSrcs::Dynamic(d) => d.serialize(serializer),
     }
 }
 

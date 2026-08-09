@@ -199,9 +199,10 @@ impl<'s> DrawEgui<'s> for ValueSrcs {
                 match self {
                     Self::Static(s) => {
                         ui.label("Value:");
+                        let mut value = s.value.get();
                         changed |= ui
                             .add(
-                                egui::Slider::new(&mut s.value, s.interval.make_range_inclusive())
+                                egui::Slider::new(&mut value, s.interval.make_range_inclusive())
                                     .logarithmic(params.slider_log_scale)
                                     .fixed_decimals(4)
                                     .step_by(0.0001),
@@ -226,7 +227,7 @@ impl<'s> DrawEgui<'s> for ValueSrcs {
                             ui.label(format!("{}", s.interval));
                         }
                         if changed {
-                            s.value = s.interval.clamp(s.value);
+                            s.value.set(s.interval.clamp(value));
                         }
                         changed
                     }
@@ -240,7 +241,7 @@ impl<'s> DrawEgui<'s> for ValueSrcs {
                     Self::Static(v) => {
                         ui.horizontal(|ui| {
                             ui.label(
-                                egui::RichText::new(format!("Value: {}, Range: {}", v.value, v.interval))
+                                egui::RichText::new(format!("Value: {}, Range: {}", v.value.get(), v.interval))
                                     .size(14.0)
                                     .monospace()
                                     .strong(),

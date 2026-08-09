@@ -16,6 +16,7 @@ use crate::schemas_transform::{
     ClampCfg, EmaFilterCfg, ForceFeedbackComponent, IntegrateCfg, InvertCfg, LinearCfg, NormExpCfg, OneEuroFilterCfg,
     RaiseFallCfg, SCurveCfg, ScriptCfg, SignedPowerCfg, SmoothstepCfg, SteeringCfg, TfmSeqCfg, TfmStepCfg,
 };
+
 use crate::schemas_value::{DynValueRefs, ValueDsts, WithNumInterval, WithRelativity};
 use crate::schemas_value::{TfmValue, WithNumericValue};
 
@@ -157,9 +158,10 @@ impl WithTfmExec for OneEuroFilterCfg {
             input.value = self.exe_state_mut().filter(
                 input.value,
                 Instant::now(),
-                self.min_cutoff_hz,
-                self.beta,
-                self.d_cutoff_hz,
+                self.min_cutoff_hz.get_numeric_value(),
+                // .get_numeric_value_clamped_predicated(ClampPred::IfDynamic),
+                self.beta.get_numeric_value(), //get_numeric_value_clamped_predicated(ClampPred::IfDynamic),
+                self.d_cutoff_hz.get_numeric_value(), //.get_numeric_value_clamped_predicated(ClampPred::IfDynamic),
             );
         } else if self.on_relative_input_reset_on_idle {
             self.exe_state_reset(input.value);
@@ -294,10 +296,13 @@ impl WithTfmExec for EmaFilterCfg {
         if self.enabled
             && (!ctx.is_idle_tick() || input.relativity == Relativity::Abs || self.on_relative_input_feed_on_idle)
         {
-            input.value = self.exe_state_mut().filter(input.value, Instant::now(), self.tau);
+            input.value = self
+                .exe_state_mut()
+                .filter(input.value, Instant::now(), self.tau.get_numeric_value());
         } else if self.on_relative_input_reset_on_idle {
             self.exe_state_reset(input.value);
         }
+
         input
     }
 }

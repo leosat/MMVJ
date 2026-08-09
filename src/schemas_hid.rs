@@ -616,8 +616,6 @@ impl WithNumericValue for HidControlMatcherCfg {
 }
 
 impl WithNumericValueSettable for HidControlMatcherCfg {
-    type ValueT = BaseNumT;
-
     fn set_numeric_value(&self, v: Self::ValueT) {
         self.current_value.store(v, Relaxed);
     }

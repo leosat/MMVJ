@@ -24,8 +24,6 @@ pub(crate) enum ControlMatchers {
 }
 
 impl WithNumericValueSettable for ControlMatchers {
-    type ValueT = BaseNumT;
-
     fn set_numeric_value(&self, v: Self::ValueT) {
         match self {
             #[cfg(feature = "midi")]
