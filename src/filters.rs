@@ -84,8 +84,7 @@ impl EmaFilter {
         }
         let dt = clamp_dt_by_zero_and_max_period(now.duration_since(self.prev_time).as_secs_f32() as BaseNumT);
         self.prev_time = now;
-        let alpha = 1.0 - (-dt / tau).exp();
-        self.prev_val = self.prev_val + alpha * (val - self.prev_val);
+        self.prev_val = (-(-dt / tau).exp_m1()).mul_add(val - self.prev_val, self.prev_val);
         self.prev_val
     }
 }

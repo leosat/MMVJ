@@ -170,9 +170,19 @@ impl Config {
         impl<'s> traversable::VisitorMut for CfgDstsAndSrcsVisitor<'s> {
             type Break = anyhow::Result<()>;
             fn enter_mut(&mut self, this: &mut dyn core::any::Any) -> std::ops::ControlFlow<Self::Break> {
+                // TODO: override static value interval using on-struct attribute!
+                // if let Some(ema) = this.downcast_mut::<EmaFilterCfg>() {
+                //     // ema.tau.clamp_to_interval = NumInterval::new(1e-6, 2.0).into();
+                //     // ema.tau.remap_to_interval = ema.tau.clamp_to_interval;
+                //     if let ValueSrcs::Static(ref mut s) = ema.tau {
+                //         s.interval = NumInterval::new(1e-6, 2.0).into();
+                //     }
+                // }
+
                 if let Some(m) = this.downcast_mut::<Mapping>() {
                     self.mapping_name = Some(m.name.clone());
                 }
+
                 if let Some(v) = this.downcast_mut::<DynValueRefs>() {
                     let resolved = Config::resolve_dynamic_value_ref(
                         self.devices,

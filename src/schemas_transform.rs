@@ -91,10 +91,23 @@ pub(crate) const fn default_norm_exp_base() -> BaseNumT {
 }
 
 const fn default_ema_tau() -> ValueSrcs {
-    ValueSrcs::Static(StaticValueCfg {
+    let src = ValueSrcs::Static(StaticValueCfg {
         value: std::cell::Cell::new(0.04),
-        interval: UNIT_INTERVAL,
-    })
+        interval: NumInterval {
+            from: 1.0e-6,
+            to: 100.0,
+        },
+    });
+    // InputPort {
+    //     src,
+    //     remap_to_interval: None,
+    //     clamp_to_interval: Some(NumInterval {
+    //         from: 1.0e-6,
+    //         to: 100.0,
+    //     }),
+    //     triggers_mapping: false,
+    // }
+    src
 }
 
 pub(crate) trait DuplicateWithNewState
@@ -276,7 +289,6 @@ pub(crate) enum TfmStepCfg {
     #[traverse(skip)]
     Clamp(#[garde(skip)] ClampCfg),
     RaiseFall(#[garde(skip)] RaiseFallCfg),
-    #[traverse(skip)]
     Ema(#[garde(skip)] EmaFilterCfg),
     #[traverse(skip)]
     Linear(#[garde(skip)] LinearCfg),
@@ -308,12 +320,12 @@ impl TfmStepCfg {
             TfmStepCfg::Steering(s) => s.doc_str(),
             TfmStepCfg::Script(s) => s.doc_str(),
             TfmStepCfg::OneEuro(s) => s.doc_str(),
+            TfmStepCfg::Ema(s) => s.doc_str(),
             TfmStepCfg::Nop(_)
             | TfmStepCfg::Invert(_)
             | TfmStepCfg::Integrate(_)
             | TfmStepCfg::Clamp(_)
             | TfmStepCfg::RaiseFall(_)
-            | TfmStepCfg::Ema(_)
             | TfmStepCfg::Linear(_)
             | TfmStepCfg::Smoothstep(_)
             | TfmStepCfg::SCurve(_)
@@ -614,33 +626,56 @@ impl Default for InvertCfg {
     }
 }
 
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate, Traversable, TraversableMut)]
 #[serde(deny_unknown_fields)]
+#[with_doc_str]
+/// An Exponential Moving Average (EMA) filter is a recursive lowpass filter.
+/// It reduces noise in real-time data by giving more weight to recent data points.
+/// It reacts faster to sudden changes than a standard moving average
+/// while smoothing out minor fluctuations.
+///
+/// a = 1 - (-dt / tau).exp()
+/// y[i] = a * x[i] + (1 - a) * y[i-1]
 pub(crate) struct EmaFilterCfg {
+    /// ...
+    #[traverse(skip)]
     #[serde(skip)]
     #[garde(skip)]
     common_state: TfmStepCommonStateShared,
+    #[traverse(skip)]
     #[serde(skip)]
     #[garde(skip)]
+    /// ...
     pub(super) exe_state: Arc<Mutex<crate::filters::EmaFilter>>,
+    #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
+    /// ...
     pub(crate) desc: DescriptionCfg,
+    #[traverse(skip)]
     #[serde(default = "default_step_enabled")]
     #[garde(skip)]
+    /// ...
     pub(crate) enabled: bool,
+    #[traverse(skip)]
     #[serde(default = "default_false")]
     #[serde(skip_serializing_if = "is_false")]
     #[garde(skip)]
+    /// ...
     pub(crate) on_relative_input_feed_on_idle: bool,
+    #[traverse(skip)]
     #[serde(default = "default_false")]
     #[serde(skip_serializing_if = "is_false")]
     #[garde(skip)]
     pub(crate) on_relative_input_reset_on_idle: bool,
+    #[traverse(skip)]
     #[serde(default = "default_ema_tau")]
     #[garde(range(min = 0.0))]
-    pub(crate) tau: ValueSrcs,
+    /// The time constant
+    /// Defines the duration required for the filter's step response
+    /// to reach about 63.2% (1 - 1/e) of its final steady-state value.
+    pub(crate) tau: ValueSrcs, // InputPort,
 }
 
 impl PartialEq for EmaFilterCfg {
@@ -658,7 +693,12 @@ impl Default for EmaFilterCfg {
         Self {
             enabled: default_step_enabled(),
             on_relative_input_feed_on_idle: default_false(),
-            tau: 0.01.into(),
+            tau: 0.01.into(), /*InputPort {
+                                  src: 0.01.into(),
+                                  remap_to_interval: None,
+                                  clamp_to_interval: NumInterval::new(1e-6, 100.0).into(),
+                                  triggers_mapping: false,
+                              }*/
             on_relative_input_reset_on_idle: default_false(),
             desc: Default::default(),
             common_state: Default::default(),

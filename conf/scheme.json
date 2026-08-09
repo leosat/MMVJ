@@ -1739,24 +1739,35 @@
       ]
     },
     "EmaFilterCfg": {
+      "description": "An Exponential Moving Average (EMA) filter is a recursive lowpass filter.\nIt reduces noise in real-time data by giving more weight to recent data points.\nIt reacts faster to sudden changes than a standard moving average\nwhile smoothing out minor fluctuations.\n\na = 1 - (-dt / tau).exp()\ny[i] = a * x[i] + (1 - a) * y[i-1]",
       "type": "object",
       "properties": {
         "desc": {
+          "description": "...",
           "$ref": "#/$defs/DescriptionCfg"
         },
         "enabled": {
+          "description": "...",
           "type": "boolean",
           "default": true
         },
         "on_relative_input_feed_on_idle": {
+          "description": "...",
           "type": "boolean"
         },
         "on_relative_input_reset_on_idle": {
           "type": "boolean"
         },
         "tau": {
+          "description": "The time constant\nDefines the duration required for the filter's step response\nto reach about 63.2% (1 - 1/e) of its final steady-state value.",
           "$ref": "#/$defs/ValueSrcs",
-          "default": 0.03999999910593033
+          "default": {
+            "value": 0.03999999910593033,
+            "range": [
+              9.999999974752427e-7,
+              100.0
+            ]
+          }
         }
       },
       "additionalProperties": false
