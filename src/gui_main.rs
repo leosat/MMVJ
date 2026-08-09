@@ -839,6 +839,7 @@ impl GuiMain {
                     Ok(Ok(new_cfg)) => {
                         self.cfg = new_cfg;
                         self.update_cfg_yaml();
+                        self.pending_cmds.clear();
                     }
                     Ok(Err(e)) => {
                         return Err(format!("Failed to load new config: {e:?}"));
