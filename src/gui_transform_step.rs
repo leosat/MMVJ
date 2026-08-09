@@ -17,7 +17,6 @@ use crate::num_interval::SYMM_UNIT_INTERVAL;
 use crate::schemas_cfg::{DevicesCfgNew, VariablesCfg};
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_transform::*;
-use crate::schemas_value::WithNumericValueSettable;
 use crate::schemas_value::{DescriptionCfg, StaticValueCfg, TfmValue, ValueSrcs, WithDescriptionMut, WithNumericValue};
 use crate::tracing::GraphDisplayStyle;
 // use documented::{Documented, DocumentedFields};
@@ -626,13 +625,15 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                             }
                                             Self::Clamp(s) => s.egui(in_interval, ui),
                                             Self::RaiseFall(s) => s.egui((cfg_variables, cfg_devices, in_interval), ui),
-                                            Self::Ema(s) => s.egui(in_is_relative, ui),
+                                            Self::Ema(s) => s.egui((cfg_variables, cfg_devices, in_is_relative), ui),
                                             Self::Linear(s) => s.egui(in_interval, ui),
-                                            Self::Smoothstep { .. } => None,
+                                            Self::Smoothstep(_) => None,
                                             Self::SCurve(s) => s.egui((), ui),
                                             Self::Exp(s) => s.egui((), ui),
                                             Self::SignedPower(s) => s.egui((), ui),
-                                            Self::OneEuro(s) => s.egui(in_is_relative, ui),
+                                            Self::OneEuro(s) => {
+                                                s.egui((cfg_variables, cfg_devices, in_is_relative), ui)
+                                            }
                                             Self::_HighPass(_) => None,
                                             Self::_ForceFeedback(_) => None,
                                         }
@@ -803,23 +804,32 @@ impl<'s> DrawEgui<'s> for RaiseFallCfg {
 }
 
 impl<'s> DrawEgui<'s> for EmaFilterCfg {
-    type In = bool;
+    type In = (&'s VariablesCfg, &'s DevicesCfgNew, bool);
     type Out = Option<GuiCmd>;
 
-    fn egui(&mut self, in_is_relative: Self::In, ui: &mut egui::Ui) -> Self::Out {
+    fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+        let cfg_variables = gui_in.0;
+        let cfg_devices = gui_in.1;
+        let in_is_relative = gui_in.2;
         let mut changed = false;
-        let mut tau = self.tau.get_numeric_value();
-        changed |= ui
-            .add(
-                // TODO: intervals, validation!
-                egui::Slider::new(&mut tau, 0.001..=2.0)
-                    .text("Time constant")
-                    .logarithmic(true),
-            )
-            .changed();
-        if changed {
-            self.tau.set_numeric_value(tau);
-        }
+        ui.horizontal(|ui| {
+            let param_name = "Time constant";
+            changed |= self.tau.egui(
+                (
+                    param_name,
+                    param_name,
+                    ValueRefChoiceContext::TfmStepAuxSrc,
+                    GuiInValue::Edit(GuiInValueEditParams {
+                        allow_interval_edit: false,
+                        slider_log_scale: true,
+                        cfg_variables,
+                        cfg_devices,
+                    }),
+                ),
+                ui,
+            );
+            ui.label(param_name).on_hover_text(self.tau_doc_str());
+        });
         if in_is_relative {
             ui.separator();
             changed |= draw_gui_idle_tick_params(ui, self);
@@ -932,56 +942,70 @@ impl<'s> DrawEgui<'s> for SignedPowerCfg {
 }
 
 impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
-    type In = bool;
+    type In = (&'s VariablesCfg, &'s DevicesCfgNew, bool);
     type Out = Option<GuiCmd>;
 
-    fn egui(&mut self, in_is_relative: Self::In, ui: &mut egui::Ui) -> Self::Out {
+    fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+        let cfg_variables = gui_in.0;
+        let cfg_devices = gui_in.1;
+        let in_is_relative = gui_in.2;
         let mut changed: bool = false;
 
         ui.horizontal(|ui| {
             let param_name = "Lowpass base cutoff";
-            let mut min_cutoff_hz = self.min_cutoff_hz.get_numeric_value();
-            changed |= ui
-                .add(
-                    egui::Slider::new(&mut min_cutoff_hz, 0.1..=1000.0)
-                        .suffix("Hz")
-                        .logarithmic(true),
-                )
-                .on_hover_text(self.min_cutoff_hz_doc_str())
-                .changed();
-            if changed {
-                self.min_cutoff_hz.set_numeric_value(min_cutoff_hz);
-            }
+            changed |= self.min_cutoff_hz.egui(
+                (
+                    param_name,
+                    param_name,
+                    ValueRefChoiceContext::TfmStepAuxSrc,
+                    GuiInValue::Edit(GuiInValueEditParams {
+                        allow_interval_edit: false,
+                        slider_log_scale: true,
+                        cfg_variables,
+                        cfg_devices,
+                    }),
+                ),
+                ui,
+            );
+
             ui.label(param_name).on_hover_text(self.min_cutoff_hz_doc_str());
         });
 
         ui.horizontal(|ui| {
             let param_name = "Beta (speed coefficient)";
-            let mut beta = self.beta.get_numeric_value();
-            changed |= ui
-                .add(egui::Slider::new(&mut beta, 0.0001..=10.0).logarithmic(true))
-                .on_hover_text(self.beta_doc_str())
-                .changed();
-            if changed {
-                self.beta.set_numeric_value(beta)
-            }
+            changed |= self.beta.egui(
+                (
+                    param_name,
+                    param_name,
+                    ValueRefChoiceContext::TfmStepAuxSrc,
+                    GuiInValue::Edit(GuiInValueEditParams {
+                        allow_interval_edit: false,
+                        slider_log_scale: true,
+                        cfg_variables,
+                        cfg_devices,
+                    }),
+                ),
+                ui,
+            );
             ui.label(param_name).on_hover_text(self.beta_doc_str());
         });
 
         ui.horizontal(|ui| {
             let param_name = "Derivative cutoff";
-            let mut d_cutoff_hz = self.d_cutoff_hz.get_numeric_value();
-            changed |= ui
-                .add(
-                    egui::Slider::new(&mut d_cutoff_hz, 0.001..=1000.0)
-                        .suffix("Hz")
-                        .logarithmic(true),
-                )
-                .on_hover_text(self.d_cutoff_hz_doc_str())
-                .changed();
-            if changed {
-                self.d_cutoff_hz.set_numeric_value(d_cutoff_hz);
-            }
+            changed |= self.d_cutoff_hz.egui(
+                (
+                    param_name,
+                    param_name,
+                    ValueRefChoiceContext::TfmStepAuxSrc,
+                    GuiInValue::Edit(GuiInValueEditParams {
+                        allow_interval_edit: false,
+                        slider_log_scale: true,
+                        cfg_variables,
+                        cfg_devices,
+                    }),
+                ),
+                ui,
+            );
             ui.label(param_name).on_hover_text(self.d_cutoff_hz_doc_str());
         });
 

@@ -14,8 +14,8 @@ use std::{
     },
 };
 
-use crate::num_interval::UNIT_INTERVAL;
 use crate::num_interval::ZERO_INTERVAL;
+use crate::num_interval::{OutOfRangePolicy, UNIT_INTERVAL};
 use crate::relativity::Relativity;
 use crossbeam_utils::CachePadded;
 use deserialize_untagged_verbose_error::DeserializeUntaggedVerboseError;
@@ -535,6 +535,111 @@ impl From<StaticValueCfg> for StaticValueRtHelper {
 impl std::fmt::Display for StaticValueCfg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("{} {}", self.value.get(), self.interval))
+    }
+}
+
+// -------------------------------------------------
+#[derive(
+    JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, TraversableMut, Traversable, Validate, PartialOrd,
+)]
+#[serde(from = "ValueSrcs", into = "ValueSrcs")]
+pub(crate) struct InputPort {
+    #[serde(skip)]
+    #[garde(skip)]
+    #[traverse(skip)]
+    pub(crate) remap_to_interval: Option<NumInterval<BaseNumT>>,
+    #[serde(skip)]
+    #[garde(skip)]
+    #[traverse(skip)]
+    pub(crate) clamp_to_interval: Option<NumInterval<BaseNumT>>,
+    #[serde(skip)]
+    #[garde(skip)]
+    #[traverse(skip)]
+    pub(crate) triggers_mapping: bool,
+    // #[serde(flatten)]
+    #[garde(skip)]
+    pub(crate) src: ValueSrcs,
+}
+
+impl From<InputPort> for ValueSrcs {
+    fn from(value: InputPort) -> Self {
+        value.src
+    }
+}
+
+impl From<ValueSrcs> for InputPort {
+    fn from(value: ValueSrcs) -> Self {
+        Self {
+            remap_to_interval: Default::default(),
+            clamp_to_interval: Default::default(),
+            triggers_mapping: Default::default(),
+            src: value,
+        }
+    }
+}
+
+impl WithNumericValueSettable for InputPort {
+    fn set_numeric_value(&self, value: <Self as WithNumericValue>::ValueT) {
+        self.src.set_numeric_value(
+            self.remap_to_interval
+                .map(|ri| self.src.get_interval().map_from(value, &ri, OutOfRangePolicy::Clamp))
+                .unwrap_or(value),
+        );
+    }
+}
+
+impl WithNumericValue for InputPort {
+    type ValueT = BaseNumT;
+    fn get_numeric_value(&self) -> Self::ValueT {
+        let mut value = self.src.get_numeric_value();
+        self.remap_to_interval
+            .map(|ri| value = ri.map_from(value, &self.src.get_interval(), OutOfRangePolicy::Clamp));
+        value
+    }
+}
+
+impl Bounds for InputPort {
+    type Size = BaseNumT;
+    const MIN: Self::Size = BaseNumT::MIN;
+    const MAX: Self::Size = BaseNumT::MAX;
+
+    fn validate_bounds(
+        &self,
+        lower_bound: Self::Size,
+        upper_bound: Self::Size,
+    ) -> Result<(), garde::rules::range::OutOfBounds> {
+        let value = self.get_numeric_value();
+        let expected_interval = NumInterval::new(lower_bound, upper_bound);
+        debug_assert!(
+            self.get_interval().contains_interval(expected_interval),
+            "Interval expected in garde is not contained within the interval specified for the value source"
+        );
+        if value < expected_interval.from() {
+            Err(garde::rules::range::OutOfBounds::Lower)
+        } else if value > expected_interval.to() {
+            Err(garde::rules::range::OutOfBounds::Upper)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl WithNumericValueClamped for InputPort {
+    fn get_numeric_value_clamped(&self) -> <Self as WithNumericValue>::ValueT {
+        let mut value = self.get_numeric_value();
+        self.clamp_to_interval.map(|ci| value = ci.clamp(value));
+        value
+    }
+}
+
+impl WithNumInterval for InputPort {
+    type ValueT = BaseNumT;
+
+    fn get_interval(&self) -> NumInterval<Self::ValueT> {
+        self.clamp_to_interval
+            .and(self.clamp_to_interval)
+            .or(self.remap_to_interval.and(self.remap_to_interval))
+            .unwrap_or(self.src.get_interval())
     }
 }
 

@@ -259,6 +259,99 @@ impl<'s> DrawEgui<'s> for ValueSrcs {
 }
 
 // -------------------------------------
+// TODO: experimenting with data port abstraction over value source,
+//       that includes additional remapping and clamping functionality.
+//       This resembles script transform source and destination
+//       and if will be tested successfully, will be used there also.
+// impl<'s> DrawEgui<'s> for InputPort {
+//     type In = (&'s str, &'s str, ValueRefChoiceContext, GuiInValue<'s>);
+//     type Out = bool;
+
+//     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+//         let gui_type = gui_in.3;
+//         match &gui_type {
+//             GuiInValue::Edit(params) => {
+//                 let mut changed = false;
+//                 if let Some(ValuesRt::Src(new_value_src)) = draw_value_choice_iface(
+//                     gui_in.2,
+//                     ui,
+//                     gui_in.0,
+//                     gui_in.1,
+//                     params.cfg_devices,
+//                     params.cfg_variables,
+//                 ) {
+//                     self.src = new_value_src;
+//                     changed |= true;
+//                 }
+//                 match self.src {
+//                     ValueSrcs::Static(_) => {
+//                         ui.label("Value:");
+//                         let mut value = self.get_numeric_value();
+//                         changed |= ui
+//                             .add(
+//                                 egui::Slider::new(&mut value, self.get_interval().make_range_inclusive())
+//                                     .logarithmic(params.slider_log_scale)
+//                                     .fixed_decimals(4)
+//                                     .step_by(0.0001),
+//                             )
+//                             .changed();
+//                         // --
+//                         ui.separator();
+//                         ui.label("Range: ");
+//                         if params.allow_interval_edit {
+//                             changed |= self.get_interval().egui(
+//                                 GuiInInterval::Edit {
+//                                     max_range: HID_AXIS_MAX_RANGE,
+//                                     from_label: "From: ",
+//                                     to_label: "To: ",
+//                                     sanitize_and_sort: true,
+//                                     truncate: false,
+//                                 },
+//                                 ui,
+//                             );
+//                             ui.label("");
+//                         } else {
+//                             ui.label(format!("{}", self.get_interval()));
+//                         }
+//                         if changed {
+//                             self.set_numeric_value(self.get_interval().clamp(value));
+//                         }
+//                         changed
+//                     }
+//                     ValueSrcs::Dynamic(ref mut d) => d.egui(gui_in, ui),
+//                 };
+//                 ui.separator();
+//                 ui.label(self.get_numeric_value_clamped().to_string());
+//                 ui.separator();
+//                 ui.label(self.get_numeric_value_clamped().to_string());
+
+//                 changed
+//             }
+//             GuiInValue::Display => {
+//                 ui.separator();
+//                 match &mut self.src {
+//                     ValueSrcs::Static(v) => {
+//                         ui.horizontal(|ui| {
+//                             ui.label(
+//                                 egui::RichText::new(format!("Value: {}, Range: {}", v.value.get(), v.interval))
+//                                     .size(14.0)
+//                                     .monospace()
+//                                     .strong(),
+//                             );
+//                         });
+//                     }
+//                     ValueSrcs::Dynamic(dynamic_value_ref_rt) => {
+//                         dynamic_value_ref_rt.egui(gui_in, ui);
+//                     }
+//                 };
+//                 false
+//             }
+//         }
+//     }
+// }
+
+// -------------------------------------
+
 impl<'s> DrawEgui<'s> for Relativity {
     type In = GuiInKinds;
     type Out = bool;
