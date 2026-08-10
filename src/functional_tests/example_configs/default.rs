@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod default_config_tests {
-    use crate::base_num::{BaseAtomicT, BaseNumT};
+    use crate::base_num::BaseNumT;
     use crate::config::ConfigManager;
     use crate::debug::DebugLevel;
     use crate::device_and_device_manager::{
@@ -11,15 +11,17 @@ mod default_config_tests {
     use crate::interner::intern_str;
     use crate::mapped_controls::MappedCtls;
     use crate::mapping::{MappedHidManager, Mapper, MappingEngine};
-    use crate::num_interval::NumInterval;
+    use crate::num_interval::{NumInterval, OutOfRangePolicy};
     use crate::schemas_cfg::Config;
     use crate::schemas_common::ObjId;
     use crate::schemas_hid::HidDeviceCfg;
     use crate::schemas_transform::TfmStepCfg;
     use crate::schemas_value::WithNumericValueSettable;
+    use clap::Parser;
+    use log::LevelFilter;
     use std::collections::HashMap;
+    use std::env;
     use std::path::PathBuf;
-    use std::sync::atomic::Ordering::Relaxed;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
@@ -32,16 +34,16 @@ mod default_config_tests {
     #[cfg(feature = "midi")]
     use crate::schemas_midi::MidiMatcherCfg;
 
-    // TODO: make a reusable framework with sane API...
+    const TESTED_JOYSTICK_AXIS_CTL_MATCHER_KEY: &str = "ABS_X";
+    const TESTED_JOYSTICK_DEVICE_NAME: &str = "Virtual steering wheel";
     // ---------------
-    static TESTED_JOYSTICK_AXIS_MIDPOINT: BaseAtomicT = BaseAtomicT::new(0.0);
-    static TESTED_JOYSTICK_AXIS_CTL_MATCHER_KEY: &str = "ABS_X";
-    static TESTED_JOYSTICK_DEVICE_NAME: &str = "Virtual steering wheel";
+    const MOCKED_HID_MICE_NAME: &str = "Mock Mouse";
+    const MOCKED_HID_KBD_NAME: &str = "Mock Keyboard";
     // ---------------
-    static MOCKED_HID_DEVICE_NAME: &str = "Mock Mouse";
-    // ---------------
-    static AUTOCENTERING_TOLERANCE: BaseNumT = 0.07;
-    static MAPPING_ENGINE_IDLE_RATE: u32 = 60;
+    const AUTOCENTERING_TOLERANCE: BaseNumT = 0.07;
+    const MAPPING_ENGINE_IDLE_RATE: u32 = 60;
+    const PAUSE_FOR_GUI_WATCHING_MS: u64 = 300;
+    const FF_SPRING_GAIN: BaseNumT = 10.0;
 
     #[derive(Debug, Clone)]
     struct MockAvailableDevice {
@@ -77,11 +79,13 @@ mod default_config_tests {
         event_rx: tokio::sync::Mutex<mpsc::UnboundedReceiver<HidDeviceEvent>>,
         outputs: Arc<Mutex<HashMap<(String, String), BaseNumT>>>,
         ff_spring_enabled: Arc<AtomicBool>,
+        tested_axis_range: NumInterval<BaseNumT>,
     }
 
     impl MockHidManager {
         fn new(
             ff_spring_enabled: Arc<AtomicBool>,
+            tested_axis_range: NumInterval<BaseNumT>,
         ) -> (
             Self,
             mpsc::UnboundedSender<HidDeviceEvent>,
@@ -94,6 +98,7 @@ mod default_config_tests {
                     event_rx: tokio::sync::Mutex::new(rx),
                     outputs: outputs.clone(),
                     ff_spring_enabled,
+                    tested_axis_range,
                 },
                 tx,
                 outputs,
@@ -140,11 +145,11 @@ mod default_config_tests {
         ) -> Vec<Self::AvailableDeviceInfoT> {
             vec![
                 MockAvailableDevice {
-                    name: MOCKED_HID_DEVICE_NAME.to_string(),
+                    name: MOCKED_HID_MICE_NAME.to_string(),
                     classification: enumflags2::BitFlags::from_flag(DeviceKind::Mouse),
                 },
                 MockAvailableDevice {
-                    name: "Mock Keyboard".to_string(),
+                    name: MOCKED_HID_KBD_NAME.to_string(),
                     classification: enumflags2::BitFlags::from_flag(DeviceKind::Keyboard),
                 },
             ]
@@ -169,6 +174,7 @@ mod default_config_tests {
             if !self.ff_spring_enabled.load(Ordering::Relaxed) {
                 return 0.0;
             }
+
             let current_abs_x = self
                 .outputs
                 .lock()
@@ -180,14 +186,10 @@ mod default_config_tests {
                 .copied()
                 .unwrap_or(0.0);
 
-            // Emulate a very strong centering spring
-            if current_abs_x > TESTED_JOYSTICK_AXIS_MIDPOINT.load(Relaxed) {
-                -100.0 // * current_abs_x.abs()
-            } else if current_abs_x < TESTED_JOYSTICK_AXIS_MIDPOINT.load(Relaxed) {
-                100.0 // * current_abs_x.abs()
-            } else {
-                0.0
-            }
+            -FF_SPRING_GAIN
+                * self
+                    .tested_axis_range
+                    .map_to_symm_unit::<BaseNumT>(current_abs_x.abs(), OutOfRangePolicy::Clamp)
         }
         fn ff_get_y_sum_symm_norm(&self, _dev_key: &str) -> BaseNumT {
             0.0
@@ -289,8 +291,12 @@ mod default_config_tests {
         }
     }
 
-    async fn run_engine_and_events<F>(cfg: Config, ff_spring_enabled: Arc<AtomicBool>, scenario: F)
-    where
+    async fn run_test_driver<F>(
+        cfg: Config,
+        ff_spring_enabled: Arc<AtomicBool>,
+        range: NumInterval<BaseNumT>,
+        scenario: F,
+    ) where
         F: FnOnce(
             Arc<Mutex<HashMap<(String, String), BaseNumT>>>,
             mpsc::UnboundedSender<HidDeviceEvent>,
@@ -298,7 +304,7 @@ mod default_config_tests {
         ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'static>>,
     {
         let lua = mlua::Lua::new();
-        let (mock_hid_mgr, event_tx, outputs) = MockHidManager::new(ff_spring_enabled.clone());
+        let (mock_hid_mgr, event_tx, outputs) = MockHidManager::new(ff_spring_enabled.clone(), range);
 
         #[cfg(feature = "midi")]
         let mock_midi_mgr = MockMidiManager;
@@ -335,14 +341,27 @@ mod default_config_tests {
         tokio::select! {
             _ = engine.run() => { println!(" ENGINE RUN COMPLETED FIRST \n\n"); },
             _ = scenario_fut => { println!(" SCENARIO COMPLETED \n\n"); },
-            _ = tokio::time::sleep(Duration::from_secs(10)) => { println!(" TIMEOUT! \n\n");},
+            _ = tokio::time::sleep(Duration::from_secs(60)) => { panic!("SCENARIO TIMEOUT! \n\n");},
         }
 
         engine.stop().expect("Failed to stop engine");
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_default_config_extended() {
+    async fn test_default_config() {
+        env_logger::builder()
+            .is_test(true)
+            .filter_module("mmvj_lib", LevelFilter::Debug)
+            .try_init()
+            .unwrap();
+
+        let cli =
+            crate::cli::Cli::parse_from(env::args().skip_while(|arg| arg != &format!("--{}", crate::config::APP_NAME)));
+
+        let pause_for_gui_watching = async |duration: u64| {
+            tokio::time::sleep(Duration::from_millis(duration)).await;
+        };
+
         let cfg_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("conf/example-default.yaml");
         let mut cfg_mgr = ConfigManager::new(&cfg_path, DebugLevel::Mid).unwrap();
         cfg_mgr.load().unwrap();
@@ -361,9 +380,20 @@ mod default_config_tests {
             .unwrap()
             .range;
 
-        TESTED_JOYSTICK_AXIS_MIDPOINT.store(joystick_abs_x_range.midpoint() as BaseNumT, Relaxed);
-
-        env_logger::builder().is_test(true).try_init().unwrap();
+        //------------------------------ GUI---------------------------------
+        #[cfg(feature = "gui")]
+        if cli.gui_full || cli.gui_monitors {
+            let cfg = cfg_mgr.cfg_ref().clone();
+            let _ = std::thread::spawn(move || {
+                crate::gui_main::run(
+                    true,
+                    tokio::sync::mpsc::unbounded_channel::<crate::driver::DriverCmd>().0,
+                    Default::default(),
+                    cfg,
+                )
+            });
+            pause_for_gui_watching(PAUSE_FOR_GUI_WATCHING_MS).await;
+        }
 
         // --- Call 1: Phases 0, 1, 2 ---
         {
@@ -373,12 +403,12 @@ mod default_config_tests {
                             ff_enable_flag: Arc<AtomicBool>|
              -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'static>> {
                 Box::pin(async move {
-                    let mouse_id = ObjId::from(intern_str(MOCKED_HID_DEVICE_NAME));
+                    let mouse_id = ObjId::from(intern_str(MOCKED_HID_MICE_NAME));
 
                     // 0) Check axis turning opposit direction
                     set_hold_factor_max(&event_tx, mouse_id).await;
-                    send_rel(&event_tx, mouse_id, MappedCtls::RelX, 50.0, Count(15), Period(10)).await;
-                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    send_rel(&event_tx, mouse_id, MappedCtls::RelX, 50.0, Count(50), Period(10)).await;
+                    // tokio::time::sleep(Duration::from_millis(100)).await;
 
                     let val_right = outputs
                         .lock()
@@ -395,8 +425,11 @@ mod default_config_tests {
                         "0) Expected right turn, got {}",
                         val_right
                     );
+                    pause_for_gui_watching(PAUSE_FOR_GUI_WATCHING_MS).await;
 
-                    send_rel(&event_tx, mouse_id, MappedCtls::RelX, -50.0, Count(30), Period(1)).await;
+                    // -----------------------------------------------------------------
+
+                    send_rel(&event_tx, mouse_id, MappedCtls::RelX, -50.0, Count(50), Period(10)).await;
                     tokio::time::sleep(Duration::from_millis(100)).await;
                     let val_left = outputs
                         .lock()
@@ -408,20 +441,23 @@ mod default_config_tests {
                         .copied()
                         .unwrap_or(0.0);
                     assert!(
-                        val_left < joystick_abs_x_range.midpoint(),
+                        val_left < (joystick_abs_x_range.midpoint() - joystick_abs_x_range.span() * 0.05),
                         "0) Expected left turn, got {}",
                         val_left
                     );
+
                     println!(
                         "0) Opposite directions passed: right={:.3}, left={:.3}",
                         val_right, val_left
                     );
 
+                    pause_for_gui_watching(PAUSE_FOR_GUI_WATCHING_MS).await;
+
+                    // -----------------------------------------------------------------
+
                     // 1) Autocentering (as configured)
                     set_hold_factor_max(&event_tx, mouse_id).await;
-                    send_rel(&event_tx, mouse_id, MappedCtls::RelX, 50.0, Count(20), Period(0)).await;
-                    //tokio::time::sleep(Duration::from_millis(100)).await;
-
+                    send_rel(&event_tx, mouse_id, MappedCtls::RelX, 50.0, Count(50), Period(10)).await;
                     let val_before = outputs
                         .lock()
                         .unwrap()
@@ -432,10 +468,12 @@ mod default_config_tests {
                         .copied()
                         .unwrap_or(0.0);
                     assert!(
-                        val_before > joystick_abs_x_range.midpoint(),
-                        "1) Wheel must be turned right, got {}",
-                        val_before
+                        val_before > (joystick_abs_x_range.midpoint() + joystick_abs_x_range.span() * 0.05),
+                        "1) Wheel must be turned right, got {}. Midpoint is {}",
+                        val_before,
+                        joystick_abs_x_range.midpoint(),
                     );
+                    pause_for_gui_watching(PAUSE_FOR_GUI_WATCHING_MS).await;
 
                     set_hold_factor_zero(&event_tx, mouse_id).await;
                     tokio::time::sleep(Duration::from_millis(2000)).await;
@@ -457,13 +495,15 @@ mod default_config_tests {
                     );
                     println!("1) Autocentering passed: ABS_X = {:.3}", val_after);
 
+                    pause_for_gui_watching(PAUSE_FOR_GUI_WATCHING_MS).await;
+
+                    // -----------------------------------------------------------------
+
                     // 2) FF spring (as configured)
                     ff_enable_flag.store(true, Ordering::Relaxed);
 
                     set_hold_factor_max(&event_tx, mouse_id).await;
-                    send_rel(&event_tx, mouse_id, MappedCtls::RelX, 50.0, Count(20), Period(0)).await;
-                    //tokio::time::sleep(Duration::from_millis(100)).await;
-
+                    send_rel(&event_tx, mouse_id, MappedCtls::RelX, 50.0, Count(50), Period(10)).await;
                     let val_before = outputs
                         .lock()
                         .unwrap()
@@ -478,6 +518,9 @@ mod default_config_tests {
                         "2) Wheel must be turned right, got {}",
                         val_before
                     );
+                    pause_for_gui_watching(PAUSE_FOR_GUI_WATCHING_MS).await;
+
+                    // -----------------------------------------------------------------
 
                     set_hold_factor_zero(&event_tx, mouse_id).await;
                     tokio::time::sleep(Duration::from_millis(2000)).await;
@@ -499,32 +542,31 @@ mod default_config_tests {
                         val_after
                     );
                     println!("2) FF Spring passed: ABS_X = {:.3}", val_after);
+                    pause_for_gui_watching(PAUSE_FOR_GUI_WATCHING_MS).await;
                 })
             };
 
-            run_engine_and_events(cfg, ff_spring_enabled.clone(), scenario).await;
+            run_test_driver(cfg, ff_spring_enabled.clone(), joystick_abs_x_range, scenario).await;
         }
 
         // --- Call 2: Phase 3 ---
         {
             let mut cfg = cfg_base.clone();
             disable_autocentering(&mut cfg);
-            ff_spring_enabled.store(false, Ordering::Relaxed); // Reset flag for new engine
+            ff_spring_enabled.store(false, Ordering::Relaxed);
 
             let scenario = |outputs: Arc<Mutex<HashMap<(String, String), BaseNumT>>>,
                             event_tx: mpsc::UnboundedSender<HidDeviceEvent>,
                             ff_enable_flag: Arc<AtomicBool>|
              -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'static>> {
                 Box::pin(async move {
-                    let mouse_id = ObjId::from(intern_str("any_mouse"));
+                    let mouse_id = ObjId::from(intern_str(MOCKED_HID_MICE_NAME));
 
                     // 3) Disable autocentering and check FF spring
                     ff_enable_flag.store(true, Ordering::Relaxed);
 
                     set_hold_factor_max(&event_tx, mouse_id).await;
-                    send_rel(&event_tx, mouse_id, MappedCtls::RelX, 50.0, Count(20), Period(0)).await;
-                    //tokio::time::sleep(Duration::from_millis(100)).await;
-
+                    send_rel(&event_tx, mouse_id, MappedCtls::RelX, 50.0, Count(50), Period(10)).await;
                     let val_before = outputs
                         .lock()
                         .unwrap()
@@ -539,9 +581,10 @@ mod default_config_tests {
                         "3) Wheel must be turned right, got {}",
                         val_before
                     );
+                    pause_for_gui_watching(PAUSE_FOR_GUI_WATCHING_MS).await;
 
                     set_hold_factor_zero(&event_tx, mouse_id).await;
-                    tokio::time::sleep(Duration::from_millis(2000)).await;
+                    tokio::time::sleep(Duration::from_millis(1000)).await;
                     let val_after = outputs
                         .lock()
                         .unwrap()
@@ -559,10 +602,11 @@ mod default_config_tests {
                         val_after
                     );
                     println!("3) FF Spring (no autocenter) passed: ABS_X = {:.3}", val_after);
+                    pause_for_gui_watching(PAUSE_FOR_GUI_WATCHING_MS).await;
                 })
             };
 
-            run_engine_and_events(cfg, ff_spring_enabled.clone(), scenario).await;
+            run_test_driver(cfg, ff_spring_enabled.clone(), joystick_abs_x_range, scenario).await;
         }
     }
 }
