@@ -14,7 +14,7 @@ use crate::relativity::Relativity;
 use crate::schemas_common::WithRuntimeId;
 use crate::schemas_transform::WithCommonState;
 use crate::schemas_transform::{
-    ClampCfg, EmaFilterCfg, ForceFeedbackComponent, IntegrateCfg, InvertCfg, LinearCfg, NormExpCfg, OneEuroFilterCfg,
+    ClampCfg, EmaCfg, ForceFeedbackComponent, IntegrateCfg, InvertCfg, LinearCfg, NormExpCfg, OneEuroFilterCfg,
     RaiseFallCfg, SCurveCfg, ScriptCfg, SignedPowerCfg, SmoothstepCfg, SteeringCfg, TfmSeqCfg, TfmStepCfg,
 };
 
@@ -237,7 +237,7 @@ impl WithTfmExec for RaiseFallCfg {
     }
 }
 
-impl TfmExeState for EmaFilterCfg {
+impl TfmExeState for EmaCfg {
     type StateMutT<'a>
         = std::sync::MutexGuard<'a, crate::filters::EmaFilter>
     where
@@ -254,7 +254,7 @@ impl TfmExeState for EmaFilterCfg {
     }
 }
 
-impl WithTfmExec for EmaFilterCfg {
+impl WithTfmExec for EmaCfg {
     fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
         if self.enabled
             && (!ctx.is_idle_tick() || input.relativity == Relativity::Abs || self.on_relative_input_feed_on_idle)

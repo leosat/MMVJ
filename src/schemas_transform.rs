@@ -1,8 +1,12 @@
 use crate::base_num::{BaseAtomicT, BaseNumT};
 use crate::config::WithSanitize;
 use crate::filters::OneEuroFilter;
+use crate::make_input_port_port_inner_nutype;
 use crate::relativity::Relativity;
-use crate::schemas_value::{DescriptionCfg, InputValueMetadata, WithDescriptionMut, make_static_value_src};
+use crate::schemas_value::{
+    AutoOrManual, DescriptionCfg, SanitizedParamPort, InputValueMetadata, WithDescriptionMut, WithLastKnownIO,
+    WithNumericValue, make_static_value_src,
+};
 use crate::schemas_value::{
     DeviceControlMatcherRef, DynValueRefs, ValueDsts, VariableRef, WithNumInterval, WithRelativityRef,
     serialize_value_src_rt_ignore_interval,
@@ -25,10 +29,10 @@ use schemars::JsonSchema;
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
-use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 #[cfg(feature = "gui")]
 use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::Relaxed;
 use strum_macros::{Display, EnumIter, EnumString};
 use traversable::Traversable;
 use traversable::TraversableMut;
@@ -86,21 +90,19 @@ pub(crate) const fn default_norm_exp_base() -> BaseNumT {
     1.001
 }
 
-pub(crate) const fn default_ema_tau() -> ValueSrcs {
-    // InputPort {
-    //     src,
-    //     remap_to_interval: None,
-    //     clamp_to_interval: Some(NumInterval {
-    //         from: 1.0e-6,
-    //         to: 100.0,
-    //     }),
-    //     triggers_mapping: false,
-    // }
+pub(crate) fn default_ema_tau() -> ValueSrcs {
     ValueSrcs::Static(StaticValueCfg {
         value: std::cell::Cell::new(0.04),
         interval: AutoOrManual::Auto(NumInterval { from: 1.0e-6, to: 2.0 }),
     })
 }
+
+// pub(crate) fn default_ema_tau() -> EmaCfgTau {
+//     EmaCfgTau::from(ValueSrcs::Static(StaticValueCfg {
+//         value: std::cell::Cell::new(0.04),
+//         interval: AutoOrManual::Auto(NumInterval { from: 1.0e-6, to: 2.0 }),
+//     }))
+// }
 
 pub(crate) trait DuplicateWithNewState
 where
@@ -291,7 +293,7 @@ pub(crate) enum TfmStepCfg {
     #[traverse(skip)]
     Clamp(#[garde(skip)] ClampCfg),
     RaiseFall(#[garde(skip)] Box<RaiseFallCfg>),
-    Ema(#[garde(skip)] EmaFilterCfg),
+    Ema(#[garde(skip)] EmaCfg),
     #[traverse(skip)]
     Linear(#[garde(skip)] LinearCfg),
     #[traverse(skip)]
@@ -637,7 +639,7 @@ impl Default for InvertCfg {
 ///
 /// a = 1 - (-dt / tau).exp()
 /// y[i] = a * x[i] + (1 - a) * y[i-1]
-pub(crate) struct EmaFilterCfg {
+pub(crate) struct EmaCfg {
     /// ...
     #[traverse(skip)]
     #[serde(skip)]
@@ -670,16 +672,22 @@ pub(crate) struct EmaFilterCfg {
     #[serde(skip_serializing_if = "is_false")]
     #[garde(skip)]
     pub(crate) on_relative_input_reset_on_idle: bool,
-    #[traverse(skip)]
-    #[serde(default = "default_ema_tau")]
-    #[garde(range(min = 0.0))]
+    //#[serde(default = "default_ema_tau")]
+    #[schemars(skip)]
+    #[garde(skip)]
     /// The time constant
     /// Defines the duration required for the filter's step response
     /// to reach about 63.2% (1 - 1/e) of its final steady-state value.
-    pub(crate) tau: ValueSrcs, // InputPort,
+    // pub(crate) tau: ValueSrcs,
+    // pub(crate) tau: EmaCfgTau,
+    pub(crate) tau: SanitizedParamPort<EmaCfgTau>,
 }
 
-impl PartialEq for EmaFilterCfg {
+make_input_port_port_inner_nutype!(name: EmaCfgTau, inner: ValueSrcs, default: default_ema_tau());
+
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+impl PartialEq for EmaCfg {
     fn eq(&self, other: &Self) -> bool {
         self.desc == other.desc
             && self.enabled == other.enabled
@@ -689,17 +697,12 @@ impl PartialEq for EmaFilterCfg {
     }
 }
 
-impl Default for EmaFilterCfg {
+impl Default for EmaCfg {
     fn default() -> Self {
         Self {
             enabled: default_step_enabled(),
             on_relative_input_feed_on_idle: default_false(),
-            tau: default_ema_tau(), /*InputPort {
-                                        src: 0.01.into(),
-                                        remap_to_interval: None,
-                                        clamp_to_interval: NumInterval::new(1e-6, 100.0).into(),
-                                        triggers_mapping: false,
-                                    }*/
+            tau: Default::default(),
             on_relative_input_reset_on_idle: default_false(),
             desc: Default::default(),
             common_state: Default::default(),
@@ -821,10 +824,12 @@ pub(crate) struct OneEuroFilterCfg {
     ///   but may oscillate on noisy inputs.
     ///
     /// Rarely needs adjustment from the default.
-    #[serde(default = "default_1euro_d_cutoff_hz")]
+    // #[serde(default = "default_1euro_d_cutoff_hz")]
     #[garde(range(min = 0.0))]
-    pub(crate) d_cutoff_hz: ValueSrcs,
+    pub(crate) d_cutoff_hz: SanitizedParamPort<OneEuroCfgDCutOffHz>, // ValueSrcs,
 }
+
+make_input_port_port_inner_nutype!(name:  OneEuroCfgDCutOffHz, inner: ValueSrcs, default: default_1euro_d_cutoff_hz());
 
 impl PartialEq for OneEuroFilterCfg {
     fn eq(&self, other: &Self) -> bool {
@@ -845,7 +850,7 @@ impl Default for OneEuroFilterCfg {
             on_relative_input_feed_on_idle: default_false(),
             beta: default_1euro_beta(),
             min_cutoff_hz: default_1euro_min_cutoff_hz(),
-            d_cutoff_hz: default_1euro_d_cutoff_hz(),
+            d_cutoff_hz: Default::default(),
             on_relative_input_reset_on_idle: default_false(),
             desc: Default::default(),
             common_state: Default::default(),
@@ -1356,7 +1361,7 @@ macro_rules! tfm_seq_tpl {
             #[traverse(skip)]
             #[serde(skip)]
             #[garde(skip)]
-            pub(crate) last_io: Arc<CachePadded<AtomicF32>>,
+            pub(crate) last_io: Arc<CachePadded<BaseAtomicT>>,
             #[traverse(skip)]
             // #[serde(default)]
             #[serde(flatten)]
@@ -1375,87 +1380,6 @@ tfm_seq_tpl!(
     meta: serde(from = "TfmSeqVariants", into = "TfmSeqVariants")
 );
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
-#[serde(untagged)]
-pub(crate) enum AutoOrManual<T: Default> {
-    Manual(T),
-    Auto(T),
-}
-
-impl<T: Default> From<T> for AutoOrManual<T> {
-    fn from(value: T) -> Self {
-        Self::Auto(value)
-    }
-}
-
-impl<T: Copy + Default> Copy for AutoOrManual<T> {}
-
-impl<T: Default> AutoOrManual<T> {
-    #[allow(unused)]
-    pub fn inner_ref(&self) -> &T {
-        match self {
-            Self::Manual(m) => m,
-            Self::Auto(a) => a,
-        }
-    }
-
-    #[allow(unused)]
-    pub fn inner_mut(&mut self) -> &mut T {
-        match self {
-            Self::Manual(m) => m,
-            Self::Auto(a) => a,
-        }
-    }
-
-    #[allow(unused)]
-    pub fn make_auto(self) -> AutoOrManual<T> {
-        match self {
-            Self::Manual(m) => Self::Auto(m),
-            Self::Auto(_) => self,
-        }
-    }
-
-    pub fn make_manual(self) -> AutoOrManual<T> {
-        match self {
-            Self::Manual(_) => self,
-            Self::Auto(a) => Self::Manual(a),
-        }
-    }
-
-    pub(crate) fn is_auto(&self) -> bool {
-        matches!(self, Self::Auto(_))
-    }
-
-    #[allow(unused)]
-    pub(crate) fn is_manual(&self) -> bool {
-        matches!(self, Self::Manual(_))
-    }
-
-    #[allow(unused)]
-    pub(crate) fn set_inner(&mut self, other: T) {
-        match self {
-            AutoOrManual::Manual(v) => *v = other,
-            AutoOrManual::Auto(v) => *v = other,
-        }
-    }
-}
-
-impl<T: Default> Deref for AutoOrManual<T> {
-    type Target = T;
-    fn deref(&self) -> &Self::Target {
-        match self {
-            AutoOrManual::Manual(v) => v,
-            AutoOrManual::Auto(v) => v,
-        }
-    }
-}
-
-impl<T: Default> Default for AutoOrManual<T> {
-    fn default() -> Self {
-        Self::Auto(Default::default())
-    }
-}
-
 impl WithDescriptionMut for TfmSeqCfg {
     fn description_mut(&mut self) -> Option<&mut DescriptionCfg> {
         Some(&mut self.desc)
@@ -1468,17 +1392,21 @@ impl WithRelativityRef for TfmSeqCfg {
     }
 }
 
-impl<T: std::default::Default> DerefMut for AutoOrManual<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        match self {
-            AutoOrManual::Manual(v) => v,
-            AutoOrManual::Auto(v) => v,
-        }
+impl WithLastKnownIO<BaseNumT> for TfmSeqCfg {
+    fn get_last_known_io(&self) -> BaseNumT {
+        self.last_io.load(Relaxed)
+    }
+}
+
+impl WithNumericValue for TfmSeqCfg {
+    type ValueT = BaseNumT;
+
+    fn get_numeric_value(&self) -> Self::ValueT {
+        self.get_last_known_io()
     }
 }
 
 impl WithNumInterval for TfmSeqCfg {
-    type ValueT = BaseNumT;
     fn get_interval(&self) -> NumInterval<Self::ValueT> {
         self.in_meta.interval
     }
@@ -1555,7 +1483,7 @@ impl_with_common_state!(
     ClampCfg,
     NopCfg,
     InvertCfg,
-    EmaFilterCfg,
+    EmaCfg,
     Box<OneEuroFilterCfg>,
     LinearCfg,
     SmoothstepCfg,
@@ -1831,7 +1759,7 @@ pub(crate) trait TfmStepIdleBehavior {
     fn relative_input_reset_on_idle_mut(&mut self) -> &mut bool;
 }
 
-impl TfmStepIdleBehavior for EmaFilterCfg {
+impl TfmStepIdleBehavior for EmaCfg {
     fn relative_input_feed_on_idle_mut(&mut self) -> &mut bool {
         &mut self.on_relative_input_feed_on_idle
     }

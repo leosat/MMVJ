@@ -1,6 +1,7 @@
 use crate::base_num::*;
 use anyhow::{Result, bail};
 use num_traits::{Bounded, Float, FromPrimitive, Num, NumCast, ToPrimitive, Zero};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::backtrace::Backtrace;
 use std::convert::*;
@@ -65,6 +66,7 @@ pub(crate) trait NumIntervalValue:
     + PartialOrd
     + Copy
     + Bounded
+    + JsonSchema
     + Default // + ToNumInterval<Self>
 {
 }
