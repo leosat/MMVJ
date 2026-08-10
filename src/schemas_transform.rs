@@ -51,11 +51,11 @@ const fn default_1euro_beta() -> ValueSrcs {
 }
 
 const fn default_1euro_d_cutoff_hz() -> ValueSrcs {
-    make_static_value_src(1.0, UNIT_INTERVAL)
+    make_static_value_src(1.0, NumInterval { from: 1e-6, to: 30.0 })
 }
 
 const fn default_1euro_min_cutoff_hz() -> ValueSrcs {
-    make_static_value_src(1.0, UNIT_INTERVAL)
+    make_static_value_src(1.0, NumInterval { from: 1e-6, to: 30.0 })
 }
 
 const fn default_clamp_transform_override_interval() -> bool {

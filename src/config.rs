@@ -1,5 +1,6 @@
 use crate::debug::DebugLevel;
 use crate::device_and_device_manager::WithDeviceClassification;
+use crate::num_interval::NumInterval;
 use crate::schemas_cfg::*;
 use crate::schemas_control_matcher::ControlMatchers;
 use crate::schemas_hid::{HidControlMatcherCfg, HidDeviceCfg};
@@ -9,7 +10,7 @@ use crate::schemas_midi::{MidiControlMatcherCfg, MidiMatcherCfg};
 use crate::schemas_predefined::ControlsPredefinedCfg;
 use crate::schemas_transform::*;
 
-use crate::schemas_value::{DeviceControlMatcherRef, DynValueRefs, WithNumInterval, WithRelativity};
+use crate::schemas_value::{DeviceControlMatcherRef, DynValueRefs, ValueSrcs, WithNumInterval, WithRelativity};
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
 
@@ -171,13 +172,22 @@ impl Config {
             type Break = anyhow::Result<()>;
             fn enter_mut(&mut self, this: &mut dyn core::any::Any) -> std::ops::ControlFlow<Self::Break> {
                 // TODO: override static value interval using on-struct attribute!
-                // if let Some(ema) = this.downcast_mut::<EmaFilterCfg>() {
-                //     // ema.tau.clamp_to_interval = NumInterval::new(1e-6, 2.0).into();
-                //     // ema.tau.remap_to_interval = ema.tau.clamp_to_interval;
-                //     if let ValueSrcs::Static(ref mut s) = ema.tau {
-                //         s.interval = NumInterval::new(1e-6, 2.0).into();
-                //     }
-                // }
+                if let Some(ema) = this.downcast_mut::<EmaFilterCfg>() {
+                    // ema.tau.clamp_to_interval = NumInterval::new(1e-6, 2.0).into();
+                    // ema.tau.remap_to_interval = ema.tau.clamp_to_interval;
+                    if let ValueSrcs::Static(ref mut s) = ema.tau {
+                        s.interval = NumInterval::new(1e-6, 2.0).into();
+                    }
+                }
+
+                if let Some(ema) = this.downcast_mut::<OneEuroFilterCfg>() {
+                    if let ValueSrcs::Static(ref mut s) = ema.min_cutoff_hz {
+                        s.interval = NumInterval::new(1e-6, 30.0).into();
+                    }
+                    if let ValueSrcs::Static(ref mut s) = ema.d_cutoff_hz {
+                        s.interval = NumInterval::new(1e-6, 30.0).into();
+                    }
+                }
 
                 if let Some(m) = this.downcast_mut::<Mapping>() {
                     self.mapping_name = Some(m.name.clone());
