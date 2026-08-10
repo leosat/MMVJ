@@ -7,9 +7,7 @@ use crate::schemas_value::{
     DeviceControlMatcherRef, DynValueRefs, ValueDsts, VariableRef, WithNumInterval, WithRelativityRef,
     serialize_value_src_rt_ignore_interval,
 };
-use crate::tfm_exec::{
-    IntegrateExeState, RaiseFallExeState, ScriptExeState, SteeringExeState, TfmExeState, UncheckedIMStorage,
-};
+use crate::tfm_exec::{IntegrateExeState, RaiseFallExeState, ScriptExeState, SteeringExeState, TfmExeState};
 use crate::{
     num_interval::NumInterval,
     num_interval::{SYMM_UNIT_INTERVAL, UNIT_INTERVAL},
@@ -23,7 +21,6 @@ use bitflags::bitflags;
 use crossbeam_utils::CachePadded;
 // use documented::{Documented, DocumentedFields, docs_const};
 use garde::Validate;
-use parking_lot::Mutex;
 use schemars::JsonSchema;
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -90,13 +87,6 @@ pub(crate) const fn default_norm_exp_base() -> BaseNumT {
 }
 
 const fn default_ema_tau() -> ValueSrcs {
-    let src = ValueSrcs::Static(StaticValueCfg {
-        value: std::cell::Cell::new(0.04),
-        interval: AutoOrManual::Auto(NumInterval {
-            from: 1.0e-6,
-            to: 100.0,
-        }),
-    });
     // InputPort {
     //     src,
     //     remap_to_interval: None,
@@ -106,7 +96,13 @@ const fn default_ema_tau() -> ValueSrcs {
     //     }),
     //     triggers_mapping: false,
     // }
-    src
+    ValueSrcs::Static(StaticValueCfg {
+        value: std::cell::Cell::new(0.04),
+        interval: AutoOrManual::Auto(NumInterval {
+            from: 1.0e-6,
+            to: 100.0,
+        }),
+    })
 }
 
 pub(crate) trait DuplicateWithNewState
@@ -120,8 +116,18 @@ where
             fn enter_mut(&mut self, this: &mut dyn core::any::Any) -> std::ops::ControlFlow<Self::Break> {
                 if let Some(v) = this.downcast_mut::<TfmStepCfg>() {
                     v.common_state_assign_new();
-                    if let TfmStepCfg::Script(s) = v {
-                        s.exe_state = Default::default();
+                    match v {
+                        TfmStepCfg::Integrate(s) => s.exe_state = Default::default(),
+                        TfmStepCfg::Steering(s) => s.exe_state = Default::default(),
+                        TfmStepCfg::RaiseFall(s) => s.exe_state = Default::default(),
+                        TfmStepCfg::Ema(s) => s.exe_state = Default::default(),
+                        TfmStepCfg::OneEuro(s) => s.exe_state = Default::default(),
+                        TfmStepCfg::Script(s) => s.exe_state = Default::default(),
+                        TfmStepCfg::Nop(_) | TfmStepCfg::Invert(_) | TfmStepCfg::Clamp(_) | TfmStepCfg::Linear(_) => {}
+                        TfmStepCfg::Smoothstep(_) | TfmStepCfg::SCurve(_) => {}
+                        TfmStepCfg::Exp(_) | TfmStepCfg::SignedPower(_) => {}
+                        TfmStepCfg::_HighPass(_s) => {}
+                        TfmStepCfg::_ForceFeedback(_s) => {}
                     }
                 } else if let Some(v) = this.downcast_mut::<TfmSeqCfg>() {
                     v.assign_new_id();
@@ -287,7 +293,7 @@ pub(crate) enum TfmStepCfg {
     Steering(#[garde(skip)] Box<SteeringCfg>),
     #[traverse(skip)]
     Clamp(#[garde(skip)] ClampCfg),
-    RaiseFall(#[garde(skip)] RaiseFallCfg),
+    RaiseFall(#[garde(skip)] Box<RaiseFallCfg>),
     Ema(#[garde(skip)] EmaFilterCfg),
     #[traverse(skip)]
     Linear(#[garde(skip)] LinearCfg),
@@ -301,7 +307,7 @@ pub(crate) enum TfmStepCfg {
     #[traverse(skip)]
     SignedPower(#[garde(skip)] SignedPowerCfg),
     #[traverse(skip)]
-    OneEuro(#[garde(skip)] OneEuroFilterCfg),
+    OneEuro(#[garde(skip)] Box<OneEuroFilterCfg>),
     Script(#[garde(skip)] ScriptCfg),
     #[strum(disabled)]
     #[traverse(skip)]
@@ -645,7 +651,7 @@ pub(crate) struct EmaFilterCfg {
     #[serde(skip)]
     #[garde(skip)]
     /// ...
-    pub(super) exe_state: Arc<Mutex<crate::filters::EmaFilter>>,
+    pub(super) exe_state: Arc<std::sync::Mutex<crate::filters::EmaFilter>>,
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -730,7 +736,7 @@ pub(crate) struct OneEuroFilterCfg {
 
     #[serde(skip)]
     #[garde(skip)]
-    pub(super) exe_state: Arc<Mutex<OneEuroFilter>>,
+    pub(super) exe_state: Arc<std::sync::Mutex<OneEuroFilter>>,
 
     /// Optional human-readable description shown in the GUI.
     #[serde(default)]
@@ -1057,7 +1063,7 @@ pub(crate) struct IntegrateCfg {
     common_state: TfmStepCommonStateShared,
     #[serde(skip)]
     #[garde(skip)]
-    pub(super) exe_state: Arc<Mutex<IntegrateExeState>>,
+    pub(super) exe_state: Arc<std::sync::Mutex<IntegrateExeState>>,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -1400,14 +1406,14 @@ impl<T: Default> AutoOrManual<T> {
     }
 
     #[allow(unused)]
-    pub fn to_auto(self) -> AutoOrManual<T> {
+    pub fn make_auto(self) -> AutoOrManual<T> {
         match self {
             Self::Manual(m) => Self::Auto(m),
             Self::Auto(_) => self,
         }
     }
 
-    pub fn to_manual(self) -> AutoOrManual<T> {
+    pub fn make_manual(self) -> AutoOrManual<T> {
         match self {
             Self::Manual(_) => self,
             Self::Auto(a) => Self::Manual(a),
@@ -1548,7 +1554,7 @@ impl_with_common_state!(
     NopCfg,
     InvertCfg,
     EmaFilterCfg,
-    OneEuroFilterCfg,
+    Box<OneEuroFilterCfg>,
     LinearCfg,
     SmoothstepCfg,
     SCurveCfg,
@@ -1558,7 +1564,7 @@ impl_with_common_state!(
     IntegrateCfg,
     SteeringCfg,
     Box<SteeringCfg>,
-    RaiseFallCfg,
+    Box<RaiseFallCfg>,
     ScriptCfg,
 );
 
@@ -1583,7 +1589,7 @@ pub(crate) struct SteeringCfg {
     #[traverse(skip)]
     #[garde(skip)]
     /// Internal state
-    exe_state: Arc<Mutex<SteeringExeState>>,
+    exe_state: Arc<std::sync::Mutex<SteeringExeState>>,
 
     /// Optional human-readable description shown in the GUI.
     #[traverse(skip)]
@@ -1700,14 +1706,14 @@ pub(crate) struct SteeringCfg {
 
 impl TfmExeState for SteeringCfg {
     type StateMutT<'a>
-        = parking_lot::ArcMutexGuard<parking_lot::RawMutex, SteeringExeState>
+        = std::sync::MutexGuard<'a, SteeringExeState>
     where
         Self: 'a;
 
     type ResetInput<'b> = Option<SteeringExeState>;
 
     fn exe_state_mut(&self) -> Self::StateMutT<'_> {
-        self.exe_state.lock_arc()
+        self.exe_state.lock().unwrap()
     }
 
     fn exe_state_reset(&self, reset_with: Self::ResetInput<'_>) {
@@ -1755,7 +1761,7 @@ pub(crate) struct RaiseFallCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    pub(super) exe_state: Arc<Mutex<RaiseFallExeState>>,
+    pub(super) exe_state: Arc<std::sync::Mutex<RaiseFallExeState>>,
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -1887,7 +1893,7 @@ pub(crate) struct ScriptCfg {
     #[traverse(skip)]
     #[garde(skip)]
     /// Internal state
-    pub(super) exe_state: Arc<UncheckedIMStorage<Option<ScriptExeState>>>,
+    pub(super) exe_state: Arc<std::sync::Mutex<Option<ScriptExeState>>>,
 
     #[serde(skip)]
     #[traverse(skip)]

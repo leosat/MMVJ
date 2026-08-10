@@ -1,3 +1,4 @@
+use crate::filters::OneEuroFilter;
 use crate::filters::clamp_dt_by_min_and_max_period;
 use crate::num_interval::SYMM_UNIT_INTERVAL;
 use crate::num_interval::UNIT_INTERVAL;
@@ -30,44 +31,6 @@ use mlua::{FromLua, Lua};
 use std::ops::Add;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::Instant;
-
-use std::cell::UnsafeCell;
-
-#[derive(Debug, Default)]
-pub(crate) struct UncheckedIMStorage<T: Clone> {
-    inner: UnsafeCell<T>,
-}
-
-impl<T: Clone> Clone for UncheckedIMStorage<T> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: UnsafeCell::new(self.get().clone()),
-        }
-    }
-}
-
-// SAFETY: We guarantee that only one thread accesses this at a time
-unsafe impl<T: Clone> Send for UncheckedIMStorage<T> {}
-unsafe impl<T: Clone> Sync for UncheckedIMStorage<T> {}
-
-impl<T: Clone> UncheckedIMStorage<T> {
-    #[allow(unused)]
-    fn new(value: T) -> Self {
-        Self {
-            inner: UnsafeCell::new(value),
-        }
-    }
-
-    #[allow(unused)]
-    pub(crate) fn get(&self) -> &T {
-        unsafe { &*self.inner.get() }
-    }
-
-    #[allow(clippy::mut_from_ref)]
-    pub(crate) fn get_mut(&self) -> &mut T {
-        unsafe { &mut *self.inner.get() }
-    }
-}
 
 pub(crate) trait TfmExeState {
     type StateMutT<'a>
@@ -136,13 +99,13 @@ impl WithTfmExec for ClampCfg {
 
 impl TfmExeState for OneEuroFilterCfg {
     type StateMutT<'a>
-        = parking_lot::ArcMutexGuard<parking_lot::RawMutex, crate::filters::OneEuroFilter>
+        = std::sync::MutexGuard<'a, OneEuroFilter>
     where
         Self: 'a;
     type ResetInput<'b> = BaseNumT;
 
     fn exe_state_mut(&self) -> Self::StateMutT<'_> {
-        self.exe_state.lock_arc()
+        self.exe_state.lock().unwrap()
     }
 
     fn exe_state_reset(&self, reset_with: Self::ResetInput<'_>) {
@@ -191,14 +154,14 @@ impl Default for RaiseFallExeState {
 
 impl TfmExeState for RaiseFallCfg {
     type StateMutT<'a>
-        = parking_lot::ArcMutexGuard<parking_lot::RawMutex, RaiseFallExeState>
+        = std::sync::MutexGuard<'a, RaiseFallExeState>
     where
         Self: 'a;
 
     type ResetInput<'b> = Option<RaiseFallExeState>;
 
     fn exe_state_mut(&self) -> Self::StateMutT<'_> {
-        self.exe_state.lock_arc()
+        self.exe_state.lock().unwrap()
     }
 
     fn exe_state_reset(&self, reset_with: Self::ResetInput<'_>) {
@@ -276,14 +239,14 @@ impl WithTfmExec for RaiseFallCfg {
 
 impl TfmExeState for EmaFilterCfg {
     type StateMutT<'a>
-        = parking_lot::ArcMutexGuard<parking_lot::RawMutex, crate::filters::EmaFilter>
+        = std::sync::MutexGuard<'a, crate::filters::EmaFilter>
     where
         Self: 'a;
 
     type ResetInput<'b> = BaseNumT;
 
     fn exe_state_mut(&self) -> Self::StateMutT<'_> {
-        self.exe_state.lock_arc()
+        self.exe_state.lock().unwrap()
     }
 
     fn exe_state_reset(&self, reset_with: Self::ResetInput<'_>) {
@@ -481,20 +444,32 @@ impl ScriptExeState {
     }
 }
 
+pub(crate) enum ScriptExeStateResetMode {
+    #[cfg(feature = "gui")]
+    Recompile {
+        new_epoch: usize,
+    },
+    Init,
+}
+
 impl TfmExeState for ScriptCfg {
     type StateMutT<'a>
-        = Option<&'a mut ScriptExeState>
+        = std::sync::MutexGuard<'a, Option<ScriptExeState>>
     where
         Self: 'a;
 
-    type ResetInput<'b> = (&'b mlua::Lua, bool);
+    type ResetInput<'b> = (
+        std::sync::MutexGuard<'b, Option<ScriptExeState>>,
+        &'b mlua::Lua,
+        ScriptExeStateResetMode,
+    );
 
     fn exe_state_mut(&self) -> Self::StateMutT<'_> {
-        self.exe_state.get_mut().as_mut()
+        self.exe_state.lock().unwrap()
     }
 
-    fn exe_state_reset(&self, args: Self::ResetInput<'_>) {
-        let (lua, recompile_only) = args;
+    fn exe_state_reset(&self, mut args: Self::ResetInput<'_>) {
+        let (mut exe_state_guard, lua, ref mut reset_mode) = args;
         let script_compile = |exe_state: &mut ScriptExeState| {
             exe_state.compiled = lua
                 .load(&self.script)
@@ -504,7 +479,10 @@ impl TfmExeState for ScriptCfg {
         };
 
         || -> mlua::Result<()> {
-            if recompile_only && let Some(exe_state) = self.exe_state_mut() {
+            #[cfg(feature = "gui")]
+            if let ScriptExeStateResetMode::Recompile { new_epoch } = reset_mode
+                && let Some(exe_state) = exe_state_guard.as_mut()
+            {
                 log::info!("Re-compiling lua script!");
                 let env = exe_state
                     .compiled
@@ -515,7 +493,15 @@ impl TfmExeState for ScriptCfg {
                     .compiled
                     .set_environment(env)
                     .context("Can't set script environment")?;
+                #[cfg(feature = "gui")]
+                {
+                    exe_state.edit_epoch = *new_epoch
+                }
             } else {
+                *reset_mode = ScriptExeStateResetMode::Init;
+            }
+
+            if let ScriptExeStateResetMode::Init = reset_mode {
                 log::info!("Initializing lua script exe state!");
                 let mut exe_state = ScriptExeState::new(lua);
                 script_compile(&mut exe_state);
@@ -529,14 +515,21 @@ impl TfmExeState for ScriptCfg {
                     .compiled
                     .set_environment(env.clone())
                     .context("Can't set environment.")?;
-                *self.exe_state.get_mut() = Some(exe_state);
+                *exe_state_guard = Some(exe_state);
             }
+
             Ok(())
         }()
         .with_context(|_| {
-            if recompile_only {
+            #[cfg(feature = "gui")]
+            if let ScriptExeStateResetMode::Recompile { .. } = reset_mode {
                 "while recompiling lua script"
             } else {
+                "while creating the new lua script exe state"
+            }
+
+            #[cfg(not(feature = "gui"))]
+            {
                 "while creating the new lua script exe state"
             }
         })
@@ -558,11 +551,60 @@ impl WithTfmExec for ScriptCfg {
 
         const NAIVE_BENCH: bool = false;
 
-        let now = Instant::now();
-        match self.lang {
-            crate::schemas_transform::ScriptLanguage::Luau => {
-                let transform_closure =
-                    move |_lua: &mlua::Lua, args: (String, BaseNumT)| -> std::result::Result<BaseNumT, mlua::Error> {
+        'BEGIN: {
+            let now = Instant::now();
+            match self.lang {
+                crate::schemas_transform::ScriptLanguage::Luau => {
+                    let mut exe_state_guard = self.exe_state_mut();
+
+                    if branches::unlikely(exe_state_guard.is_none()) {
+                        self.exe_state_reset((exe_state_guard, ctx.get_lua(), ScriptExeStateResetMode::Init));
+                        break 'BEGIN;
+                    }
+
+                    let exe_state = exe_state_guard.as_mut().unwrap();
+
+                    #[cfg(feature = "gui")]
+                    if branches::unlikely(self.edit_epoch != exe_state.edit_epoch) {
+                        self.exe_state_reset((
+                            exe_state_guard,
+                            ctx.get_lua(),
+                            ScriptExeStateResetMode::Recompile {
+                                new_epoch: self.edit_epoch,
+                            },
+                        ));
+                        break 'BEGIN;
+                    }
+
+                    let env = exe_state.compiled.environment().expect(
+                        // NB: we can do a recovery with supplied Lua instance here, but generally, it must not happen, hence leaving as hard error.
+                        "Can't get lua script environment! Execution context references other Lua instance?",
+                    );
+
+                    #[derive(Clone)]
+                    enum SrcOrDstKey {
+                        Str(String),
+                        Num(i64),
+                    }
+
+                    impl FromLua for SrcOrDstKey {
+                        fn from_lua(value: mlua::prelude::LuaValue, _lua: &Lua) -> mlua::prelude::LuaResult<Self> {
+                            match value {
+                                mlua::Value::String(s) => Ok(SrcOrDstKey::Str(s.to_str()?.to_owned())),
+                                mlua::Value::Integer(i) => Ok(SrcOrDstKey::Num(i)),
+                                mlua::Value::Number(n) => Ok(SrcOrDstKey::Num(n as i64)),
+                                _ => Err(mlua::Error::FromLuaConversionError {
+                                    from: value.type_name(),
+                                    to: "SrcOrDstKey".to_string(),
+                                    message: Some("expected string or number".to_string()),
+                                }),
+                            }
+                        }
+                    }
+
+                    let transform_closure = move |_lua: &mlua::Lua,
+                                                  args: (String, BaseNumT)|
+                          -> std::result::Result<BaseNumT, mlua::Error> {
                         if let Some(tfm) = self.aux_transformations.get(&args.0) {
                             let ret = tfm.exec(
                                 TfmValue {
@@ -581,206 +623,170 @@ impl WithTfmExec for ScriptCfg {
                         }
                     };
 
-                let is_idle_closure =
-                    move |_lua: &mlua::Lua, _: ()| -> std::result::Result<bool, mlua::Error> { Ok(ctx.is_idle_tick()) };
+                    let is_idle_closure = move |_lua: &mlua::Lua, _: ()| -> std::result::Result<bool, mlua::Error> {
+                        Ok(ctx.is_idle_tick())
+                    };
 
-                let base_tick_closure = move |_lua: &mlua::Lua, _: ()| -> std::result::Result<u32, mlua::Error> {
-                    Ok(ctx.get_idle_tick_rate())
-                };
+                    let base_tick_closure = move |_lua: &mlua::Lua, _: ()| -> std::result::Result<u32, mlua::Error> {
+                        Ok(ctx.get_idle_tick_rate())
+                    };
 
-                let exe_state = self
-                    .exe_state_mut()
-                    .or_else(|| {
-                        branches::mark_unlikely();
-                        self.exe_state_reset((ctx.get_lua(), false));
-                        self.exe_state_mut()
-                    })
-                    .expect("Get or init lua script exe state failed.");
-
-                #[cfg(feature = "gui")]
-                if self.edit_epoch != exe_state.edit_epoch {
-                    self.exe_state_reset((ctx.get_lua(), true));
-                    exe_state.edit_epoch = self.edit_epoch;
-                }
-
-                let env = exe_state.compiled.environment().expect(
-                    // NB: we can do a recovery with supplied Lua instance here, but generally, it must not happen, hence leaving as hard error.
-                    "Can't get lua script environment! Execution context references other Lua instance?",
-                );
-
-                #[derive(Clone)]
-                enum SrcOrDstKey {
-                    Str(String),
-                    Num(i64),
-                }
-
-                impl FromLua for SrcOrDstKey {
-                    fn from_lua(value: mlua::prelude::LuaValue, _lua: &Lua) -> mlua::prelude::LuaResult<Self> {
-                        match value {
-                            mlua::Value::String(s) => Ok(SrcOrDstKey::Str(s.to_str()?.to_owned())),
-                            mlua::Value::Integer(i) => Ok(SrcOrDstKey::Num(i)),
-                            mlua::Value::Number(n) => Ok(SrcOrDstKey::Num(n as i64)),
-                            _ => Err(mlua::Error::FromLuaConversionError {
-                                from: value.type_name(),
-                                to: "SrcOrDstKey".to_string(),
-                                message: Some("expected string or number".to_string()),
-                            }),
-                        }
-                    }
-                }
-
-                let read_src_closure = {
-                    move |_lua: &mlua::Lua, key: SrcOrDstKey| -> std::result::Result<BaseNumT, mlua::Error> {
-                        match key {
-                            SrcOrDstKey::Num(0) => Ok(input.value),
-                            SrcOrDstKey::Str(s) => {
-                                if let Some(src) = self.aux_srcs.get(&s) {
-                                    let raw = src.source.get_numeric_value();
-                                    Ok(if let Some(remap_interval) = src.remap_to_interval {
-                                        remap_interval.map_from(
-                                            raw,
-                                            &src.source.get_interval(),
-                                            OutOfRangePolicy::Clamp,
-                                        )
+                    let read_src_closure = {
+                        move |_lua: &mlua::Lua, key: SrcOrDstKey| -> std::result::Result<BaseNumT, mlua::Error> {
+                            match key {
+                                SrcOrDstKey::Num(0) => Ok(input.value),
+                                SrcOrDstKey::Str(s) => {
+                                    if let Some(src) = self.aux_srcs.get(&s) {
+                                        let raw = src.source.get_numeric_value();
+                                        Ok(if let Some(remap_interval) = src.remap_to_interval {
+                                            remap_interval.map_from(
+                                                raw,
+                                                &src.source.get_interval(),
+                                                OutOfRangePolicy::Clamp,
+                                            )
+                                        } else {
+                                            raw
+                                        })
                                     } else {
-                                        raw
-                                    })
-                                } else {
-                                    Err(mlua::Error::RuntimeError(format!("Can't find source with key {s}")))
-                                }
-                            }
-                            SrcOrDstKey::Num(n) => self
-                                .aux_srcs
-                                .iter()
-                                .nth(n as usize - 1)
-                                .map(|v| {
-                                    let raw = v.1.source.get_numeric_value();
-                                    if let Some(remap_interval) = v.1.remap_to_interval {
-                                        remap_interval.map_from(
-                                            raw,
-                                            &v.1.source.get_interval(),
-                                            OutOfRangePolicy::Clamp,
-                                        )
-                                    } else {
-                                        raw
+                                        Err(mlua::Error::RuntimeError(format!("Can't find source with key {s}")))
                                     }
-                                })
-                                .ok_or_else(|| mlua::Error::RuntimeError(format!("Can't find source with key {n}"))),
-                        }
-                    }
-                };
-
-                let write_dst_closure = {
-                    let input_ref = &mut input.value;
-                    move |_lua: &mlua::Lua,
-                          (key, mut value): (SrcOrDstKey, BaseNumT)|
-                          -> std::result::Result<(), mlua::Error> {
-                        match key {
-                            SrcOrDstKey::Num(0) => {
-                                let _: () = *input_ref = value;
-                                Ok(())
+                                }
+                                SrcOrDstKey::Num(n) => self
+                                    .aux_srcs
+                                    .iter()
+                                    .nth(n as usize - 1)
+                                    .map(|v| {
+                                        let raw = v.1.source.get_numeric_value();
+                                        if let Some(remap_interval) = v.1.remap_to_interval {
+                                            remap_interval.map_from(
+                                                raw,
+                                                &v.1.source.get_interval(),
+                                                OutOfRangePolicy::Clamp,
+                                            )
+                                        } else {
+                                            raw
+                                        }
+                                    })
+                                    .ok_or_else(|| {
+                                        mlua::Error::RuntimeError(format!("Can't find source with key {n}"))
+                                    }),
                             }
-                            SrcOrDstKey::Str(key) => {
-                                if let Some(dst) = self.aux_dsts.get(&key) {
-                                    match dst.destination {
+                        }
+                    };
+
+                    let write_dst_closure = {
+                        let input_ref = &mut input.value;
+                        move |_lua: &mlua::Lua,
+                              (key, mut value): (SrcOrDstKey, BaseNumT)|
+                              -> std::result::Result<(), mlua::Error> {
+                            match key {
+                                SrcOrDstKey::Num(0) => {
+                                    let _: () = *input_ref = value;
+                                    Ok(())
+                                }
+                                SrcOrDstKey::Str(key) => {
+                                    if let Some(dst) = self.aux_dsts.get(&key) {
+                                        match dst.destination {
+                                            ValueDsts::Dynamic(ref d) => {
+                                                if let Some(remap_interval) = dst.remap_from_interval {
+                                                    value = dst.destination.get_interval().map_from(
+                                                        value,
+                                                        &remap_interval,
+                                                        OutOfRangePolicy::Clamp,
+                                                    )
+                                                }
+                                                ctx.set_dyn_value(d, value)
+                                            }
+                                            ValueDsts::Void => {}
+                                        };
+                                        Ok(())
+                                    } else {
+                                        Err(mlua::Error::RuntimeError(format!(
+                                            "Can't find destination with key {key}",
+                                        )))
+                                    }
+                                }
+                                SrcOrDstKey::Num(n) => self
+                                    .aux_dsts
+                                    .iter()
+                                    .nth(n as usize - 1)
+                                    .map(|v| match v.1.destination {
                                         ValueDsts::Dynamic(ref d) => {
-                                            if let Some(remap_interval) = dst.remap_from_interval {
-                                                value = dst.destination.get_interval().map_from(
+                                            if let Some(remap_interval) = v.1.remap_from_interval {
+                                                value = v.1.destination.get_interval().map_from(
                                                     value,
                                                     &remap_interval,
                                                     OutOfRangePolicy::Clamp,
                                                 )
                                             }
-                                            ctx.set_dyn_value(d, value)
+                                            ctx.set_dyn_value(d, value);
                                         }
                                         ValueDsts::Void => {}
-                                    };
-                                    Ok(())
-                                } else {
-                                    Err(mlua::Error::RuntimeError(format!(
-                                        "Can't find destination with key {key}",
-                                    )))
-                                }
+                                    })
+                                    .ok_or_else(|| {
+                                        mlua::Error::RuntimeError(format!("Can't find destination with key {n}"))
+                                    }),
                             }
-                            SrcOrDstKey::Num(n) => self
-                                .aux_dsts
-                                .iter()
-                                .nth(n as usize - 1)
-                                .map(|v| match v.1.destination {
-                                    ValueDsts::Dynamic(ref d) => {
-                                        if let Some(remap_interval) = v.1.remap_from_interval {
-                                            value = v.1.destination.get_interval().map_from(
-                                                value,
-                                                &remap_interval,
-                                                OutOfRangePolicy::Clamp,
-                                            )
-                                        }
-                                        ctx.set_dyn_value(d, value);
-                                    }
-                                    ValueDsts::Void => {}
-                                })
-                                .ok_or_else(|| {
-                                    mlua::Error::RuntimeError(format!("Can't find destination with key {n}"))
-                                }),
                         }
-                    }
-                };
-
-                if NAIVE_BENCH {
-                    stats_post_closure_setup = (Instant::now() - now).as_secs_f64();
-                }
-
-                let _ = ctx.get_lua().scope(|s| {
-                    if NAIVE_BENCH {
-                        stats_post_scope_setup = (Instant::now() - now).as_secs_f64();
-                    }
-
-                    // TODO: consider using Lua userdata ref and setup those routines only once on state reset.
-                    let _ = env.set("transform", s.create_function(transform_closure).unwrap());
-                    let _ = env.set("is_idle", s.create_function(is_idle_closure).unwrap());
-                    let _ = env.set("base_rate", s.create_function(base_tick_closure).unwrap());
-                    let _ = env.set("read", s.create_function(read_src_closure).unwrap());
-                    let _ = env.set("write", s.create_function_mut(write_dst_closure).unwrap());
+                    };
 
                     if NAIVE_BENCH {
-                        stats_post_env_setup = (Instant::now() - now).as_secs_f64();
+                        stats_post_closure_setup = (Instant::now() - now).as_secs_f64();
                     }
 
-                    if let Err(e) = exe_state.compiled.call::<()>(()) {
-                        log::error!("{e} ");
+                    let _ = ctx.get_lua().scope(|s| {
+                        if NAIVE_BENCH {
+                            stats_post_scope_setup = (Instant::now() - now).as_secs_f64();
+                        }
+
+                        // TODO: consider using Lua userdata ref and setup those routines only once on state reset.
+                        let _ = env.set("transform", s.create_function(transform_closure).unwrap());
+                        let _ = env.set("is_idle", s.create_function(is_idle_closure).unwrap());
+                        let _ = env.set("base_rate", s.create_function(base_tick_closure).unwrap());
+                        let _ = env.set("read", s.create_function(read_src_closure).unwrap());
+                        let _ = env.set("write", s.create_function_mut(write_dst_closure).unwrap());
+
+                        if NAIVE_BENCH {
+                            stats_post_env_setup = (Instant::now() - now).as_secs_f64();
+                        }
+
+                        if let Err(e) = exe_state.compiled.call::<()>(()) {
+                            log::error!("{e} ");
+                        }
+
+                        if NAIVE_BENCH {
+                            stats_post_exec = (Instant::now() - now).as_secs_f64();
+                        }
+
+                        Ok(())
+                    });
+
+                    // -----------------------------------
+                    input.relativity = self.output_relativity.unwrap_or(input.relativity);
+
+                    if let Some(intvl) = self.output_interval {
+                        input.interval = intvl;
                     }
 
                     if NAIVE_BENCH {
-                        stats_post_exec = (Instant::now() - now).as_secs_f64();
-                    }
-
-                    Ok(())
-                });
-
-                // -----------------------------------
-                input.relativity = self.output_relativity.unwrap_or(input.relativity);
-            }
-        }
-
-        if let Some(intvl) = self.output_interval {
-            input.interval = intvl;
-        }
-
-        if NAIVE_BENCH {
-            println!(
-                " Script execution naive perf stats -----
+                        println!(
+                            " Script execution naive perf stats -----
                   post closures    {}
                   post scope setup {}
                   post env setup   {}
                   post script exe  {}
                   post exec total  {}\n",
-                stats_post_closure_setup,
-                stats_post_scope_setup,
-                stats_post_env_setup,
-                stats_post_exec,
-                (Instant::now() - now).as_secs_f64()
-            );
+                            stats_post_closure_setup,
+                            stats_post_scope_setup,
+                            stats_post_env_setup,
+                            stats_post_exec,
+                            (Instant::now() - now).as_secs_f64()
+                        );
+                    }
+                }
+            }
         }
+
         input
     }
 }
@@ -805,14 +811,14 @@ pub(crate) struct IntegrateExeState {
 
 impl TfmExeState for IntegrateCfg {
     type StateMutT<'a>
-        = parking_lot::ArcMutexGuard<parking_lot::RawMutex, IntegrateExeState>
+        = std::sync::MutexGuard<'a, IntegrateExeState>
     where
         Self: 'a;
 
     type ResetInput<'b> = ();
 
     fn exe_state_mut(&self) -> Self::StateMutT<'_> {
-        self.exe_state.lock_arc()
+        self.exe_state.lock().unwrap()
     }
 
     fn exe_state_reset(&self, _: Self::ResetInput<'_>) {

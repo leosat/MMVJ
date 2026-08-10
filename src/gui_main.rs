@@ -160,7 +160,7 @@ pub(crate) fn run(
         )
     };
     log::info!("GUI closed, status: {:?}", eframe_result);
-    let _ = GuiMain::send_driver_cmd_static(&cmd_tx, DriverCmd::StatusGuiClosed);
+    GuiMain::send_driver_cmd_static(&cmd_tx, DriverCmd::StatusGuiClosed);
     Ok(())
 }
 

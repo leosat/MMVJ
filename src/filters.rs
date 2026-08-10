@@ -89,7 +89,7 @@ impl EmaFilter {
 }
 
 //-----------------------------------------
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct OneEuroFilter {
     prev_val: BaseNumT,
     prev_val_d: BaseNumT,

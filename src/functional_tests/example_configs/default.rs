@@ -83,6 +83,7 @@ mod default_config_tests {
     }
 
     impl MockHidManager {
+        #[allow(clippy::type_complexity)]
         fn new(
             ff_spring_enabled: Arc<AtomicBool>,
             tested_axis_range: NumInterval<BaseNumT>,
