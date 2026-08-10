@@ -38,20 +38,20 @@ pub(crate) enum GuiInMapping<'s> {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum ValueRefChoiceContext {
+pub(crate) enum ValueTargetChoiceCase {
     MappingSrc,
     MappingDst,
     TfmStepAuxSrc,
     TfmStepAuxDst,
 }
 
-impl ValueRefChoiceContext {
+impl ValueTargetChoiceCase {
     pub(crate) fn is_dst(&self) -> bool {
         match self {
-            ValueRefChoiceContext::MappingDst => true,
-            ValueRefChoiceContext::TfmStepAuxDst => true,
-            ValueRefChoiceContext::MappingSrc => false,
-            ValueRefChoiceContext::TfmStepAuxSrc => false,
+            ValueTargetChoiceCase::MappingDst => true,
+            ValueTargetChoiceCase::TfmStepAuxDst => true,
+            ValueTargetChoiceCase::MappingSrc => false,
+            ValueTargetChoiceCase::TfmStepAuxSrc => false,
         }
     }
 }
@@ -142,7 +142,7 @@ impl<'s> DrawEgui<'s> for Mapping {
                                         (
                                             "Choose main mapping source",
                                             "Choose main mapping source",
-                                            ValueRefChoiceContext::MappingSrc,
+                                            ValueTargetChoiceCase::MappingSrc,
                                             GuiInValue::Edit(GuiInValueEditParams {
                                                 allow_interval_edit: true,
                                                 slider_log_scale: false,
@@ -173,7 +173,7 @@ impl<'s> DrawEgui<'s> for Mapping {
                             ui.separator();
                             ui.collapsing("In-pipeline referenced dynamic sources ...", |ui| {
                                 for mut dcm in all_dynamic_sources {
-                                    dcm.egui(("", "", ValueRefChoiceContext::MappingSrc, GuiInValue::Display), ui);
+                                    dcm.egui(("", "", ValueTargetChoiceCase::MappingSrc, GuiInValue::Display), ui);
                                 }
                             });
                         }
@@ -194,7 +194,7 @@ impl<'s> DrawEgui<'s> for Mapping {
                                         (
                                             "Choose main mapping destination",
                                             "Choose main mapping destination",
-                                            ValueRefChoiceContext::MappingDst,
+                                            ValueTargetChoiceCase::MappingDst,
                                             GuiInValue::Edit(GuiInValueEditParams {
                                                 allow_interval_edit: true,
                                                 slider_log_scale: false,
@@ -228,7 +228,7 @@ impl<'s> DrawEgui<'s> for Mapping {
                             ui.separator();
                             ui.collapsing("In-pipeline referenced dynamic destinations ...", |ui| {
                                 for mut dcm in all_dynamic_destinations {
-                                    dcm.egui(("", "", ValueRefChoiceContext::MappingDst, GuiInValue::Display), ui);
+                                    dcm.egui(("", "", ValueTargetChoiceCase::MappingDst, GuiInValue::Display), ui);
                                 }
                             });
                         }

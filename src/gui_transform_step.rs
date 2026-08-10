@@ -7,7 +7,7 @@ use crate::gui_common::{
     DrawEgui, GuiCmd, GuiCmdScriptAuxRename, GuiDndJob, GuiDndJobMoveTfmStep, GuiDndJobNewTfmStep, GuiInKinds,
     ScriptAuxKind, bool_to_simple_change_gui_cmd, draw_collapsing_ui, get_item_name_with_random_suffix,
 };
-use crate::gui_mapping::ValueRefChoiceContext;
+use crate::gui_mapping::ValueTargetChoiceCase;
 use crate::gui_telemetry_graph::{GuiTelemetryGraphStates, make_trace_graph_2d};
 use crate::gui_value::{GuiInInterval, GuiInValue, GuiInValueEditParams, draw_value_choice_iface};
 use crate::hid_device::HID_AXIS_MAX_RANGE;
@@ -17,6 +17,15 @@ use crate::num_interval::SYMM_UNIT_INTERVAL;
 use crate::schemas_cfg::{DevicesCfgNew, VariablesCfg};
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_transform::*;
+use crate::schemas_value::AutoOrManual;
+use crate::schemas_value::PortIface;
+use crate::schemas_value::PortInnerIface;
+use crate::schemas_value::SanitizedParamPort;
+use crate::schemas_value::ValueDsts;
+use crate::schemas_value::ValueTargets;
+use crate::schemas_value::WithNumInterval;
+use crate::schemas_value::WithNumIntervalSettable;
+use crate::schemas_value::WithNumericValueSettable;
 use crate::schemas_value::{DescriptionCfg, StaticValueCfg, TfmValue, ValueSrcs, WithDescriptionMut, WithNumericValue};
 use crate::tracing::GraphDisplayStyle;
 // use documented::{Documented, DocumentedFields};
@@ -784,7 +793,7 @@ impl<'s> DrawEgui<'s> for RaiseFallCfg {
                 (
                     "Choose hold factor source",
                     "Choose hold factor source",
-                    ValueRefChoiceContext::TfmStepAuxSrc,
+                    ValueTargetChoiceCase::TfmStepAuxSrc,
                     GuiInValue::Edit(GuiInValueEditParams {
                         allow_interval_edit: false,
                         slider_log_scale: false,
@@ -803,7 +812,7 @@ impl<'s> DrawEgui<'s> for RaiseFallCfg {
     }
 }
 
-impl<'s> DrawEgui<'s> for EmaFilterCfg {
+impl<'s> DrawEgui<'s> for EmaCfg {
     type In = (&'s VariablesCfg, &'s DevicesCfgNew, bool);
     type Out = Option<GuiCmd>;
 
@@ -814,13 +823,14 @@ impl<'s> DrawEgui<'s> for EmaFilterCfg {
         let mut changed = false;
         ui.horizontal(|ui| {
             let param_name = "Time constant";
+            ui.label(param_name).on_hover_text(self.tau_doc_str());
             changed |= self.tau.egui(
                 (
                     param_name,
                     param_name,
-                    ValueRefChoiceContext::TfmStepAuxSrc,
+                    ValueTargetChoiceCase::TfmStepAuxSrc,
                     GuiInValue::Edit(GuiInValueEditParams {
-                        allow_interval_edit: false,
+                        allow_interval_edit: true,
                         slider_log_scale: true,
                         cfg_variables,
                         cfg_devices,
@@ -828,7 +838,6 @@ impl<'s> DrawEgui<'s> for EmaFilterCfg {
                 ),
                 ui,
             );
-            ui.label(param_name).on_hover_text(self.tau_doc_str());
         });
         if in_is_relative {
             ui.separator();
@@ -953,13 +962,15 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
 
         ui.horizontal(|ui| {
             let param_name = "Lowpass base cutoff";
+            ui.label(param_name).on_hover_text(self.min_cutoff_hz_doc_str());
+            ui.separator();
             changed |= self.min_cutoff_hz.egui(
                 (
                     param_name,
                     param_name,
-                    ValueRefChoiceContext::TfmStepAuxSrc,
+                    ValueTargetChoiceCase::TfmStepAuxSrc,
                     GuiInValue::Edit(GuiInValueEditParams {
-                        allow_interval_edit: false,
+                        allow_interval_edit: true,
                         slider_log_scale: true,
                         cfg_variables,
                         cfg_devices,
@@ -967,17 +978,18 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
                 ),
                 ui,
             );
-
-            ui.label(param_name).on_hover_text(self.min_cutoff_hz_doc_str());
         });
+        ui.separator();
 
         ui.horizontal(|ui| {
             let param_name = "Beta (speed coefficient)";
+            ui.label(param_name).on_hover_text(self.beta_doc_str());
+            ui.separator();
             changed |= self.beta.egui(
                 (
                     param_name,
                     param_name,
-                    ValueRefChoiceContext::TfmStepAuxSrc,
+                    ValueTargetChoiceCase::TfmStepAuxSrc,
                     GuiInValue::Edit(GuiInValueEditParams {
                         allow_interval_edit: false,
                         slider_log_scale: true,
@@ -987,16 +999,18 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
                 ),
                 ui,
             );
-            ui.label(param_name).on_hover_text(self.beta_doc_str());
         });
+        ui.separator();
 
         ui.horizontal(|ui| {
             let param_name = "Derivative cutoff";
+            ui.label(param_name).on_hover_text(self.d_cutoff_hz_doc_str());
+            ui.separator();
             changed |= self.d_cutoff_hz.egui(
                 (
                     param_name,
                     param_name,
-                    ValueRefChoiceContext::TfmStepAuxSrc,
+                    ValueTargetChoiceCase::TfmStepAuxSrc,
                     GuiInValue::Edit(GuiInValueEditParams {
                         allow_interval_edit: false,
                         slider_log_scale: true,
@@ -1006,7 +1020,6 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
                 ),
                 ui,
             );
-            ui.label(param_name).on_hover_text(self.d_cutoff_hz_doc_str());
         });
 
         if in_is_relative {
@@ -1076,7 +1089,7 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
                                 (
                                     "FFB custom source",
                                     "FFB custom source",
-                                    ValueRefChoiceContext::TfmStepAuxSrc,
+                                    ValueTargetChoiceCase::TfmStepAuxSrc,
                                     GuiInValue::Edit(GuiInValueEditParams {
                                         allow_interval_edit: false,
                                         slider_log_scale: false,
@@ -1158,7 +1171,7 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                         (
                             param_name,
                             param_name,
-                            ValueRefChoiceContext::TfmStepAuxSrc,
+                            ValueTargetChoiceCase::TfmStepAuxSrc,
                             GuiInValue::Edit(GuiInValueEditParams {
                                 allow_interval_edit: false,
                                 slider_log_scale: false,
@@ -1182,7 +1195,7 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                                 (
                                     param_name,
                                     param_name,
-                                    ValueRefChoiceContext::TfmStepAuxSrc,
+                                    ValueTargetChoiceCase::TfmStepAuxSrc,
                                     GuiInValue::Edit(GuiInValueEditParams {
                                         allow_interval_edit: false,
                                         slider_log_scale: false,
@@ -1207,7 +1220,7 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                                 (
                                     param_name,
                                     param_name,
-                                    ValueRefChoiceContext::TfmStepAuxSrc,
+                                    ValueTargetChoiceCase::TfmStepAuxSrc,
                                     GuiInValue::Edit(GuiInValueEditParams {
                                         allow_interval_edit: false,
                                         slider_log_scale: false,
@@ -1246,7 +1259,7 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                             (
                                 "Choose hold factor source",
                                 "Choose hold factor source",
-                                ValueRefChoiceContext::TfmStepAuxSrc,
+                                ValueTargetChoiceCase::TfmStepAuxSrc,
                                 GuiInValue::Edit(GuiInValueEditParams {
                                     allow_interval_edit: false,
                                     slider_log_scale: false,
@@ -1278,7 +1291,7 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                             (
                                 param_name,
                                 param_name,
-                                ValueRefChoiceContext::TfmStepAuxSrc,
+                                ValueTargetChoiceCase::TfmStepAuxSrc,
                                 GuiInValue::Edit(GuiInValueEditParams {
                                     allow_interval_edit: false,
                                     slider_log_scale: false,
@@ -1295,7 +1308,7 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                     }
                     {
                         let choice = draw_value_choice_iface(
-                            ValueRefChoiceContext::TfmStepAuxDst,
+                            ValueTargetChoiceCase::TfmStepAuxDst,
                             ui,
                             "Custom accumulator",
                             "Custom accumulator",
@@ -1303,13 +1316,13 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                             cfg_variables,
                         )
                         .and_then(|vr| match vr {
-                            crate::schemas_value::ValuesRt::Src(value_srcs) => match value_srcs {
+                            ValueTargets::Src(s) => match s {
                                 ValueSrcs::Static(_) => None,
-                                ValueSrcs::Dynamic(srcs) => Some(srcs),
+                                ValueSrcs::Dynamic(d) => Some(d),
                             },
-                            crate::schemas_value::ValuesRt::Dst(dsts) => match dsts {
-                                crate::schemas_value::ValueDsts::Dynamic(d) => Some(d),
-                                crate::schemas_value::ValueDsts::Void => None,
+                            ValueTargets::Dst(d) => match d {
+                                ValueDsts::Dynamic(d) => Some(d),
+                                ValueDsts::Void => None,
                             },
                         });
 
@@ -1587,7 +1600,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                                                                 a_value_gui_in: (
                                                                     &window_title,
                                                                     &window_title,
-                                                                    ValueRefChoiceContext::TfmStepAuxSrc,
+                                                                    ValueTargetChoiceCase::TfmStepAuxSrc,
                                                                     gui_in.2,
                                                                 ),
                                                             },
@@ -1606,7 +1619,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                                                                 a_value_gui_in: (
                                                                     &window_title,
                                                                     &window_title,
-                                                                    ValueRefChoiceContext::TfmStepAuxDst,
+                                                                    ValueTargetChoiceCase::TfmStepAuxDst,
                                                                     gui_in.2,
                                                                 ),
                                                             },
@@ -1736,7 +1749,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
 
 pub(super) struct ScriptCfgSourceOrDestinationGuiIn<'s> {
     item_idx: usize,
-    a_value_gui_in: (&'s str, &'s str, ValueRefChoiceContext, GuiInValue<'s>),
+    a_value_gui_in: (&'s str, &'s str, ValueTargetChoiceCase, GuiInValue<'s>),
 }
 
 enum ScriptSourceOrDestinationMut<'s> {

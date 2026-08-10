@@ -73,6 +73,7 @@ egui-phosphor = { version = "0.12.0", features = ["bold", "fill"] }
 branches = "0.4.4"
 ambassador = "0.5.1"
 fastrand = "2.5.0"
+nutype = { version = "0.7.0", features = ["arbitrary", "schemars08", "serde"] }
 
 [dev-dependencies]
 tempfile = "3.10"

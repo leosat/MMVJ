@@ -4,19 +4,21 @@ use eframe::egui;
 
 use crate::relativity::Relativity;
 
+use crate::schemas_value::{
+    AutoOrManual, PortIface, PortInnerIface, SanitizedParamPort, StaticValueCfg, WithNumIntervalSettable,
+};
 use crate::{
     base_num::BaseNumT,
     device_and_device_manager::WithDeviceClassification,
     gui_common::{DrawEgui, GuiInKinds},
-    gui_mapping::ValueRefChoiceContext,
+    gui_mapping::ValueTargetChoiceCase,
     hid_device::HID_AXIS_MAX_RANGE,
     num_interval::NumInterval,
     schemas_cfg::{DevicesCfgNew, VariablesCfg},
     schemas_control_matcher::ControlMatchers,
     schemas_hid::HidDeviceCfg,
-    schemas_transform::AutoOrManual,
     schemas_value::{
-        DeviceControlMatcherRef, DynValueRefs, ValueDsts, ValueSrcs, ValuesRt, VariableState, WithLastKnownIO,
+        DeviceControlMatcherRef, DynValueRefs, ValueDsts, ValueSrcs, ValueTargets, VariableState, WithLastKnownIO,
         WithNumInterval, WithNumIntervalMut, WithNumericValue, WithRelativity,
     },
 };
@@ -38,7 +40,7 @@ pub(crate) enum GuiInValue<'s> {
 // -------------------------------------
 
 impl<'s> DrawEgui<'s> for DynValueRefs {
-    type In = (&'s str, &'s str, ValueRefChoiceContext, GuiInValue<'s>);
+    type In = (&'s str, &'s str, ValueTargetChoiceCase, GuiInValue<'s>);
     type Out = bool;
 
     fn egui(&mut self, _gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
@@ -79,14 +81,14 @@ impl<'s> DrawEgui<'s> for DynValueRefs {
 }
 
 impl<'s> DrawEgui<'s> for ValueDsts {
-    type In = (&'s str, &'s str, ValueRefChoiceContext, GuiInValue<'s>);
+    type In = (&'s str, &'s str, ValueTargetChoiceCase, GuiInValue<'s>);
     type Out = bool;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut changed = false;
         match gui_in.3 {
             GuiInValue::Edit(params) => {
-                if let Some(ValuesRt::Dst(dst)) = draw_value_choice_iface(
+                if let Some(ValueTargets::Dst(dst)) = draw_value_choice_iface(
                     gui_in.2,
                     ui,
                     gui_in.0,
@@ -174,185 +176,177 @@ impl<'s> DrawEgui<'s> for NumInterval<BaseNumT> {
     }
 }
 
-// -----------------------------
-impl<'s> DrawEgui<'s> for ValueSrcs {
-    type In = (&'s str, &'s str, ValueRefChoiceContext, GuiInValue<'s>);
-    type Out = bool;
+impl WithNumIntervalSettable for StaticValueCfg {
+    fn set_interval(&mut self, interval: NumInterval<Self::ValueT>) {
+        self.interval = AutoOrManual::Manual(interval);
+    }
+}
 
-    fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
-        let gui_type = gui_in.3;
-        match &gui_type {
-            GuiInValue::Edit(params) => {
-                let mut changed = false;
-                if let Some(ValuesRt::Src(new_value_src)) = draw_value_choice_iface(
-                    gui_in.2,
-                    ui,
-                    gui_in.0,
-                    gui_in.1,
-                    params.cfg_devices,
-                    params.cfg_variables,
-                ) {
-                    *self = new_value_src;
-                    changed |= true;
-                }
-                ui.separator();
-                match self {
-                    Self::Static(s) => {
-                        ui.label("Value:");
-                        let mut value = s.value.get();
-                        changed |= ui
-                            .add(
-                                egui::Slider::new(&mut value, s.interval.make_range_inclusive())
-                                    .logarithmic(params.slider_log_scale)
-                                    .fixed_decimals(4)
-                                    .step_by(0.0001),
-                            )
-                            .changed();
-                        // --
-                        ui.separator();
-                        ui.label("Range: ");
-                        if params.allow_interval_edit {
-                            if s.interval.is_auto() {
-                                s.interval = s.interval.make_manual();
-                                changed = true;
-                            }
-                            changed |= s.interval.egui(
-                                GuiInInterval::Edit {
-                                    max_range: HID_AXIS_MAX_RANGE,
-                                    from_label: "From: ",
-                                    to_label: "To: ",
-                                    sanitize_and_sort: true,
-                                    truncate: false,
-                                },
-                                ui,
-                            );
-                            ui.label("");
-                        } else {
-                            ui.label(format!("{}", s.get_interval()));
-                        }
-                        if changed {
-                            s.value.set(s.interval.clamp(value));
-                        }
-                        changed
-                    }
-                    Self::Dynamic(d) => d.egui(gui_in, ui),
-                };
-                changed
-            }
-            GuiInValue::Display => {
-                ui.separator();
-                match self {
-                    Self::Static(v) => {
-                        ui.horizontal(|ui| {
-                            ui.label(
-                                egui::RichText::new(format!("Value: {}, Range: {}", v.value.get(), v.get_interval()))
-                                    .size(14.0)
-                                    .monospace()
-                                    .strong(),
-                            );
-                        });
-                    }
-                    Self::Dynamic(dynamic_value_ref_rt) => {
-                        dynamic_value_ref_rt.egui(gui_in, ui);
-                    }
-                };
-                false
+impl WithNumIntervalSettable for ValueSrcs {
+    fn set_interval(&mut self, interval: NumInterval<Self::ValueT>) {
+        match self {
+            Self::Static(s) => s.set_interval(interval),
+            Self::Dynamic(_) => {
+                log::error!(
+                    "Setting interval on dynamic value reference is not possible: modify the definition itself."
+                )
             }
         }
     }
 }
 
-// -------------------------------------
-// TODO: experimenting with data port abstraction over value source,
-//       that includes additional remapping and clamping functionality.
-//       This resembles script transform source and destination
-//       and if will be tested successfully, will be used there also.
-// impl<'s> DrawEgui<'s> for InputPort {
-//     type In = (&'s str, &'s str, ValueRefChoiceContext, GuiInValue<'s>);
-//     type Out = bool;
+impl<'s, T: PortInnerIface> DrawEgui<'s> for SanitizedParamPort<T>
+where
+    T: PortInnerIface
+        + From<ValueSrcs>
+        + DrawEgui<'s, In = (&'s str, &'s str, ValueTargetChoiceCase, GuiInValue<'s>), Out = bool>,
+    NumInterval<<T as WithNumericValue>::ValueT>: DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
+    <T as WithNumericValue>::ValueT: eframe::emath::Numeric,
+{
+    type In = (&'s str, &'s str, ValueTargetChoiceCase, GuiInValue<'s>);
+    type Out = bool;
 
-//     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
-//         let gui_type = gui_in.3;
-//         match &gui_type {
-//             GuiInValue::Edit(params) => {
-//                 let mut changed = false;
-//                 if let Some(ValuesRt::Src(new_value_src)) = draw_value_choice_iface(
-//                     gui_in.2,
-//                     ui,
-//                     gui_in.0,
-//                     gui_in.1,
-//                     params.cfg_devices,
-//                     params.cfg_variables,
-//                 ) {
-//                     self.src = new_value_src;
-//                     changed |= true;
-//                 }
-//                 match self.src {
-//                     ValueSrcs::Static(_) => {
-//                         ui.label("Value:");
-//                         let mut value = self.get_numeric_value();
-//                         changed |= ui
-//                             .add(
-//                                 egui::Slider::new(&mut value, self.get_interval().make_range_inclusive())
-//                                     .logarithmic(params.slider_log_scale)
-//                                     .fixed_decimals(4)
-//                                     .step_by(0.0001),
-//                             )
-//                             .changed();
-//                         // --
-//                         ui.separator();
-//                         ui.label("Range: ");
-//                         if params.allow_interval_edit {
-//                             changed |= self.get_interval().egui(
-//                                 GuiInInterval::Edit {
-//                                     max_range: HID_AXIS_MAX_RANGE,
-//                                     from_label: "From: ",
-//                                     to_label: "To: ",
-//                                     sanitize_and_sort: true,
-//                                     truncate: false,
-//                                 },
-//                                 ui,
-//                             );
-//                             ui.label("");
-//                         } else {
-//                             ui.label(format!("{}", self.get_interval()));
-//                         }
-//                         if changed {
-//                             self.set_numeric_value(self.get_interval().clamp(value));
-//                         }
-//                         changed
-//                     }
-//                     ValueSrcs::Dynamic(ref mut d) => d.egui(gui_in, ui),
-//                 };
-//                 ui.separator();
-//                 ui.label(self.get_numeric_value_clamped().to_string());
-//                 ui.separator();
-//                 ui.label(self.get_numeric_value_clamped().to_string());
+    fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+        draw_egui_for_port(self, gui_in, ui)
+    }
+}
 
-//                 changed
-//             }
-//             GuiInValue::Display => {
-//                 ui.separator();
-//                 match &mut self.src {
-//                     ValueSrcs::Static(v) => {
-//                         ui.horizontal(|ui| {
-//                             ui.label(
-//                                 egui::RichText::new(format!("Value: {}, Range: {}", v.value.get(), v.interval))
-//                                     .size(14.0)
-//                                     .monospace()
-//                                     .strong(),
-//                             );
-//                         });
-//                     }
-//                     ValueSrcs::Dynamic(dynamic_value_ref_rt) => {
-//                         dynamic_value_ref_rt.egui(gui_in, ui);
-//                     }
-//                 };
-//                 false
-//             }
-//         }
-//     }
-// }
+pub(crate) fn draw_egui_for_port<'s, PortT>(
+    port: &mut PortT,
+    gui_in: (&'s str, &'s str, ValueTargetChoiceCase, GuiInValue<'s>),
+    ui: &mut egui::Ui,
+) -> bool
+where
+    PortT: PortIface,
+    <PortT as PortIface>::InnerT: PortInnerIface
+        + From<ValueSrcs>
+        + DrawEgui<'s, In = (&'s str, &'s str, ValueTargetChoiceCase, GuiInValue<'s>), Out = bool>,
+    NumInterval<<<PortT as PortIface>::InnerT as WithNumericValue>::ValueT>:
+        DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
+    <<PortT as PortIface>::InnerT as WithNumericValue>::ValueT: eframe::emath::Numeric,
+{
+    if port.port_inner_ref().port_inner_is_static() {
+        let changed = ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
+        changed
+    } else {
+        ui.label(
+            egui::RichText::new(format!("{:+.004}", port.get_numeric_value()))
+                .monospace()
+                .size(13.0),
+        );
+        ui.collapsing(egui_phosphor::bold::PHONE_TRANSFER, |ui| {
+            let changed = ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
+            ui.separator();
+            ui.label(port.get_port_identity_str());
+            ui.separator();
+            if let Some(mut remap_to) = port.get_remap_interval() {
+                ui.label("remapped ->");
+                remap_to.egui(GuiInInterval::Display, ui);
+            }
+            if changed {
+                *port = PortT::from(port.port_inner_ref().clone());
+            }
+            changed
+        })
+        .body_returned
+        .unwrap_or_default()
+    }
+}
+
+pub(crate) fn draw_egui_for_input_port_inner<'s, T>(
+    this: &mut T,
+    gui_in: (&'s str, &'s str, ValueTargetChoiceCase, GuiInValue<'s>),
+    ui: &mut egui::Ui,
+) -> bool
+where
+    T: crate::schemas_value::PortInnerIface,
+    NumInterval<<T as WithNumericValue>::ValueT>: DrawEgui<'s, Out = bool, In = GuiInInterval<'s>>,
+    <T as WithNumericValue>::ValueT: eframe::emath::Numeric,
+    T: From<ValueSrcs>,
+{
+    let gui_type = gui_in.3;
+    match &gui_type {
+        GuiInValue::Edit(params) => {
+            let mut changed = false;
+            if let Some(ValueTargets::Src(new_value_src)) = draw_value_choice_iface(
+                gui_in.2,
+                ui,
+                gui_in.0,
+                gui_in.1,
+                params.cfg_devices,
+                params.cfg_variables,
+            ) {
+                *this = new_value_src.into();
+                changed |= true;
+            }
+
+            ui.label("Value:");
+            let mut value = this.get_numeric_value();
+            if ui
+                .add(
+                    egui::Slider::new(&mut value, this.get_interval().make_range_inclusive())
+                        .logarithmic(params.slider_log_scale)
+                        .fixed_decimals(4)
+                        .step_by(0.0001),
+                )
+                .changed()
+            {
+                this.set_numeric_value(value);
+                changed = true;
+            }
+            // --
+            ui.separator();
+            ui.label("Range: ");
+            if params.allow_interval_edit {
+                let mut interval = this.get_interval();
+                if interval.egui(
+                    GuiInInterval::Edit {
+                        max_range: HID_AXIS_MAX_RANGE,
+                        from_label: "From: ",
+                        to_label: "To: ",
+                        sanitize_and_sort: true,
+                        truncate: false,
+                    },
+                    ui,
+                ) {
+                    this.set_interval(interval);
+                    changed = true;
+                }
+                ui.label("");
+            } else {
+                ui.label(format!("{}", this.get_interval()));
+            }
+            changed
+        }
+        GuiInValue::Display => {
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "Value: {}, Range: {}",
+                        // self.get_port_identity_str(),
+                        this.get_numeric_value(),
+                        this.get_interval()
+                    ))
+                    .size(14.0)
+                    .monospace()
+                    .strong(),
+                );
+            });
+            false
+        }
+    }
+}
+
+// -----------------------------
+impl<'s> DrawEgui<'s> for ValueSrcs {
+    type In = (&'s str, &'s str, ValueTargetChoiceCase, GuiInValue<'s>);
+    type Out = bool;
+
+    fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+        draw_egui_for_input_port_inner(self, gui_in, ui)
+    }
+}
 
 // -------------------------------------
 
@@ -415,7 +409,7 @@ impl<'s> DrawEgui<'s> for VariableState {
                     ui.separator();
                     let mut value = self.get_numeric_value();
                     match self.value {
-                        crate::schemas_transform::AutoOrManual::Manual(_) => {
+                        AutoOrManual::Manual(_) => {
                             changed |= ui
                                 .add(
                                     egui::Slider::new(&mut value, self.get_interval().make_range_inclusive())
@@ -440,7 +434,7 @@ impl<'s> DrawEgui<'s> for VariableState {
                                 changed = true;
                             }
                         }
-                        crate::schemas_transform::AutoOrManual::Auto(_) => {
+                        AutoOrManual::Auto(_) => {
                             ui.label(egui::RichText::new(format!("{value:+11.4}")).monospace().strong());
                             ui.separator();
                             if ui
@@ -466,7 +460,7 @@ impl<'s> DrawEgui<'s> for VariableState {
 // -------------------------------------
 
 pub(crate) fn draw_value_choice_iface_window(
-    choice_context: &ValueRefChoiceContext,
+    choice_context: &ValueTargetChoiceCase,
     ui: &mut egui::Ui,
     cfg_devices: &DevicesCfgNew,
     cfg_variables: &VariablesCfg,
@@ -475,10 +469,10 @@ pub(crate) fn draw_value_choice_iface_window(
     let gui_out_mut = &mut gui_out;
     let (allow_special_ffb, allow_joysticks_or_gamepads, allow_midi, allow_mice_or_kbd, allow_vars) =
         match choice_context {
-            ValueRefChoiceContext::MappingSrc => (true, true, true, true, true),
-            ValueRefChoiceContext::MappingDst => (false, true, false, true, true),
-            ValueRefChoiceContext::TfmStepAuxSrc => (true, true, true, true, true),
-            ValueRefChoiceContext::TfmStepAuxDst => (false, true, false, true, true),
+            ValueTargetChoiceCase::MappingSrc => (true, true, true, true, true),
+            ValueTargetChoiceCase::MappingDst => (false, true, false, true, true),
+            ValueTargetChoiceCase::TfmStepAuxSrc => (true, true, true, true, true),
+            ValueTargetChoiceCase::TfmStepAuxDst => (false, true, false, true, true),
         };
 
     if allow_vars {
@@ -603,13 +597,13 @@ pub(crate) fn draw_value_choice_iface_window(
 }
 
 pub(crate) fn draw_value_choice_iface(
-    choice_context: ValueRefChoiceContext,
+    choice_context: ValueTargetChoiceCase,
     ui: &mut egui::Ui,
     egui_id_hashable: &str,
     window_title: &str,
     cfg_devices: &DevicesCfgNew,
     cfg_variables: &VariablesCfg,
-) -> Option<ValuesRt> {
+) -> Option<ValueTargets> {
     let mut choice = None;
     ui.scope_builder(egui::UiBuilder::default(), |ui| {
         let egui_id_window_open = ui.auto_id_with(egui_id_hashable);
@@ -619,10 +613,10 @@ pub(crate) fn draw_value_choice_iface(
         } else if ui
             .button(egui_phosphor::regular::LIST_MAGNIFYING_GLASS.to_string())
             .on_hover_text(match choice_context {
-                ValueRefChoiceContext::MappingSrc => "Select main src",
-                ValueRefChoiceContext::MappingDst => "Select main dst",
-                ValueRefChoiceContext::TfmStepAuxSrc => "Select src",
-                ValueRefChoiceContext::TfmStepAuxDst => "Select dst",
+                ValueTargetChoiceCase::MappingSrc => "Select main src",
+                ValueTargetChoiceCase::MappingDst => "Select main dst",
+                ValueTargetChoiceCase::TfmStepAuxSrc => "Select src",
+                ValueTargetChoiceCase::TfmStepAuxDst => "Select dst",
             })
             .clicked()
         {
@@ -640,7 +634,7 @@ pub(crate) fn draw_value_choice_iface(
                         ui.collapsing("Void", |ui| {
                             ui.separator();
                             if ui.button("Void").clicked() {
-                                static_value = Some(ValuesRt::Dst(ValueDsts::Void));
+                                static_value = Some(ValueTargets::Dst(ValueDsts::Void));
                             }
                         });
                     } else {
@@ -648,7 +642,7 @@ pub(crate) fn draw_value_choice_iface(
                         ui.collapsing("Static", |ui| {
                             ui.separator();
                             if ui.button("Local static value").clicked() {
-                                static_value = Some(ValuesRt::Src(ValueSrcs::Static(Default::default())));
+                                static_value = Some(ValueTargets::Src(ValueSrcs::Static(Default::default())));
                             }
                         });
                     }
@@ -661,11 +655,13 @@ pub(crate) fn draw_value_choice_iface(
                         draw_value_choice_iface_window(&choice_context, ui, cfg_devices, cfg_variables)
                     {
                         return match choice_context {
-                            ValueRefChoiceContext::TfmStepAuxSrc | ValueRefChoiceContext::MappingSrc => {
-                                Some(ValuesRt::Src(ValueSrcs::Dynamic(dynamic)))
+                            ValueTargetChoiceCase::TfmStepAuxSrc | ValueTargetChoiceCase::MappingSrc => {
+                                Some(ValueTargets::Src(ValueSrcs::Dynamic(dynamic)))
                             }
-                            ValueRefChoiceContext::MappingDst => Some(ValuesRt::Dst(ValueDsts::Dynamic(dynamic))),
-                            ValueRefChoiceContext::TfmStepAuxDst => Some(ValuesRt::Dst(ValueDsts::Dynamic(dynamic))),
+                            ValueTargetChoiceCase::MappingDst => Some(ValueTargets::Dst(ValueDsts::Dynamic(dynamic))),
+                            ValueTargetChoiceCase::TfmStepAuxDst => {
+                                Some(ValueTargets::Dst(ValueDsts::Dynamic(dynamic)))
+                            }
                         };
                     }
                     None
