@@ -68,4 +68,6 @@ pub(crate) mod gui_transform_step;
 pub(crate) mod gui_value;
 
 // --------------------------
+pub mod cli;
+// --------------------------
 mod functional_tests;

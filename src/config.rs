@@ -387,9 +387,8 @@ impl Config {
                                 control.clone()
                             } else if let Some(predef) = PREDEF_CONTROLS.midi_controls.get(&d.control_key) {
                                 log::warn!(
-                                    "Automatically back-filling predefined control {:?} into midi definition for {}, \
+                                    "Automatically back-filling predefined control into midi definition for {}, \
                                     where it was not found while being referenced in a mapping {}",
-                                    d.control_matcher,
                                     d.device_matcher_key,
                                     mapping_name
                                 );
@@ -438,7 +437,7 @@ impl Config {
                         variable: v.clone(),
                     }))
                 } else {
-                    bail!("Variable {var:#?} definition is not found")
+                    bail!("Variable {} definition is not found", var.variable_key)
                 }
             }
         }
