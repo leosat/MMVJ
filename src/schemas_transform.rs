@@ -46,15 +46,15 @@ const fn default_ff_gain() -> BaseNumT {
     1.0
 }
 
-const fn default_1euro_beta() -> ValueSrcs {
+pub(crate) const fn default_1euro_beta() -> ValueSrcs {
     make_static_value_src(0.007, UNIT_INTERVAL)
 }
 
-const fn default_1euro_d_cutoff_hz() -> ValueSrcs {
+pub(crate) const fn default_1euro_d_cutoff_hz() -> ValueSrcs {
     make_static_value_src(1.0, NumInterval { from: 1e-6, to: 30.0 })
 }
 
-const fn default_1euro_min_cutoff_hz() -> ValueSrcs {
+pub(crate) const fn default_1euro_min_cutoff_hz() -> ValueSrcs {
     make_static_value_src(1.0, NumInterval { from: 1e-6, to: 30.0 })
 }
 
@@ -86,7 +86,7 @@ pub(crate) const fn default_norm_exp_base() -> BaseNumT {
     1.001
 }
 
-const fn default_ema_tau() -> ValueSrcs {
+pub(crate) const fn default_ema_tau() -> ValueSrcs {
     // InputPort {
     //     src,
     //     remap_to_interval: None,
@@ -98,10 +98,7 @@ const fn default_ema_tau() -> ValueSrcs {
     // }
     ValueSrcs::Static(StaticValueCfg {
         value: std::cell::Cell::new(0.04),
-        interval: AutoOrManual::Auto(NumInterval {
-            from: 1.0e-6,
-            to: 100.0,
-        }),
+        interval: AutoOrManual::Auto(NumInterval { from: 1.0e-6, to: 2.0 }),
     })
 }
 
@@ -306,7 +303,6 @@ pub(crate) enum TfmStepCfg {
     Exp(#[garde(skip)] NormExpCfg),
     #[traverse(skip)]
     SignedPower(#[garde(skip)] SignedPowerCfg),
-    #[traverse(skip)]
     OneEuro(#[garde(skip)] Box<OneEuroFilterCfg>),
     Script(#[garde(skip)] ScriptCfg),
     #[strum(disabled)]
@@ -698,12 +694,12 @@ impl Default for EmaFilterCfg {
         Self {
             enabled: default_step_enabled(),
             on_relative_input_feed_on_idle: default_false(),
-            tau: 0.01.into(), /*InputPort {
-                                  src: 0.01.into(),
-                                  remap_to_interval: None,
-                                  clamp_to_interval: NumInterval::new(1e-6, 100.0).into(),
-                                  triggers_mapping: false,
-                              }*/
+            tau: default_ema_tau(), /*InputPort {
+                                        src: 0.01.into(),
+                                        remap_to_interval: None,
+                                        clamp_to_interval: NumInterval::new(1e-6, 100.0).into(),
+                                        triggers_mapping: false,
+                                    }*/
             on_relative_input_reset_on_idle: default_false(),
             desc: Default::default(),
             common_state: Default::default(),
@@ -726,28 +722,32 @@ impl Default for EmaFilterCfg {
 /// Ideal for smoothing noisy relative inputs (mouse,
 /// trackball) before a steering step, as a final output smoother
 /// after steering, or inside a force-feedback sub-pipeline.
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate, Traversable, TraversableMut)]
 #[serde(deny_unknown_fields)]
 #[with_doc_str]
 pub(crate) struct OneEuroFilterCfg {
     #[serde(skip)]
     #[garde(skip)]
+    #[traverse(skip)]
     common_state: TfmStepCommonStateShared,
 
     #[serde(skip)]
     #[garde(skip)]
+    #[traverse(skip)]
     pub(super) exe_state: Arc<std::sync::Mutex<OneEuroFilter>>,
 
     /// Optional human-readable description shown in the GUI.
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
+    #[traverse(skip)]
     pub(crate) desc: DescriptionCfg,
 
     /// Master on/off switch for the entire one-euro step. When `false`,
     /// the input value passes through unchanged and no filter state is updated.
     #[serde(default = "default_step_enabled")]
     #[garde(skip)]
+    #[traverse(skip)]
     pub(crate) enabled: bool,
 
     /// When `true` and the input has **relative** semantics, the last
@@ -761,6 +761,7 @@ pub(crate) struct OneEuroFilterCfg {
     #[serde(default = "default_false")]
     #[serde(skip_serializing_if = "is_false")]
     #[garde(skip)]
+    #[traverse(skip)]
     pub(crate) on_relative_input_feed_on_idle: bool,
 
     /// When `true` and the input has **relative** semantics, the filter
@@ -773,6 +774,7 @@ pub(crate) struct OneEuroFilterCfg {
     #[serde(default = "default_false")]
     #[serde(skip_serializing_if = "is_false")]
     #[garde(skip)]
+    #[traverse(skip)]
     pub(crate) on_relative_input_reset_on_idle: bool,
 
     /// Speed coefficient (β). Controls how much the cutoff frequency

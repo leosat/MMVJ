@@ -1,6 +1,5 @@
 use crate::debug::DebugLevel;
 use crate::device_and_device_manager::WithDeviceClassification;
-use crate::num_interval::NumInterval;
 use crate::schemas_cfg::*;
 use crate::schemas_control_matcher::ControlMatchers;
 use crate::schemas_hid::{HidControlMatcherCfg, HidDeviceCfg};
@@ -173,19 +172,21 @@ impl Config {
             fn enter_mut(&mut self, this: &mut dyn core::any::Any) -> std::ops::ControlFlow<Self::Break> {
                 // TODO: override static value interval using on-struct attribute!
                 if let Some(ema) = this.downcast_mut::<EmaFilterCfg>() {
-                    // ema.tau.clamp_to_interval = NumInterval::new(1e-6, 2.0).into();
-                    // ema.tau.remap_to_interval = ema.tau.clamp_to_interval;
                     if let ValueSrcs::Static(ref mut s) = ema.tau {
-                        s.interval = NumInterval::new(1e-6, 2.0).into();
+                        s.interval = AutoOrManual::Auto(default_ema_tau().get_interval());
                     }
                 }
 
-                if let Some(ema) = this.downcast_mut::<OneEuroFilterCfg>() {
-                    if let ValueSrcs::Static(ref mut s) = ema.min_cutoff_hz {
-                        s.interval = NumInterval::new(1e-6, 30.0).into();
+                // TODO: override static value interval using on-struct attribute!
+                if let Some(oe) = this.downcast_mut::<OneEuroFilterCfg>() {
+                    if let ValueSrcs::Static(ref mut s) = oe.min_cutoff_hz {
+                        s.interval = AutoOrManual::Auto(default_1euro_min_cutoff_hz().get_interval());
                     }
-                    if let ValueSrcs::Static(ref mut s) = ema.d_cutoff_hz {
-                        s.interval = NumInterval::new(1e-6, 30.0).into();
+                    if let ValueSrcs::Static(ref mut s) = oe.d_cutoff_hz {
+                        s.interval = AutoOrManual::Auto(default_1euro_d_cutoff_hz().get_interval());
+                    }
+                    if let ValueSrcs::Static(ref mut s) = oe.beta {
+                        s.interval = AutoOrManual::Auto(default_1euro_beta().get_interval());
                     }
                 }
 
