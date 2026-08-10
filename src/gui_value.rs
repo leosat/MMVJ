@@ -213,7 +213,7 @@ impl<'s> DrawEgui<'s> for ValueSrcs {
                         ui.label("Range: ");
                         if params.allow_interval_edit {
                             if s.interval.is_auto() {
-                                s.interval = s.interval.to_manual();
+                                s.interval = s.interval.make_manual();
                                 changed = true;
                             }
                             changed |= s.interval.egui(

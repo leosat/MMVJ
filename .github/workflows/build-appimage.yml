@@ -3,6 +3,10 @@ name: Build and Auto-Release AppImage
 on:
   push:
     branches: [ "main" ]
+  workflow_run:
+    workflows: ["Common testing"]
+    types: [completed]
+    branches: [main]
 
 permissions:
   contents: write

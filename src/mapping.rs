@@ -244,7 +244,7 @@ impl<
                     // TODO: will go to a reusable routine for reuse in other parts, e.g. in Gui.
                     v.is_enabled()
                         && v.matcher_name_regex_ref()
-                            .map(|r| r.is_match(&available_hid_device_info.get_name()))
+                            .map(|r| r.is_match(available_hid_device_info.get_name()))
                             .or(v.virtual_device_name_ref().map(|n| {
                                 crate::hid_device::sanitize_hid_name(n) == available_hid_device_info.get_name()
                             }))
@@ -283,12 +283,12 @@ impl<
                 .devices
                 .midi
                 .iter()
-                .filter(|(_, v)| v.enabled && v.match_name_regex.is_match(&available_midi_device_info.get_name()))
+                .filter(|(_, v)| v.enabled && v.match_name_regex.is_match(available_midi_device_info.get_name()))
                 .collect::<Vec<(_, _)>>()
             {
                 let opened_device_id = self
                     .midi_mgr
-                    .open_device(&available_midi_device_info, dmk, dm)?
+                    .open_device(available_midi_device_info, dmk, dm)?
                     .get_opened_device_id();
 
                 for cm in dm.controls.values() {
@@ -569,7 +569,7 @@ impl<
                 current_mapping_src: &mapping.src,
                 current_mapping_dst: &mapping.dst,
                 is_idle_tick,
-                lua: &self.lua,
+                lua: self.lua,
             },
         );
 

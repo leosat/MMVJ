@@ -594,8 +594,9 @@ impl WithNumericValue for InputPort {
     type ValueT = BaseNumT;
     fn get_numeric_value(&self) -> Self::ValueT {
         let mut value = self.src.get_numeric_value();
-        self.remap_to_interval
-            .map(|ri| value = ri.map_from(value, &self.src.get_interval(), OutOfRangePolicy::Clamp));
+        if let Some(ri) = self.remap_to_interval {
+            value = ri.map_from(value, &self.src.get_interval(), OutOfRangePolicy::Clamp);
+        }
         value
     }
 }
@@ -629,7 +630,9 @@ impl Bounds for InputPort {
 impl WithNumericValueClamped for InputPort {
     fn get_numeric_value_clamped(&self) -> <Self as WithNumericValue>::ValueT {
         let mut value = self.get_numeric_value();
-        self.clamp_to_interval.map(|ci| value = ci.clamp(value));
+        if let Some(ci) = self.clamp_to_interval {
+            value = ci.clamp(value);
+        }
         value
     }
 }
