@@ -1921,7 +1921,7 @@
         },
         "d_cutoff_hz": {
           "description": "Cutoff frequency in Hz for the derivative (speed) low-pass\nfilter.\n\nThe raw derivative `(x - x̂_prev) / dt` amplifies sensor jitter.\nThis secondary filter smooths the derivative so the adaptive\ncutoff does not oscillate.\n\n- `0.01 – 0.1` — very smooth derivative; stable but slow to\n  react to speed changes.\n- `1.0` *(default)* — balanced; works well for most devices.\n- `10.0 – 100.0` — barely filtered derivative; fast tracking\n  but may oscillate on noisy inputs.\n\nRarely needs adjustment from the default.",
-          "$ref": "#/$defs/InputParamPort"
+          "$ref": "#/$defs/SanitizedParamPort"
         }
       },
       "additionalProperties": false,
@@ -1929,7 +1929,39 @@
         "d_cutoff_hz"
       ]
     },
-    "InputParamPort": {
+    "SanitizedParamPort": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "remap": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NumInterval"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "triggers_mapping": {
+              "type": "boolean"
+            },
+            "target": {
+              "$ref": "#/$defs/OneEuroCfgDCutOffHz"
+            }
+          },
+          "required": [
+            "triggers_mapping",
+            "target"
+          ]
+        },
+        {
+          "$ref": "#/$defs/OneEuroCfgDCutOffHz"
+        }
+      ]
+    },
+    "OneEuroCfgDCutOffHz": {
       "anyOf": [
         {
           "$ref": "#/$defs/StaticValueCfg"
@@ -2106,9 +2138,6 @@
         }
       },
       "anyOf": [
-        {
-          "$ref": "#/$defs/InputValueMetadata"
-        },
         {
           "$ref": "#/$defs/InputValueMetadata"
         }
