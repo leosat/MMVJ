@@ -11,7 +11,7 @@ use crate::{
     base_num::BaseNumT,
     device_and_device_manager::WithDeviceClassification,
     gui_common::{DrawEgui, GuiInKinds},
-    gui_mapping::ValueTargetChoiceCase,
+    gui_mapping::ValueUsageContext,
     hid_device::HID_AXIS_MAX_RANGE,
     num_interval::NumInterval,
     schemas_cfg::{DevicesCfgNew, VariablesCfg},
@@ -25,6 +25,8 @@ use crate::{
 
 #[derive(Clone, Copy)]
 pub(crate) struct GuiInValueEditParams<'s> {
+    pub(crate) name: &'s str,
+    pub(crate) choice_case: ValueUsageContext,
     pub(crate) allow_interval_edit: bool,
     pub(crate) slider_log_scale: bool,
     pub(crate) cfg_variables: &'s VariablesCfg,
@@ -34,13 +36,16 @@ pub(crate) struct GuiInValueEditParams<'s> {
 #[derive(Clone, Copy)]
 pub(crate) enum GuiInValue<'s> {
     Edit(GuiInValueEditParams<'s>),
-    Display,
+    Display {
+        #[allow(unused)]
+        usage_context: ValueUsageContext,
+    },
 }
 
 // -------------------------------------
 
 impl<'s> DrawEgui<'s> for DynValueRefs {
-    type In = (&'s str, &'s str, ValueTargetChoiceCase, GuiInValue<'s>);
+    type In = GuiInValue<'s>;
     type Out = bool;
 
     fn egui(&mut self, _gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
@@ -81,18 +86,18 @@ impl<'s> DrawEgui<'s> for DynValueRefs {
 }
 
 impl<'s> DrawEgui<'s> for ValueDsts {
-    type In = (&'s str, &'s str, ValueTargetChoiceCase, GuiInValue<'s>);
+    type In = GuiInValue<'s>;
     type Out = bool;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut changed = false;
-        match gui_in.3 {
+        match gui_in {
             GuiInValue::Edit(params) => {
                 if let Some(ValueTargets::Dst(dst)) = draw_value_choice_iface(
-                    gui_in.2,
+                    params.choice_case,
                     ui,
-                    gui_in.0,
-                    gui_in.1,
+                    params.name,
+                    params.name,
                     params.cfg_devices,
                     params.cfg_variables,
                 ) {
@@ -101,14 +106,16 @@ impl<'s> DrawEgui<'s> for ValueDsts {
                 }
                 ui.separator();
             }
-            GuiInValue::Display => {}
+            GuiInValue::Display { .. } => {
+                // ui.label(self.to_string());
+            }
         }
         match self {
             ValueDsts::Void => {
                 ui.label(egui::RichText::new("Void").size(14.0).monospace().strong());
             }
-            ValueDsts::Dynamic(dynamic_value_refs_rt) => {
-                dynamic_value_refs_rt.egui(gui_in, ui);
+            ValueDsts::Dynamic(d) => {
+                d.egui(gui_in, ui);
             }
         }
         changed
@@ -197,13 +204,11 @@ impl WithNumIntervalSettable for ValueSrcs {
 
 impl<'s, T: PortInnerIface> DrawEgui<'s> for SanitizedParamPort<T>
 where
-    T: PortInnerIface
-        + From<ValueSrcs>
-        + DrawEgui<'s, In = (&'s str, &'s str, ValueTargetChoiceCase, GuiInValue<'s>), Out = bool>,
+    T: PortInnerIface + From<ValueSrcs> + DrawEgui<'s, In = GuiInValue<'s>, Out = bool>,
     NumInterval<<T as WithNumericValue>::ValueT>: DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
     <T as WithNumericValue>::ValueT: eframe::emath::Numeric,
 {
-    type In = (&'s str, &'s str, ValueTargetChoiceCase, GuiInValue<'s>);
+    type In = GuiInValue<'s>;
     type Out = bool;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
@@ -211,16 +216,10 @@ where
     }
 }
 
-pub(crate) fn draw_egui_for_port<'s, PortT>(
-    port: &mut PortT,
-    gui_in: (&'s str, &'s str, ValueTargetChoiceCase, GuiInValue<'s>),
-    ui: &mut egui::Ui,
-) -> bool
+pub(crate) fn draw_egui_for_port<'s, PortT>(port: &mut PortT, gui_in: GuiInValue<'s>, ui: &mut egui::Ui) -> bool
 where
     PortT: PortIface,
-    <PortT as PortIface>::InnerT: PortInnerIface
-        + From<ValueSrcs>
-        + DrawEgui<'s, In = (&'s str, &'s str, ValueTargetChoiceCase, GuiInValue<'s>), Out = bool>,
+    <PortT as PortIface>::InnerT: PortInnerIface + From<ValueSrcs> + DrawEgui<'s, In = GuiInValue<'s>, Out = bool>,
     NumInterval<<<PortT as PortIface>::InnerT as WithNumericValue>::ValueT>:
         DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
     <<PortT as PortIface>::InnerT as WithNumericValue>::ValueT: eframe::emath::Numeric,
@@ -253,26 +252,21 @@ where
     }
 }
 
-pub(crate) fn draw_egui_for_input_port_inner<'s, T>(
-    this: &mut T,
-    gui_in: (&'s str, &'s str, ValueTargetChoiceCase, GuiInValue<'s>),
-    ui: &mut egui::Ui,
-) -> bool
+pub(crate) fn draw_egui_for_input_port_inner<'s, T>(this: &mut T, gui_in: GuiInValue<'s>, ui: &mut egui::Ui) -> bool
 where
     T: crate::schemas_value::PortInnerIface,
     NumInterval<<T as WithNumericValue>::ValueT>: DrawEgui<'s, Out = bool, In = GuiInInterval<'s>>,
     <T as WithNumericValue>::ValueT: eframe::emath::Numeric,
     T: From<ValueSrcs>,
 {
-    let gui_type = gui_in.3;
-    match &gui_type {
+    match &gui_in {
         GuiInValue::Edit(params) => {
             let mut changed = false;
             if let Some(ValueTargets::Src(new_value_src)) = draw_value_choice_iface(
-                gui_in.2,
+                params.choice_case,
                 ui,
-                gui_in.0,
-                gui_in.1,
+                params.name,
+                params.name,
                 params.cfg_devices,
                 params.cfg_variables,
             ) {
@@ -318,7 +312,7 @@ where
             }
             changed
         }
-        GuiInValue::Display => {
+        GuiInValue::Display { .. } => {
             ui.separator();
             ui.horizontal(|ui| {
                 ui.label(
@@ -340,7 +334,7 @@ where
 
 // -----------------------------
 impl<'s> DrawEgui<'s> for ValueSrcs {
-    type In = (&'s str, &'s str, ValueTargetChoiceCase, GuiInValue<'s>);
+    type In = GuiInValue<'s>;
     type Out = bool;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
@@ -460,7 +454,7 @@ impl<'s> DrawEgui<'s> for VariableState {
 // -------------------------------------
 
 pub(crate) fn draw_value_choice_iface_window(
-    choice_context: &ValueTargetChoiceCase,
+    choice_context: &ValueUsageContext,
     ui: &mut egui::Ui,
     cfg_devices: &DevicesCfgNew,
     cfg_variables: &VariablesCfg,
@@ -469,10 +463,10 @@ pub(crate) fn draw_value_choice_iface_window(
     let gui_out_mut = &mut gui_out;
     let (allow_special_ffb, allow_joysticks_or_gamepads, allow_midi, allow_mice_or_kbd, allow_vars) =
         match choice_context {
-            ValueTargetChoiceCase::MappingSrc => (true, true, true, true, true),
-            ValueTargetChoiceCase::MappingDst => (false, true, false, true, true),
-            ValueTargetChoiceCase::TfmStepAuxSrc => (true, true, true, true, true),
-            ValueTargetChoiceCase::TfmStepAuxDst => (false, true, false, true, true),
+            ValueUsageContext::MappingSrc => (true, true, true, true, true),
+            ValueUsageContext::MappingDst => (false, true, false, true, true),
+            ValueUsageContext::TfmStepAuxSrc => (true, true, true, true, true),
+            ValueUsageContext::TfmStepAuxDst => (false, true, false, true, true),
         };
 
     if allow_vars {
@@ -597,7 +591,7 @@ pub(crate) fn draw_value_choice_iface_window(
 }
 
 pub(crate) fn draw_value_choice_iface(
-    choice_context: ValueTargetChoiceCase,
+    choice_context: ValueUsageContext,
     ui: &mut egui::Ui,
     egui_id_hashable: &str,
     window_title: &str,
@@ -613,10 +607,10 @@ pub(crate) fn draw_value_choice_iface(
         } else if ui
             .button(egui_phosphor::regular::LIST_MAGNIFYING_GLASS.to_string())
             .on_hover_text(match choice_context {
-                ValueTargetChoiceCase::MappingSrc => "Select main src",
-                ValueTargetChoiceCase::MappingDst => "Select main dst",
-                ValueTargetChoiceCase::TfmStepAuxSrc => "Select src",
-                ValueTargetChoiceCase::TfmStepAuxDst => "Select dst",
+                ValueUsageContext::MappingSrc => "Select main src",
+                ValueUsageContext::MappingDst => "Select main dst",
+                ValueUsageContext::TfmStepAuxSrc => "Select src",
+                ValueUsageContext::TfmStepAuxDst => "Select dst",
             })
             .clicked()
         {
@@ -655,13 +649,11 @@ pub(crate) fn draw_value_choice_iface(
                         draw_value_choice_iface_window(&choice_context, ui, cfg_devices, cfg_variables)
                     {
                         return match choice_context {
-                            ValueTargetChoiceCase::TfmStepAuxSrc | ValueTargetChoiceCase::MappingSrc => {
+                            ValueUsageContext::TfmStepAuxSrc | ValueUsageContext::MappingSrc => {
                                 Some(ValueTargets::Src(ValueSrcs::Dynamic(dynamic)))
                             }
-                            ValueTargetChoiceCase::MappingDst => Some(ValueTargets::Dst(ValueDsts::Dynamic(dynamic))),
-                            ValueTargetChoiceCase::TfmStepAuxDst => {
-                                Some(ValueTargets::Dst(ValueDsts::Dynamic(dynamic)))
-                            }
+                            ValueUsageContext::MappingDst => Some(ValueTargets::Dst(ValueDsts::Dynamic(dynamic))),
+                            ValueUsageContext::TfmStepAuxDst => Some(ValueTargets::Dst(ValueDsts::Dynamic(dynamic))),
                         };
                     }
                     None

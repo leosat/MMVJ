@@ -177,10 +177,13 @@ pub(crate) trait WithNumIntervalMut {
     fn interval_mut(&mut self) -> &mut NumInterval<Self::ValueT>;
 }
 
-pub mod variable_value_serde {
+pub(crate) mod variable_value_serde {
     use super::*;
 
-    pub fn serialize<S>(value: &AutoOrManual<Arc<CachePadded<BaseAtomicT>>>, serializer: S) -> Result<S::Ok, S::Error>
+    pub(crate) fn serialize<S>(
+        value: &AutoOrManual<Arc<CachePadded<BaseAtomicT>>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -190,7 +193,7 @@ pub mod variable_value_serde {
         return serializer.serialize_f32(value.load(std::sync::atomic::Ordering::Relaxed));
     }
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<AutoOrManual<Arc<CachePadded<BaseAtomicT>>>, D::Error>
+    pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<AutoOrManual<Arc<CachePadded<BaseAtomicT>>>, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -325,7 +328,7 @@ impl PartialOrd for VariableRef {
 }
 
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, TraversableMut, Traversable)]
-pub struct DeviceControlMatcherRef {
+pub(crate) struct DeviceControlMatcherRef {
     #[serde(rename = "dev")]
     #[serde(alias = "device")]
     #[serde(alias = "device-matcher")]
@@ -362,13 +365,13 @@ impl PartialOrd for DeviceControlMatcherRef {
     }
 }
 
-pub fn dummy_control_matcher_rt() -> ControlMatchers {
+pub(crate) fn dummy_control_matcher_rt() -> ControlMatchers {
     ControlMatchers::Hid(Default::default())
 }
 
 #[derive(PartialOrd, Ord, Eq, JsonSchema, Debug, Clone, Serialize, PartialEq, TraversableMut, Traversable)]
 #[serde(untagged)]
-pub enum DynValueRefs {
+pub(crate) enum DynValueRefs {
     DeviceControlMatcher(DeviceControlMatcherRef),
     Variable(VariableRef),
 }
@@ -488,7 +491,7 @@ enum StaticValueCfgSerdeHelper {
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Default, Validate)]
 #[serde(from = "StaticValueCfgSerdeHelper", into = "StaticValueCfgSerdeHelper")]
 #[serde(deny_unknown_fields)]
-pub struct StaticValueCfg {
+pub(crate) struct StaticValueCfg {
     #[garde(skip)]
     pub(crate) value: Cell<BaseNumT>,
     #[serde(default = "default_unit_interval")]
@@ -580,12 +583,12 @@ impl<T: PortInnerIface> PortIface for SanitizedParamPort<T> {
 }
 
 // -------------------------------------------------
-pub trait WithTriggersMapping {
+pub(crate) trait WithTriggersMapping {
     fn get_triggers_mapping(&self) -> bool;
     fn set_triggers_mapping(&mut self, flag: bool);
 }
 
-pub trait PortIface: WithTriggersMapping + From<Self::InnerT> + WithNumericValue {
+pub(crate) trait PortIface: WithTriggersMapping + From<Self::InnerT> + WithNumericValue {
     type InnerT: PortInnerIface;
     fn get_port_identity_str(&self) -> String;
     fn port_inner_ref(&self) -> &Self::InnerT;
@@ -596,13 +599,13 @@ pub trait PortIface: WithTriggersMapping + From<Self::InnerT> + WithNumericValue
     }
 }
 
-pub trait WithNumIntervalSettable: WithNumericValue {
+pub(crate) trait WithNumIntervalSettable: WithNumericValue {
     fn set_interval(&mut self, interval: NumInterval<Self::ValueT>);
 }
 
 // --------------------------------------------------------
 
-pub trait PortInnerIface:
+pub(crate) trait PortInnerIface:
     Clone
     + Default
     + PartialEq
@@ -731,7 +734,7 @@ impl<T: PortInnerIface> Bounds for SanitizedParamPort<T> {
     Validate,
 )]
 #[serde(untagged)]
-pub enum ValueSrcs {
+pub(crate) enum ValueSrcs {
     // Rand { distr: ... , interval: ... },
     #[traverse(skip)]
     Static(#[garde(skip)] StaticValueCfg),
@@ -1218,7 +1221,7 @@ impl<T: Copy + Default> Copy for AutoOrManual<T> {}
 
 impl<T: Default> AutoOrManual<T> {
     #[allow(unused)]
-    pub fn inner_ref(&self) -> &T {
+    pub(crate) fn inner_ref(&self) -> &T {
         match self {
             Self::Manual(m) => m,
             Self::Auto(a) => a,
@@ -1226,7 +1229,7 @@ impl<T: Default> AutoOrManual<T> {
     }
 
     #[allow(unused)]
-    pub fn inner_mut(&mut self) -> &mut T {
+    pub(crate) fn inner_mut(&mut self) -> &mut T {
         match self {
             Self::Manual(m) => m,
             Self::Auto(a) => a,
@@ -1234,7 +1237,7 @@ impl<T: Default> AutoOrManual<T> {
     }
 
     #[allow(unused)]
-    pub fn make_auto(self) -> AutoOrManual<T> {
+    pub(crate) fn make_auto(self) -> AutoOrManual<T> {
         match self {
             Self::Manual(m) => Self::Auto(m),
             Self::Auto(_) => self,
@@ -1242,7 +1245,7 @@ impl<T: Default> AutoOrManual<T> {
     }
 
     #[allow(unused)]
-    pub fn make_manual(self) -> AutoOrManual<T> {
+    pub(crate) fn make_manual(self) -> AutoOrManual<T> {
         match self {
             Self::Manual(_) => self,
             Self::Auto(a) => Self::Manual(a),
@@ -1363,7 +1366,7 @@ macro_rules! make_input_port_port_inner_nutype {
         }
 
         impl<'s> crate::gui_common::DrawEgui<'s> for $name {
-            type In = (&'s str, &'s str, crate::gui_mapping::ValueTargetChoiceCase, crate::gui_value::GuiInValue<'s>);
+            type In = crate::gui_value::GuiInValue<'s>;
             type Out = bool;
 
             fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {

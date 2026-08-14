@@ -38,20 +38,20 @@ pub(crate) enum GuiInMapping<'s> {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum ValueTargetChoiceCase {
+pub(crate) enum ValueUsageContext {
     MappingSrc,
     MappingDst,
     TfmStepAuxSrc,
     TfmStepAuxDst,
 }
 
-impl ValueTargetChoiceCase {
+impl ValueUsageContext {
     pub(crate) fn is_dst(&self) -> bool {
         match self {
-            ValueTargetChoiceCase::MappingDst => true,
-            ValueTargetChoiceCase::TfmStepAuxDst => true,
-            ValueTargetChoiceCase::MappingSrc => false,
-            ValueTargetChoiceCase::TfmStepAuxSrc => false,
+            ValueUsageContext::MappingDst => true,
+            ValueUsageContext::TfmStepAuxDst => true,
+            ValueUsageContext::MappingSrc => false,
+            ValueUsageContext::TfmStepAuxSrc => false,
         }
     }
 }
@@ -139,17 +139,14 @@ impl<'s> DrawEgui<'s> for Mapping {
                                     ui.separator();
                                     let old_id = self.src.get_id();
                                     if self.src.egui(
-                                        (
-                                            "Choose main mapping source",
-                                            "Choose main mapping source",
-                                            ValueTargetChoiceCase::MappingSrc,
-                                            GuiInValue::Edit(GuiInValueEditParams {
-                                                allow_interval_edit: true,
-                                                slider_log_scale: false,
-                                                cfg_variables,
-                                                cfg_devices,
-                                            }),
-                                        ),
+                                        GuiInValue::Edit(GuiInValueEditParams {
+                                            allow_interval_edit: true,
+                                            slider_log_scale: false,
+                                            cfg_variables,
+                                            cfg_devices,
+                                            name: "Choose main mapping source",
+                                            choice_case: ValueUsageContext::MappingSrc,
+                                        }),
                                         ui,
                                     ) {
                                         gui_out = if old_id == self.src.get_id() {
@@ -173,7 +170,12 @@ impl<'s> DrawEgui<'s> for Mapping {
                             ui.separator();
                             ui.collapsing("In-pipeline referenced dynamic sources ...", |ui| {
                                 for mut dcm in all_dynamic_sources {
-                                    dcm.egui(("", "", ValueTargetChoiceCase::MappingSrc, GuiInValue::Display), ui);
+                                    dcm.egui(
+                                        GuiInValue::Display {
+                                            usage_context: ValueUsageContext::MappingSrc,
+                                        },
+                                        ui,
+                                    );
                                 }
                             });
                         }
@@ -191,17 +193,14 @@ impl<'s> DrawEgui<'s> for Mapping {
                                     ui.separator();
                                     let old_id = self.dst.get_id();
                                     if self.dst.egui(
-                                        (
-                                            "Choose main mapping destination",
-                                            "Choose main mapping destination",
-                                            ValueTargetChoiceCase::MappingDst,
-                                            GuiInValue::Edit(GuiInValueEditParams {
-                                                allow_interval_edit: true,
-                                                slider_log_scale: false,
-                                                cfg_variables,
-                                                cfg_devices,
-                                            }),
-                                        ),
+                                        GuiInValue::Edit(GuiInValueEditParams {
+                                            allow_interval_edit: true,
+                                            slider_log_scale: false,
+                                            cfg_variables,
+                                            cfg_devices,
+                                            name: "Choose main mapping destination",
+                                            choice_case: ValueUsageContext::MappingDst,
+                                        }),
                                         ui,
                                     ) {
                                         gui_out = if old_id == self.dst.get_id() {
@@ -228,7 +227,12 @@ impl<'s> DrawEgui<'s> for Mapping {
                             ui.separator();
                             ui.collapsing("In-pipeline referenced dynamic destinations ...", |ui| {
                                 for mut dcm in all_dynamic_destinations {
-                                    dcm.egui(("", "", ValueTargetChoiceCase::MappingDst, GuiInValue::Display), ui);
+                                    dcm.egui(
+                                        GuiInValue::Display {
+                                            usage_context: ValueUsageContext::MappingDst,
+                                        },
+                                        ui,
+                                    );
                                 }
                             });
                         }

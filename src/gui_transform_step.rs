@@ -7,7 +7,7 @@ use crate::gui_common::{
     DrawEgui, GuiCmd, GuiCmdScriptAuxRename, GuiDndJob, GuiDndJobMoveTfmStep, GuiDndJobNewTfmStep, GuiInKinds,
     ScriptAuxKind, bool_to_simple_change_gui_cmd, draw_collapsing_ui, get_item_name_with_random_suffix,
 };
-use crate::gui_mapping::ValueTargetChoiceCase;
+use crate::gui_mapping::ValueUsageContext;
 use crate::gui_telemetry_graph::{GuiTelemetryGraphStates, make_trace_graph_2d};
 use crate::gui_value::{GuiInInterval, GuiInValue, GuiInValueEditParams, draw_value_choice_iface};
 use crate::hid_device::HID_AXIS_MAX_RANGE;
@@ -18,14 +18,8 @@ use crate::schemas_cfg::{DevicesCfgNew, VariablesCfg};
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_transform::*;
 use crate::schemas_value::AutoOrManual;
-use crate::schemas_value::PortIface;
-use crate::schemas_value::PortInnerIface;
-use crate::schemas_value::SanitizedParamPort;
 use crate::schemas_value::ValueDsts;
 use crate::schemas_value::ValueTargets;
-use crate::schemas_value::WithNumInterval;
-use crate::schemas_value::WithNumIntervalSettable;
-use crate::schemas_value::WithNumericValueSettable;
 use crate::schemas_value::{DescriptionCfg, StaticValueCfg, TfmValue, ValueSrcs, WithDescriptionMut, WithNumericValue};
 use crate::tracing::GraphDisplayStyle;
 // use documented::{Documented, DocumentedFields};
@@ -615,12 +609,8 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                                 (
                                                     step_id,
                                                     gui_in.2.clone_and_push_hier(step_id),
-                                                    GuiInValue::Edit(GuiInValueEditParams {
-                                                        allow_interval_edit: true,
-                                                        slider_log_scale: false,
-                                                        cfg_variables,
-                                                        cfg_devices,
-                                                    }),
+                                                    cfg_variables,
+                                                    cfg_devices,
                                                 ),
                                                 ui,
                                             ),
@@ -790,17 +780,14 @@ impl<'s> DrawEgui<'s> for RaiseFallCfg {
         ui.collapsing("Fall hold factor:", |ui| {
             ui.separator();
             changed |= self.fall_hold_factor.egui(
-                (
-                    "Choose hold factor source",
-                    "Choose hold factor source",
-                    ValueTargetChoiceCase::TfmStepAuxSrc,
-                    GuiInValue::Edit(GuiInValueEditParams {
-                        allow_interval_edit: false,
-                        slider_log_scale: false,
-                        cfg_variables,
-                        cfg_devices,
-                    }),
-                ),
+                GuiInValue::Edit(GuiInValueEditParams {
+                    allow_interval_edit: false,
+                    slider_log_scale: false,
+                    cfg_variables,
+                    cfg_devices,
+                    name: "Choose hold factor source",
+                    choice_case: ValueUsageContext::TfmStepAuxSrc,
+                }),
                 ui,
             );
             ui.separator();
@@ -825,17 +812,14 @@ impl<'s> DrawEgui<'s> for EmaCfg {
             let param_name = "Time constant";
             ui.label(param_name).on_hover_text(self.tau_doc_str());
             changed |= self.tau.egui(
-                (
-                    param_name,
-                    param_name,
-                    ValueTargetChoiceCase::TfmStepAuxSrc,
-                    GuiInValue::Edit(GuiInValueEditParams {
-                        allow_interval_edit: true,
-                        slider_log_scale: true,
-                        cfg_variables,
-                        cfg_devices,
-                    }),
-                ),
+                GuiInValue::Edit(GuiInValueEditParams {
+                    allow_interval_edit: true,
+                    slider_log_scale: true,
+                    cfg_variables,
+                    cfg_devices,
+                    name: param_name,
+                    choice_case: ValueUsageContext::TfmStepAuxSrc,
+                }),
                 ui,
             );
         });
@@ -965,17 +949,14 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
             ui.label(param_name).on_hover_text(self.min_cutoff_hz_doc_str());
             ui.separator();
             changed |= self.min_cutoff_hz.egui(
-                (
-                    param_name,
-                    param_name,
-                    ValueTargetChoiceCase::TfmStepAuxSrc,
-                    GuiInValue::Edit(GuiInValueEditParams {
-                        allow_interval_edit: true,
-                        slider_log_scale: true,
-                        cfg_variables,
-                        cfg_devices,
-                    }),
-                ),
+                GuiInValue::Edit(GuiInValueEditParams {
+                    allow_interval_edit: true,
+                    slider_log_scale: true,
+                    cfg_variables,
+                    cfg_devices,
+                    name: param_name,
+                    choice_case: ValueUsageContext::TfmStepAuxSrc,
+                }),
                 ui,
             );
         });
@@ -986,17 +967,14 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
             ui.label(param_name).on_hover_text(self.beta_doc_str());
             ui.separator();
             changed |= self.beta.egui(
-                (
-                    param_name,
-                    param_name,
-                    ValueTargetChoiceCase::TfmStepAuxSrc,
-                    GuiInValue::Edit(GuiInValueEditParams {
-                        allow_interval_edit: false,
-                        slider_log_scale: true,
-                        cfg_variables,
-                        cfg_devices,
-                    }),
-                ),
+                GuiInValue::Edit(GuiInValueEditParams {
+                    allow_interval_edit: false,
+                    slider_log_scale: true,
+                    cfg_variables,
+                    cfg_devices,
+                    name: param_name,
+                    choice_case: ValueUsageContext::TfmStepAuxSrc,
+                }),
                 ui,
             );
         });
@@ -1007,17 +985,14 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
             ui.label(param_name).on_hover_text(self.d_cutoff_hz_doc_str());
             ui.separator();
             changed |= self.d_cutoff_hz.egui(
-                (
-                    param_name,
-                    param_name,
-                    ValueTargetChoiceCase::TfmStepAuxSrc,
-                    GuiInValue::Edit(GuiInValueEditParams {
-                        allow_interval_edit: false,
-                        slider_log_scale: true,
-                        cfg_variables,
-                        cfg_devices,
-                    }),
-                ),
+                GuiInValue::Edit(GuiInValueEditParams {
+                    allow_interval_edit: false,
+                    slider_log_scale: true,
+                    cfg_variables,
+                    cfg_devices,
+                    name: param_name,
+                    choice_case: ValueUsageContext::TfmStepAuxSrc,
+                }),
                 ui,
             );
         });
@@ -1086,17 +1061,14 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
                         let old_id = custom_src.get_id();
                         ui.horizontal(|ui| {
                             if custom_src.egui(
-                                (
-                                    "FFB custom source",
-                                    "FFB custom source",
-                                    ValueTargetChoiceCase::TfmStepAuxSrc,
-                                    GuiInValue::Edit(GuiInValueEditParams {
-                                        allow_interval_edit: false,
-                                        slider_log_scale: false,
-                                        cfg_variables,
-                                        cfg_devices,
-                                    }),
-                                ),
+                                GuiInValue::Edit(GuiInValueEditParams {
+                                    allow_interval_edit: false,
+                                    slider_log_scale: false,
+                                    cfg_variables,
+                                    cfg_devices,
+                                    name: "FFB custom source",
+                                    choice_case: ValueUsageContext::TfmStepAuxSrc,
+                                }),
                                 ui,
                             ) {
                                 gui_out = if old_id != custom_src.get_id() {
@@ -1168,17 +1140,14 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                     let param_name = "Input gain";
                     ui.label(param_name).on_hover_text(self.input_gain_doc_str());
                     changed_simple |= self.input_gain.egui(
-                        (
-                            param_name,
-                            param_name,
-                            ValueTargetChoiceCase::TfmStepAuxSrc,
-                            GuiInValue::Edit(GuiInValueEditParams {
-                                allow_interval_edit: false,
-                                slider_log_scale: false,
-                                cfg_variables,
-                                cfg_devices,
-                            }),
-                        ),
+                        GuiInValue::Edit(GuiInValueEditParams {
+                            allow_interval_edit: false,
+                            slider_log_scale: false,
+                            cfg_variables,
+                            cfg_devices,
+                            name: param_name,
+                            choice_case: ValueUsageContext::TfmStepAuxSrc,
+                        }),
                         ui,
                     );
                 })
@@ -1192,17 +1161,14 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                     changed_simple |= ui
                         .horizontal(|ui| {
                             self.auto_center_halflife.egui(
-                                (
-                                    param_name,
-                                    param_name,
-                                    ValueTargetChoiceCase::TfmStepAuxSrc,
-                                    GuiInValue::Edit(GuiInValueEditParams {
-                                        allow_interval_edit: false,
-                                        slider_log_scale: false,
-                                        cfg_variables,
-                                        cfg_devices,
-                                    }),
-                                ),
+                                GuiInValue::Edit(GuiInValueEditParams {
+                                    allow_interval_edit: false,
+                                    slider_log_scale: false,
+                                    cfg_variables,
+                                    cfg_devices,
+                                    name: param_name,
+                                    choice_case: ValueUsageContext::TfmStepAuxSrc,
+                                }),
                                 ui,
                             )
                         })
@@ -1217,17 +1183,14 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                             ui.label(param_name)
                                 .on_hover_text(Self::auto_center_along_force_feedback_doc_str_static());
                             changed_simple |= self.auto_center_along_force_feedback.egui(
-                                (
-                                    param_name,
-                                    param_name,
-                                    ValueTargetChoiceCase::TfmStepAuxSrc,
-                                    GuiInValue::Edit(GuiInValueEditParams {
-                                        allow_interval_edit: false,
-                                        slider_log_scale: false,
-                                        cfg_variables,
-                                        cfg_devices,
-                                    }),
-                                ),
+                                GuiInValue::Edit(GuiInValueEditParams {
+                                    allow_interval_edit: false,
+                                    slider_log_scale: false,
+                                    cfg_variables,
+                                    cfg_devices,
+                                    name: param_name,
+                                    choice_case: ValueUsageContext::TfmStepAuxSrc,
+                                }),
                                 ui,
                             );
                         });
@@ -1256,17 +1219,14 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                     ui.horizontal(|ui| {
                         let id = self.hold_factor.get_id();
                         if self.hold_factor.egui(
-                            (
-                                "Choose hold factor source",
-                                "Choose hold factor source",
-                                ValueTargetChoiceCase::TfmStepAuxSrc,
-                                GuiInValue::Edit(GuiInValueEditParams {
-                                    allow_interval_edit: false,
-                                    slider_log_scale: false,
-                                    cfg_devices,
-                                    cfg_variables,
-                                }),
-                            ),
+                            GuiInValue::Edit(GuiInValueEditParams {
+                                allow_interval_edit: false,
+                                slider_log_scale: false,
+                                cfg_devices,
+                                cfg_variables,
+                                name: "Choose hold factor source",
+                                choice_case: ValueUsageContext::TfmStepAuxSrc,
+                            }),
                             ui,
                         ) {
                             if id == self.hold_factor.get_id() {
@@ -1288,17 +1248,14 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                     ui.label(param_name);
                     if let Some(acc) = &mut self.accumulator {
                         changed_simple |= acc.egui(
-                            (
-                                param_name,
-                                param_name,
-                                ValueTargetChoiceCase::TfmStepAuxSrc,
-                                GuiInValue::Edit(GuiInValueEditParams {
-                                    allow_interval_edit: false,
-                                    slider_log_scale: false,
-                                    cfg_variables,
-                                    cfg_devices,
-                                }),
-                            ),
+                            GuiInValue::Edit(GuiInValueEditParams {
+                                allow_interval_edit: false,
+                                slider_log_scale: false,
+                                cfg_variables,
+                                cfg_devices,
+                                name: param_name,
+                                choice_case: ValueUsageContext::TfmStepAuxSrc,
+                            }),
                             ui,
                         );
                         ui.separator();
@@ -1308,7 +1265,7 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                     }
                     {
                         let choice = draw_value_choice_iface(
-                            ValueTargetChoiceCase::TfmStepAuxDst,
+                            ValueUsageContext::TfmStepAuxDst,
                             ui,
                             "Custom accumulator",
                             "Custom accumulator",
@@ -1439,7 +1396,7 @@ fn draw_gui_idle_tick_params(ui: &mut egui::Ui, tfm: &mut impl TfmStepIdleBehavi
 
 // --------------------------------------------
 impl<'s> DrawEgui<'s> for ScriptCfg {
-    type In = (ObjId, GuiInTfmStepsSeq<'s>, GuiInValue<'s>);
+    type In = (ObjId, GuiInTfmStepsSeq<'s>, &'s VariablesCfg, &'s DevicesCfgNew);
     type Out = Option<GuiCmd>;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
@@ -1592,20 +1549,25 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                                             ScriptAuxKind::Source => {
                                                 if let Some(src) = self.aux_srcs.get_mut(name) {
                                                     let window_title = format!("Choose script input {} ", name);
-                                                    *gui_out_mut =
-                                                        gui_out_mut.clone().or(draw_egui_script_src_or_dest(
+                                                    *gui_out_mut = gui_out_mut.clone().or_else(|| {
+                                                        draw_egui_script_src_or_dest(
                                                             &mut ScriptSourceOrDestinationMut::Src(src),
                                                             ScriptCfgSourceOrDestinationGuiIn {
                                                                 item_idx: idx,
-                                                                a_value_gui_in: (
-                                                                    &window_title,
-                                                                    &window_title,
-                                                                    ValueTargetChoiceCase::TfmStepAuxSrc,
-                                                                    gui_in.2,
+                                                                a_value_gui_in: GuiInValue::Edit(
+                                                                    GuiInValueEditParams {
+                                                                        name,
+                                                                        choice_case: ValueUsageContext::TfmStepAuxSrc,
+                                                                        allow_interval_edit: true,
+                                                                        slider_log_scale: false,
+                                                                        cfg_variables: gui_in.2,
+                                                                        cfg_devices: gui_in.3,
+                                                                    },
                                                                 ),
                                                             },
                                                             ui,
-                                                        ));
+                                                        )
+                                                    });
                                                 }
                                             }
                                             ScriptAuxKind::Destination => {
@@ -1616,11 +1578,15 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                                                             &mut ScriptSourceOrDestinationMut::Dst(dst),
                                                             ScriptCfgSourceOrDestinationGuiIn {
                                                                 item_idx: idx,
-                                                                a_value_gui_in: (
-                                                                    &window_title,
-                                                                    &window_title,
-                                                                    ValueTargetChoiceCase::TfmStepAuxDst,
-                                                                    gui_in.2,
+                                                                a_value_gui_in: GuiInValue::Edit(
+                                                                    GuiInValueEditParams {
+                                                                        name,
+                                                                        choice_case: ValueUsageContext::TfmStepAuxDst,
+                                                                        allow_interval_edit: true,
+                                                                        slider_log_scale: false,
+                                                                        cfg_variables: gui_in.2,
+                                                                        cfg_devices: gui_in.3,
+                                                                    },
                                                                 ),
                                                             },
                                                             ui,
@@ -1749,7 +1715,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
 
 pub(super) struct ScriptCfgSourceOrDestinationGuiIn<'s> {
     item_idx: usize,
-    a_value_gui_in: (&'s str, &'s str, ValueTargetChoiceCase, GuiInValue<'s>),
+    a_value_gui_in: GuiInValue<'s>,
 }
 
 enum ScriptSourceOrDestinationMut<'s> {
@@ -1763,7 +1729,7 @@ fn draw_egui_script_src_or_dest<'s>(
     ui: &mut egui::Ui,
 ) -> Option<GuiCmd> {
     let mut gui_out = None;
-    match gui_in.a_value_gui_in.3 {
+    match gui_in.a_value_gui_in {
         GuiInValue::Edit(_) => {
             ui.push_id(gui_in.item_idx, |ui| {
                 ui.group(|ui| {
@@ -1843,7 +1809,7 @@ fn draw_egui_script_src_or_dest<'s>(
             })
             .inner
         }
-        GuiInValue::Display => {}
+        GuiInValue::Display { .. } => {}
     }
     gui_out
 }

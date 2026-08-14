@@ -4,7 +4,7 @@ use crate::filters::OneEuroFilter;
 use crate::make_input_port_port_inner_nutype;
 use crate::relativity::Relativity;
 use crate::schemas_value::{
-    AutoOrManual, DescriptionCfg, SanitizedParamPort, InputValueMetadata, WithDescriptionMut, WithLastKnownIO,
+    AutoOrManual, DescriptionCfg, InputValueMetadata, SanitizedParamPort, WithDescriptionMut, WithLastKnownIO,
     WithNumericValue, make_static_value_src,
 };
 use crate::schemas_value::{
@@ -20,7 +20,6 @@ use crate::{
     tracing::TraceChannel,
 };
 use ambassador::{Delegate, delegatable_trait};
-use atomic_float::AtomicF32;
 use bitflags::bitflags;
 use crossbeam_utils::CachePadded;
 // use documented::{Documented, DocumentedFields, docs_const};
