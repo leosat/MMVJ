@@ -224,9 +224,8 @@ where
         DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
     <<PortT as PortIface>::InnerT as WithNumericValue>::ValueT: eframe::emath::Numeric,
 {
-    if port.port_inner_ref().port_inner_is_static() {
-        let changed = ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
-        changed
+    let changed = if port.port_inner_ref().port_inner_is_static() {
+        ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner
     } else {
         ui.label(
             egui::RichText::new(format!("{:+.004}", port.get_numeric_value()))
@@ -234,22 +233,56 @@ where
                 .size(13.0),
         );
         ui.collapsing(egui_phosphor::bold::PHONE_TRANSFER, |ui| {
-            let changed = ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
+            let mut changed = ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
             ui.separator();
             ui.label(port.get_port_identity_str());
             ui.separator();
-            if let Some(mut remap_to) = port.get_remap_interval() {
-                ui.label("remapped ->");
-                remap_to.egui(GuiInInterval::Display, ui);
-            }
-            if changed {
-                *port = PortT::from(port.port_inner_ref().clone());
-            }
+            changed |= ui
+                .horizontal(|ui| {
+                    if let Some(mut remap_to) = port.get_remap_interval() {
+                        ui.label("remapped ->");
+                        if remap_to == port.get_max_interval() {
+                            ui.label("(default)");
+                        } else {
+                            ui.label("(overriden)");
+                        }
+                        if remap_to.egui(
+                            GuiInInterval::Edit {
+                                max_range: port.get_max_interval().cast().unwrap().make_range_inclusive(),
+                                from_label: &"",
+                                to_label: &"",
+                                sanitize_and_sort: true,
+                                truncate: false,
+                            },
+                            ui,
+                        ) {
+                            port.set_remap_interval(remap_to);
+                            changed = true;
+                        };
+                        if ui.button("Remap off").clicked() {
+                            port.set_remap_off();
+                            changed = true;
+                        }
+                    } else {
+                        if ui.button("Remap on").clicked() {
+                            port.set_remap_on();
+                            changed = true;
+                        }
+                    }
+                    changed
+                })
+                .inner;
             changed
         })
         .body_returned
         .unwrap_or_default()
+    };
+
+    if changed {
+        port.self_sanitize();
     }
+
+    changed
 }
 
 pub(crate) fn draw_egui_for_input_port_inner<'s, T>(this: &mut T, gui_in: GuiInValue<'s>, ui: &mut egui::Ui) -> bool

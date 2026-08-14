@@ -552,7 +552,7 @@ impl WithTriggersMapping for ValueDsts {
     fn set_triggers_mapping(&mut self, _flag: bool) {}
 }
 
-impl<T: PortInnerIface> WithTriggersMapping for SanitizedParamPort<T> {
+impl<PortInnerT: PortInnerIface> WithTriggersMapping for SanitizedParamPort<PortInnerT> {
     fn get_triggers_mapping(&self) -> bool {
         todo!()
     }
@@ -562,23 +562,63 @@ impl<T: PortInnerIface> WithTriggersMapping for SanitizedParamPort<T> {
     }
 }
 
-impl<T: PortInnerIface> PortIface for SanitizedParamPort<T> {
-    type InnerT = T;
+impl<PortInnerT: PortInnerIface> PortIface for SanitizedParamPort<PortInnerT> {
+    type InnerT = PortInnerT;
 
     fn get_port_identity_str(&self) -> String {
-        self.src.port_inner_identity()
+        self.target.port_inner_identity()
     }
 
     fn port_inner_ref(&self) -> &Self::InnerT {
-        &self.src
+        &self.target
     }
 
     fn port_inner_mut(&mut self) -> &mut Self::InnerT {
-        &mut self.src
+        &mut self.target
+    }
+
+    fn get_max_interval(&self) -> NumInterval<<Self::InnerT as WithNumericValue>::ValueT> {
+        Self::InnerT::default().get_interval()
+    }
+
+    fn set_remap_interval(&mut self, ri: NumInterval<<Self::InnerT as WithNumericValue>::ValueT>) {
+        if ri == self.get_max_interval() {
+            self.remap = AutoOrManual::Manual(Some(AutoOrManual::Auto(ri)))
+        } else {
+            self.remap = AutoOrManual::Manual(Some(AutoOrManual::Manual(ri)))
+        }
+    }
+
+    fn set_clamp_interval(&mut self, ri: NumInterval<<Self::InnerT as WithNumericValue>::ValueT>) {
+        todo!()
     }
 
     fn get_remap_interval(&self) -> Option<NumInterval<<Self::InnerT as WithNumericValue>::ValueT>> {
-        self.remap
+        self.remap.map(|ri| ri.deref().clone().cast().unwrap())
+    }
+
+    fn self_sanitize(&mut self) {
+        if self.port_inner_ref().port_inner_is_static() {
+            self.remap = AutoOrManual::Auto(None);
+        } else {
+            let san_range = PortInnerT::default().get_interval();
+            if self.remap.is_auto() {
+                self.remap.get_or_insert(AutoOrManual::Auto(san_range));
+            } else {
+                if let Some(remap) = &mut self.remap.deref_mut() {
+                    remap.from = san_range.clamp(remap.from);
+                    remap.to = san_range.clamp(remap.to);
+                }
+            }
+        }
+    }
+
+    fn set_remap_off(&mut self) {
+        self.remap = AutoOrManual::Manual(None)
+    }
+
+    fn set_remap_on(&mut self) {
+        self.remap = AutoOrManual::Manual(Some(AutoOrManual::Auto(PortInnerT::default().get_interval())))
     }
 }
 
@@ -590,13 +630,19 @@ pub(crate) trait WithTriggersMapping {
 
 pub(crate) trait PortIface: WithTriggersMapping + From<Self::InnerT> + WithNumericValue {
     type InnerT: PortInnerIface;
+    fn set_remap_off(&mut self);
+    fn set_remap_on(&mut self);
     fn get_port_identity_str(&self) -> String;
     fn port_inner_ref(&self) -> &Self::InnerT;
     fn port_inner_mut(&mut self) -> &mut Self::InnerT;
     fn get_remap_interval(&self) -> Option<NumInterval<<Self::InnerT as WithNumericValue>::ValueT>>;
+    fn set_remap_interval(&mut self, ri: NumInterval<<Self::InnerT as WithNumericValue>::ValueT>);
     fn get_clamp_interval(&self) -> Option<NumInterval<<Self::InnerT as WithNumericValue>::ValueT>> {
-        None
+        todo!()
     }
+    fn self_sanitize(&mut self);
+    fn set_clamp_interval(&mut self, ri: NumInterval<<Self::InnerT as WithNumericValue>::ValueT>);
+    fn get_max_interval(&self) -> NumInterval<<Self::InnerT as WithNumericValue>::ValueT>;
 }
 
 pub(crate) trait WithNumIntervalSettable: WithNumericValue {
@@ -615,7 +661,7 @@ pub(crate) trait PortInnerIface:
     + WithNumIntervalSettable
     + WithNumericValue
     + WithNumericValueSettable
-    + From<SanitizedParamPort<Self>>
+    // + From<SanitizedParamPort<Self>>
     + Serialize
     + for<'de> Deserialize<'de>
 {
@@ -625,7 +671,7 @@ pub(crate) trait PortInnerIface:
 
 impl std::convert::From<SanitizedParamPort<ValueSrcs>> for ValueSrcs {
     fn from(value: SanitizedParamPort<ValueSrcs>) -> Self {
-        value.src
+        value.target
     }
 }
 
@@ -646,61 +692,137 @@ impl PortInnerIface for ValueSrcs {
     }
 }
 
-#[derive(JsonSchema, Debug, Clone, PartialOrd, Deserialize, Serialize)]
-#[serde(from = "T", into = "T")]
-#[serde(bound(serialize = "T: PortInnerIface"))]
-#[serde(bound(deserialize = "T: PortInnerIface"))]
-pub(crate) struct SanitizedParamPort<T>
-where
-    T: PortInnerIface,
-{
-    pub(super) remap: Option<NumInterval<<T as WithNumericValue>::ValueT>>,
-    pub(super) triggers_mapping: bool,
-    pub(crate) src: T,
+impl<T: Default + PartialOrd> PartialOrd for AutoOrManual<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.deref().partial_cmp(other.deref())
+    }
 }
 
-impl<T: PortInnerIface> From<T> for SanitizedParamPort<T> {
-    fn from(value: T) -> Self {
-        Self {
-            remap: if !value.port_inner_is_static() {
-                T::default().get_interval().into()
-            } else {
-                None
+#[derive(JsonSchema, Debug, Clone, PartialOrd, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+#[serde(bound(serialize = "PortInnerT: PortInnerIface, <PortInnerT as WithNumericValue>::ValueT: serde::Serialize"))]
+#[serde(bound(
+    deserialize = "PortInnerT: PortInnerIface, <PortInnerT as WithNumericValue>::ValueT: serde::Deserialize<'de>"
+))]
+enum SanitizedParamPortSerdeHelper<PortInnerT: PortInnerIface> {
+    AsPort {
+        remap: AutoOrManual<Option<NumInterval<PortInnerT::ValueT>>>,
+        #[serde(skip_serializing_if = "crate::schemas_common::is_false")]
+        #[serde(default)]
+        triggers_mapping: bool,
+        //#[serde(flatten)] // Fails when inner is serialized to a single number.
+        target: PortInnerT,
+    },
+    AsInner(PortInnerT),
+}
+
+impl<PortInnerT: PortInnerIface> From<SanitizedParamPortSerdeHelper<PortInnerT>> for SanitizedParamPort<PortInnerT> {
+    fn from(value: SanitizedParamPortSerdeHelper<PortInnerT>) -> Self {
+        match value {
+            SanitizedParamPortSerdeHelper::AsInner(i) => i.into(),
+            SanitizedParamPortSerdeHelper::AsPort {
+                remap,
+                triggers_mapping,
+                target,
+            } => Self {
+                remap: AutoOrManual::Manual(remap.map(|remap| AutoOrManual::Manual(remap))),
+                triggers_mapping,
+                target,
             },
-            triggers_mapping: false,
-            src: value,
         }
     }
 }
 
-impl<T: PortInnerIface> WithNumericValueSettable for SanitizedParamPort<T> {
+impl<PortInnerT: PortInnerIface> From<SanitizedParamPort<PortInnerT>> for SanitizedParamPortSerdeHelper<PortInnerT> {
+    fn from(value: SanitizedParamPort<PortInnerT>) -> Self {
+        if value.remap.is_manual() /*|| value.remap.is_some_and(|r| r.is_manual())*/ || value.triggers_mapping {
+            SanitizedParamPortSerdeHelper::AsPort {
+                remap: // if value.remap.is_manual() {
+                    AutoOrManual::Manual(value.remap.map(|remap| *remap))
+                //} else {
+                //    AutoOrManual::Auto(value.remap.map(|remap| *remap))
+                //}
+                ,
+                triggers_mapping: value.triggers_mapping,
+                target: value.target,
+            }
+        } else {
+            SanitizedParamPortSerdeHelper::AsInner(value.target)
+        }
+    }
+}
+
+#[derive(JsonSchema, Debug, Clone, PartialOrd, Deserialize, Serialize)]
+#[serde(
+    from = "SanitizedParamPortSerdeHelper<PortInnerT>",
+    into = "SanitizedParamPortSerdeHelper<PortInnerT>"
+)]
+#[serde(bound(serialize = "PortInnerT: PortInnerIface, <PortInnerT as WithNumericValue>::ValueT: serde::Serialize"))]
+#[serde(bound(
+    deserialize = "PortInnerT: PortInnerIface, <PortInnerT as WithNumericValue>::ValueT: serde::Deserialize<'de>"
+))]
+pub(crate) struct SanitizedParamPort<PortInnerT: PortInnerIface> {
+    pub(super) remap: AutoOrManual<Option<AutoOrManual<NumInterval<<PortInnerT as WithNumericValue>::ValueT>>>>,
+    pub(super) triggers_mapping: bool,
+    pub(crate) target: PortInnerT,
+}
+
+impl<PortInnerT: PortInnerIface> From<PortInnerT> for SanitizedParamPort<PortInnerT> {
+    fn from(value: PortInnerT) -> Self {
+        Self {
+            remap: if !value.port_inner_is_static() {
+                AutoOrManual::Auto(Some(AutoOrManual::Auto(
+                    PortInnerT::default().get_interval().cast().unwrap(),
+                )))
+            } else {
+                AutoOrManual::Auto(None)
+            },
+            triggers_mapping: false,
+            target: value,
+        }
+    }
+}
+
+impl<PortInnerT: PortInnerIface> WithNumericValueSettable for SanitizedParamPort<PortInnerT> {
     fn set_numeric_value(&self, value: Self::ValueT) {
         let value = self
             .remap
-            .map(|remap| self.src.get_interval().map_from(value, &remap, OutOfRangePolicy::Clamp))
+            .map(|remap| {
+                self.target
+                    .get_interval()
+                    .map_from(value, &remap.cast().unwrap(), OutOfRangePolicy::Clamp)
+            })
             .unwrap_or(value);
-        self.src.set_numeric_value(value);
+        self.target.set_numeric_value(value);
     }
 }
 
-impl<T: PortInnerIface> WithNumericValue for SanitizedParamPort<T> {
-    type ValueT = <T as WithNumericValue>::ValueT;
+impl<PortInnerT: PortInnerIface> WithNumericValue for SanitizedParamPort<PortInnerT> {
+    type ValueT = <PortInnerT as WithNumericValue>::ValueT;
     fn get_numeric_value(&self) -> Self::ValueT {
-        let mut value = self.src.get_numeric_value();
-        if let Some(remap) = self.remap {
-            value = remap.map_from(value, &self.src.get_interval().into(), OutOfRangePolicy::Clamp);
+        // let now = std::time::Instant::now();
+        let mut value = self.target.get_numeric_value();
+        if let Some(remap) = self.remap.deref() {
+            value = remap
+                // .cast()
+                // .unwrap()
+                .map_from(value, &self.target.get_interval(), OutOfRangePolicy::Clamp);
         }
+        // dbg!((std::time::Instant::now() - now).as_nanos());
         value
     }
 }
 
 impl<T: PortInnerIface> PartialEq for SanitizedParamPort<T> {
     fn eq(&self, other: &Self) -> bool {
-        self.remap == other.remap && self.triggers_mapping == other.triggers_mapping && self.src == other.src
+        self.remap == other.remap && self.triggers_mapping == other.triggers_mapping && self.target == other.target
     }
 }
 
-impl<T: PortInnerIface> Bounds for SanitizedParamPort<T> {
+impl<PortInnerT: PortInnerIface> Bounds for SanitizedParamPort<PortInnerT>
+where
+    <PortInnerT as WithNumericValue>::ValueT: for<'de> serde::Deserialize<'de>,
+{
     type Size = BaseNumT;
     const MIN: Self::Size = Self::Size::MIN;
     const MAX: Self::Size = Self::Size::MAX;
@@ -1057,7 +1179,7 @@ impl ValueSrcs {
 
 // ----------------------------------------------------------
 
-#[derive(JsonSchema, Debug, Clone, Serialize, PartialEq, Default, TraversableMut, Traversable)]
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Default, TraversableMut, Traversable)]
 #[serde(untagged)]
 pub(crate) enum ValueDsts {
     Dynamic(DynValueRefs),
@@ -1065,50 +1187,19 @@ pub(crate) enum ValueDsts {
     Void,
 }
 
-impl<'de> Deserialize<'de> for ValueDsts {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        use serde::de::Error;
-        let raw: serde_value::Value = Deserialize::deserialize(deserializer)?;
-        match DynValueRefs::deserialize(raw.clone().into_deserializer()) {
-            Ok(dynamic) => Ok(ValueDsts::Dynamic(dynamic)),
-            Err(dynamic_err) => {
-                let is_void = match <()>::deserialize(raw.clone().into_deserializer()) {
-                    Ok(()) => true,
-                    Err(_) => {
-                        if let serde_value::Value::Map(ref m) = raw {
-                            m.is_empty()
-                        } else {
-                            false
-                        }
-                    }
-                };
-                if is_void {
-                    return Ok(ValueDsts::Void);
-                }
-                Err(D::Error::custom(format!("  {:?}  {}", raw, dynamic_err)))
-            }
-        }
-    }
-}
-
 impl ValueDsts {
     pub(crate) fn get_idle_tick_enabled_flag(&self) -> Option<&AtomicBool> {
-        match self {
-            ValueDsts::Void => None,
-            ValueDsts::Dynamic(dynamic_value_ref_rt) => match dynamic_value_ref_rt {
-                DynValueRefs::DeviceControlMatcher(d) => Some(d.control_matcher.get_idle_tick_enabled_flag()),
-                DynValueRefs::Variable(_) => None,
-            },
+        if let ValueDsts::Dynamic(DynValueRefs::DeviceControlMatcher(d)) = self {
+            Some(d.control_matcher.get_idle_tick_enabled_flag())
+        } else {
+            None
         }
     }
 
     pub(crate) fn get_id(&self) -> Option<ObjId> {
         match self {
             ValueDsts::Void => None,
-            ValueDsts::Dynamic(dynamic_value_ref_rt) => match dynamic_value_ref_rt {
+            ValueDsts::Dynamic(d) => match d {
                 DynValueRefs::DeviceControlMatcher(d) => Some(d.control_matcher.get_id()),
                 DynValueRefs::Variable(v) => Some(v.variable.get_id()),
             },
@@ -1207,8 +1298,31 @@ impl _WithDstRefCount for VariableState {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 #[serde(untagged)]
 pub(crate) enum AutoOrManual<T: Default> {
+    Auto(#[serde(skip)] T),
     Manual(T),
-    Auto(T),
+}
+
+#[test]
+fn auto_or_manual_check_serialization() {
+    assert!(
+        !serde_saphyr::to_string(&AutoOrManual::Manual(1.0))
+            .unwrap_or_default()
+            .is_empty()
+    );
+    assert!(
+        serde_saphyr::to_string(&AutoOrManual::Auto(1.0))
+            .unwrap_or_default()
+            .is_empty()
+    );
+}
+
+impl<T: Default + ToString> ToString for AutoOrManual<T> {
+    fn to_string(&self) -> String {
+        match self {
+            AutoOrManual::Manual(m) => format!("Manual({})", m.to_string()),
+            AutoOrManual::Auto(a) => format!("Auto({})", a.to_string()),
+        }
+    }
 }
 
 impl<T: Default> From<T> for AutoOrManual<T> {
@@ -1323,15 +1437,15 @@ macro_rules! make_input_port_port_inner_nutype {
 
         impl ::traversable::Traversable for SanitizedParamPort<$name> {
             fn traverse<V: traversable::Visitor>(&self, visitor: &mut V) -> std::ops::ControlFlow<V::Break> {
-                self.src.as_ref().traverse(visitor)
+                self.target.as_ref().traverse(visitor)
             }
         }
 
         impl ::traversable::TraversableMut for SanitizedParamPort<$name> {
             fn traverse_mut<V: traversable::VisitorMut>(&mut self, visitor: &mut V) -> std::ops::ControlFlow<V::Break> {
-                let mut tmp = self.src.clone().into_inner();
+                let mut tmp = self.target.clone().into_inner();
                 let ret = tmp.traverse_mut(visitor);
-                self.src = $name::new(tmp);
+                self.target = $name::new(tmp);
                 ret
             }
         }
@@ -1339,9 +1453,9 @@ macro_rules! make_input_port_port_inner_nutype {
         impl ::core::default::Default for crate::schemas_value::SanitizedParamPort<$name> {
             fn default() -> Self {
                 Self {
-                    remap: $default.get_interval().into(),
+                    remap: AutoOrManual::Auto(Some(AutoOrManual::Auto($default.get_interval()))),
                     triggers_mapping: Default::default(),
-                    src: Default::default(),
+                    target: Default::default(),
                 }
             }
         }
@@ -1376,7 +1490,7 @@ macro_rules! make_input_port_port_inner_nutype {
 
         impl ::core::convert::From<SanitizedParamPort<$name>> for $name {
             fn from(value: SanitizedParamPort<$name>) -> Self {
-                value.src
+                value.target
             }
         }
 

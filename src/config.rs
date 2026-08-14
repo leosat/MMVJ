@@ -60,7 +60,7 @@ pub const MIDI_ENABLED_CONST: bool = true;
 pub(crate) trait WithSanitize {
     fn sanitize_inplace(&mut self);
     #[allow(unused)]
-    fn sanitize(mut self) -> Self
+    fn sanitize_self(mut self) -> Self
     where
         Self: Sized,
     {
