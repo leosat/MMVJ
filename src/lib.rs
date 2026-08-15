@@ -1,5 +1,6 @@
 // #![cfg_attr(all(not(feature = "default"), not(debug_assertions)), allow(warnings))]
 #![cfg_attr(all(not(debug_assertions)), allow(warnings))]
+#[macro_use]
 
 pub mod config;
 pub mod debug;
@@ -38,6 +39,8 @@ pub(crate) mod schemas_midi;
 pub(crate) mod schemas_predefined;
 pub(crate) mod schemas_transform;
 pub(crate) mod schemas_ui;
+
+#[macro_use]
 pub(crate) mod schemas_value;
 //--------------------------------
 pub(crate) mod curves;

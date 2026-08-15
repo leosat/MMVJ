@@ -1,17 +1,19 @@
 use crate::base_num::{BaseAtomicT, BaseNumT};
-use crate::config::WithSanitize;
+use crate::config::WithSelfSanitize;
 use crate::filters::OneEuroFilter;
-use crate::make_input_port_port_inner_nutype;
 use crate::relativity::Relativity;
 use crate::schemas_value::{
-    AutoOrManual, DescriptionCfg, InputValueMetadata, SanitizedParamPort, WithDescriptionMut, WithLastKnownIO,
-    WithNumericValue, make_static_value_src,
+    AutoOrManual, DescriptionCfg, InputValueMetadata, PortInnerIface, ValuePort, ValuePortIface, WithDescriptionMut,
+    WithLastKnownIO, WithNumIntervalSettable, WithNumericValue, WithNumericValueSettable, make_static_value_src,
 };
 use crate::schemas_value::{
     DeviceControlMatcherRef, DynValueRefs, ValueDsts, VariableRef, WithNumInterval, WithRelativityRef,
     serialize_value_src_rt_ignore_interval,
 };
-use crate::tfm_exec::{IntegrateExeState, RaiseFallExeState, ScriptExeState, SteeringExeState, TfmExeState};
+use crate::tfm_exec::{
+    IntegrateExeState, RaiseFallExeState, ScriptExeState, SteeringExeState, TfmExeState, TfmExecCtx,
+};
+use crate::{make_input_port_inner_nutype, make_output_port_inner_nutype};
 use crate::{
     num_interval::NumInterval,
     num_interval::{SYMM_UNIT_INTERVAL, UNIT_INTERVAL},
@@ -19,10 +21,11 @@ use crate::{
     schemas_value::{StaticValueCfg, ValueSrcs},
     tracing::TraceChannel,
 };
-use ambassador::{Delegate, delegatable_trait};
 use bitflags::bitflags;
 use crossbeam_utils::CachePadded;
+use enum_dispatch::enum_dispatch;
 use garde::Validate;
+use num_traits::Zero;
 use schemars::JsonSchema;
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -88,10 +91,10 @@ pub(crate) const fn default_norm_exp_base() -> BaseNumT {
     1.001
 }
 
-pub(crate) fn default_ema_tau() -> ValueSrcs {
+pub(crate) fn default_filter_tau() -> ValueSrcs {
     ValueSrcs::Static(StaticValueCfg {
-        value: std::cell::Cell::new(0.04),
-        interval: AutoOrManual::Auto(NumInterval { from: 1.0e-6, to: 2.0 }),
+        value: 0.04.into(),
+        interval: AutoOrManual::Auto(NumInterval { from: 1e-4, to: 2.0 }),
     })
 }
 
@@ -267,10 +270,8 @@ impl PartialEq for TfmStepCommonStateShared {
     Clone,
     PartialEq,
     Validate,
-    Delegate,
 )]
-#[delegate(WithCommonState)]
-#[delegate(WithCommonStateMut)]
+#[enum_dispatch]
 #[strum(serialize_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum TfmStepCfg {
@@ -555,7 +556,7 @@ impl From<ClampCfgCompat__> for ClampCfg {
     }
 }
 
-impl WithSanitize for ClampCfg {
+impl WithSelfSanitize for ClampCfg {
     fn sanitize_inplace(&mut self) {
         let mut clamping_interval = self.get_clamping_interval();
         let in_interval = self.get_in_interval();
@@ -709,12 +710,24 @@ pub(crate) struct EmaCfg {
     /// The time constant
     /// Defines the duration required for the filter's step response
     /// to reach about 63.2% (1 - 1/e) of its final steady-state value.
+    pub(crate) tau: ValuePort<TauCfg>,
+    // #[serde(skip)]
+    // #[garde(skip)]
     // pub(crate) tau: ValueSrcs,
+    // #[serde(skip)]
+    // #[garde(skip)]
     // pub(crate) tau: EmaCfgTau,
-    pub(crate) tau: SanitizedParamPort<EmaCfgTau>,
+    // #[serde(skip)]
+    // #[garde(skip)]
+    // pub(crate) tau: ValuePort<ValueSrcs>,
 }
 
-make_input_port_port_inner_nutype!(name: EmaCfgTau, inner: ValueSrcs, default: default_ema_tau());
+make_input_port_inner_nutype!(
+    TauCfg,
+    default: default_filter_tau(),
+    san-doc: "Tau is ensured to be > 0.0",
+    san-exe: |v: BaseNumT| {v.clamp(default_filter_tau().get_interval().from(), BaseNumT::INFINITY)}
+);
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++
 
@@ -866,10 +879,14 @@ pub(crate) struct OneEuroFilterCfg {
     /// Rarely needs adjustment from the default.
     // #[serde(default = "default_1euro_d_cutoff_hz")]
     #[garde(range(min = 0.0))]
-    pub(crate) d_cutoff_hz: SanitizedParamPort<OneEuroCfgDCutOffHz>, // ValueSrcs,
+    pub(crate) d_cutoff_hz: ValueSrcs, //SanitizedParamPort<OneEuroCfgDCutOffHz>, //
 }
 
-make_input_port_port_inner_nutype!(name:  OneEuroCfgDCutOffHz, inner: ValueSrcs, default: default_1euro_d_cutoff_hz());
+// make_input_port_inner_nutype!(
+//     name: OneEuroCfgDCutOffHz,
+//     inner: ValueSrcs,
+//     default: default_1euro_d_cutoff_hz()
+// );
 
 impl TfmCfgDuplicateWithNewState for OneEuroFilterCfg {
     fn duplicate_with_new_state(&self) -> Self {
@@ -1545,13 +1562,13 @@ impl PartialEq for SteeringCfg {
     }
 }
 
-#[delegatable_trait]
+#[enum_dispatch(TfmStepCfg)]
 pub(crate) trait WithCommonState {
     fn common_state_ref(&self) -> &TfmStepCommonState;
 }
 
 #[allow(unused)]
-#[delegatable_trait]
+#[enum_dispatch(TfmStepCfg)]
 pub(crate) trait WithCommonStateMut {
     fn common_state_mut(&mut self) -> &mut TfmStepCommonState;
 }
@@ -2238,3 +2255,21 @@ mod tests {
 }
 
 // =================================================================
+
+#[allow(unused)]
+#[allow(non_local_definitions)]
+fn test_dst_port() {
+    make_output_port_inner_nutype!(
+        InnerPortTest,
+        default: ValueDsts::default(),
+        san-doc: "Value must not be 0.0",
+        san-exe: |v: BaseNumT| { if v.is_zero() {BaseNumT::EPSILON} else {v}}
+    );
+
+    let dst_port_test: ValuePort<InnerPortTest> = Default::default();
+    dst_port_test.set_numeric_value(1.0);
+
+    // struct ExeCtx {}
+    // impl TfmExecCtx for ExeCtx { .. }
+    // dst_port_test.write(&ExeCtx {});
+}
