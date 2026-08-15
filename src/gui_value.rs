@@ -2,10 +2,13 @@ use std::ops::RangeInclusive;
 
 use eframe::egui;
 
+use crate::config::WithSelfSanitize;
+use crate::gui_common::draw_collapsing_ui;
 use crate::relativity::Relativity;
 
 use crate::schemas_value::{
-    AutoOrManual, PortIface, PortInnerIface, SanitizedParamPort, StaticValueCfg, WithNumIntervalSettable,
+    AutoOrManual, PortInnerIface, SanPolicyNone, SanPolicyUseFromPortInner, StaticValueCfg, ValuePort, ValuePortIface,
+    WithNumIntervalSanitizerStatic, WithNumIntervalSettable, WithNumericValueSanitizerStatic,
 };
 use crate::{
     base_num::BaseNumT,
@@ -183,72 +186,94 @@ impl<'s> DrawEgui<'s> for NumInterval<BaseNumT> {
     }
 }
 
-impl WithNumIntervalSettable for StaticValueCfg {
-    fn set_interval(&mut self, interval: NumInterval<Self::ValueT>) {
-        self.interval = AutoOrManual::Manual(interval);
-    }
-}
+use crate::schemas_value::PortSanPolicy;
 
-impl WithNumIntervalSettable for ValueSrcs {
-    fn set_interval(&mut self, interval: NumInterval<Self::ValueT>) {
-        match self {
-            Self::Static(s) => s.set_interval(interval),
-            Self::Dynamic(_) => {
-                log::error!(
-                    "Setting interval on dynamic value reference is not possible: modify the definition itself."
-                )
-            }
-        }
-    }
-}
-
-impl<'s, T: PortInnerIface> DrawEgui<'s> for SanitizedParamPort<T>
+impl<'s, PortInnerT, SanPolicyT> DrawEgui<'s> for ValuePort<PortInnerT, SanPolicyT>
 where
-    T: PortInnerIface + From<ValueSrcs> + DrawEgui<'s, In = GuiInValue<'s>, Out = bool>,
-    NumInterval<<T as WithNumericValue>::ValueT>: DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
-    <T as WithNumericValue>::ValueT: eframe::emath::Numeric,
+    SanPolicyT: PortSanPolicy<PortInnerT> + GuiSanInfo<PortInnerT>,
+    PortInnerT: PortInnerIface
+        + WithNumIntervalSanitizerStatic
+        + From<ValueSrcs>
+        + DrawEgui<'s, In = GuiInValue<'s>, Out = bool>,
+    NumInterval<<Self as WithNumericValue>::ValueT>: DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
+    <Self as WithNumericValue>::ValueT: eframe::emath::Numeric,
+    Self: WithSelfSanitize,
 {
     type In = GuiInValue<'s>;
     type Out = bool;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
-        draw_egui_for_port(self, gui_in, ui)
+        let changed = draw_egui_for_port::<SanPolicyT, Self, PortInnerT>(self, gui_in, ui);
+        SanPolicyT::san_policy_sanitize_this_inplace(self);
+        changed
     }
 }
 
-pub(crate) fn draw_egui_for_port<'s, PortT>(port: &mut PortT, gui_in: GuiInValue<'s>, ui: &mut egui::Ui) -> bool
+trait GuiSanInfo<T: WithNumericValueSanitizerStatic> {
+    fn draw_san_info(ui: &mut egui::Ui);
+}
+
+impl<T: WithNumericValueSanitizerStatic> GuiSanInfo<T> for SanPolicyUseFromPortInner {
+    fn draw_san_info(ui: &mut egui::Ui) {
+        ui.label(egui::RichText::new(egui_phosphor::bold::BROOM).size(14.0))
+            .on_hover_text(<Self as PortSanPolicy<T>>::san_policy_get_value_san_doc_str());
+    }
+}
+
+impl<T: WithNumericValueSanitizerStatic> GuiSanInfo<T> for SanPolicyNone {
+    fn draw_san_info(ui: &mut egui::Ui) {
+        ui.label(egui::RichText::new(egui_phosphor::bold::FUNNEL_X).size(14.0))
+            .on_hover_text(<Self as PortSanPolicy<T>>::san_policy_get_value_san_doc_str());
+    }
+}
+
+fn draw_egui_for_port<'s, SanPolicyT, PortT, PortInnerT>(
+    port: &mut PortT,
+    gui_in: GuiInValue<'s>,
+    ui: &mut egui::Ui,
+) -> bool
 where
-    PortT: PortIface,
-    <PortT as PortIface>::InnerT: PortInnerIface + From<ValueSrcs> + DrawEgui<'s, In = GuiInValue<'s>, Out = bool>,
-    NumInterval<<<PortT as PortIface>::InnerT as WithNumericValue>::ValueT>:
-        DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
-    <<PortT as PortIface>::InnerT as WithNumericValue>::ValueT: eframe::emath::Numeric,
+    PortInnerT: WithNumericValueSanitizerStatic,
+    SanPolicyT: GuiSanInfo<PortInnerT>,
+    PortT: ValuePortIface,
+    <PortT as ValuePortIface>::InnerT: PortInnerIface + From<ValueSrcs> + DrawEgui<'s, In = GuiInValue<'s>, Out = bool>,
+    NumInterval<<PortT as WithNumericValue>::ValueT>: DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
+    <PortT as WithNumericValue>::ValueT: eframe::emath::Numeric,
 {
-    let changed = if port.port_inner_ref().port_inner_is_static() {
+    if port.port_inner_ref().port_inner_is_static() {
         ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner
     } else {
         ui.label(
-            egui::RichText::new(format!("{:+.004}", port.get_numeric_value()))
+            egui::RichText::new(format!("{:+012.5}", port.get_numeric_value()))
                 .monospace()
                 .size(13.0),
         );
-        ui.collapsing(egui_phosphor::bold::PHONE_TRANSFER, |ui| {
-            let mut changed = ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
-            ui.separator();
-            ui.label(port.get_port_identity_str());
-            ui.separator();
-            changed |= ui
-                .horizontal(|ui| {
+        ui.separator();
+        SanPolicyT::draw_san_info(ui);
+        ui.separator();
+
+        let mut changed = false;
+        ui.vertical(|ui| {
+            draw_collapsing_ui(ui, port.get_port_identity_str().into(), None, |ui| {
+                ui.label(egui::RichText::new(egui_phosphor::bold::PLUGS).size(14.0));
+                ui.label(port.get_port_identity_str());
+            })
+            .body(|ui| {
+                changed |= ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
+                ui.separator();
+                ui.horizontal(|ui| {
                     if let Some(mut remap_to) = port.get_remap_interval() {
-                        ui.label("remapped ->");
-                        if remap_to == port.get_max_interval() {
-                            ui.label("(default)");
+                        ui.label("remapped: ");
+                        if remap_to == port.get_default_interval() {
+                            ui.label("(=default)");
                         } else {
-                            ui.label("(overriden)");
+                            ui.label("(overridden)");
                         }
+                        ui.separator();
+
                         if remap_to.egui(
                             GuiInInterval::Edit {
-                                max_range: port.get_max_interval().cast().unwrap().make_range_inclusive(),
+                                max_range: BaseNumT::MIN..=BaseNumT::MAX, // port.get_max_interval().cast().unwrap().make_range_inclusive(),
                                 from_label: &"",
                                 to_label: &"",
                                 sanitize_and_sort: true,
@@ -259,35 +284,26 @@ where
                             port.set_remap_interval(remap_to);
                             changed = true;
                         };
-                        if ui.button("Remap off").clicked() {
+                        if ui.button("turn remapping off").clicked() {
                             port.set_remap_off();
                             changed = true;
                         }
                     } else {
-                        if ui.button("Remap on").clicked() {
+                        if ui.button("turn remapping on").clicked() {
                             port.set_remap_on();
                             changed = true;
                         }
                     }
-                    changed
                 })
-                .inner;
-            changed
-        })
-        .body_returned
-        .unwrap_or_default()
-    };
-
-    if changed {
-        port.self_sanitize();
+            })
+        });
+        changed
     }
-
-    changed
 }
 
 pub(crate) fn draw_egui_for_input_port_inner<'s, T>(this: &mut T, gui_in: GuiInValue<'s>, ui: &mut egui::Ui) -> bool
 where
-    T: crate::schemas_value::PortInnerIface,
+    T: PortInnerIface,
     NumInterval<<T as WithNumericValue>::ValueT>: DrawEgui<'s, Out = bool, In = GuiInInterval<'s>>,
     <T as WithNumericValue>::ValueT: eframe::emath::Numeric,
     T: From<ValueSrcs>,
@@ -324,7 +340,7 @@ where
             // --
             ui.separator();
             ui.label("Range: ");
-            if params.allow_interval_edit {
+            if params.allow_interval_edit && this.port_inner_is_static() {
                 let mut interval = this.get_interval();
                 if interval.egui(
                     GuiInInterval::Edit {

@@ -1254,7 +1254,10 @@
           "$ref": "#/$defs/DynValueRefs"
         },
         {
-          "type": "null"
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       ]
     },
@@ -1438,30 +1441,6 @@
           },
           "required": [
             "script"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "__high_pass": {
-              "$ref": "#/$defs/HighPassCfg"
-            }
-          },
-          "required": [
-            "__high_pass"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "__force_feedback": {
-              "$ref": "#/$defs/ForceFeedbackCfg"
-            }
-          },
-          "required": [
-            "__force_feedback"
           ],
           "additionalProperties": false
         }
@@ -1921,54 +1900,12 @@
         },
         "d_cutoff_hz": {
           "description": "Cutoff frequency in Hz for the derivative (speed) low-pass\nfilter.\n\nThe raw derivative `(x - x̂_prev) / dt` amplifies sensor jitter.\nThis secondary filter smooths the derivative so the adaptive\ncutoff does not oscillate.\n\n- `0.01 – 0.1` — very smooth derivative; stable but slow to\n  react to speed changes.\n- `1.0` *(default)* — balanced; works well for most devices.\n- `10.0 – 100.0` — barely filtered derivative; fast tracking\n  but may oscillate on noisy inputs.\n\nRarely needs adjustment from the default.",
-          "$ref": "#/$defs/SanitizedParamPort"
+          "$ref": "#/$defs/ValueSrcs"
         }
       },
       "additionalProperties": false,
       "required": [
         "d_cutoff_hz"
-      ]
-    },
-    "SanitizedParamPort": {
-      "anyOf": [
-        {
-          "type": "object",
-          "properties": {
-            "remap": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/NumInterval"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "triggers_mapping": {
-              "type": "boolean"
-            },
-            "target": {
-              "$ref": "#/$defs/OneEuroCfgDCutOffHz"
-            }
-          },
-          "required": [
-            "triggers_mapping",
-            "target"
-          ]
-        },
-        {
-          "$ref": "#/$defs/OneEuroCfgDCutOffHz"
-        }
-      ]
-    },
-    "OneEuroCfgDCutOffHz": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/StaticValueCfg"
-        },
-        {
-          "$ref": "#/$defs/DynValueRefs"
-        }
       ]
     },
     "ScriptCfg": {
@@ -2100,30 +2037,6 @@
         }
       }
     },
-    "HighPassCfg": {
-      "type": "object",
-      "properties": {
-        "desc": {
-          "$ref": "#/$defs/DescriptionCfg"
-        },
-        "enabled": {
-          "type": "boolean",
-          "default": true
-        },
-        "cutoff": {
-          "type": "number",
-          "format": "float",
-          "minimum": 0.0
-        },
-        "on_idle": {
-          "type": "boolean"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "cutoff"
-      ]
-    },
     "TfmSeqFull": {
       "type": "object",
       "properties": {
@@ -2138,6 +2051,11 @@
         }
       },
       "anyOf": [
+        {
+          "$ref": "#/$defs/InputValueMetadata",
+          "readOnly": true,
+          "writeOnly": true
+        },
         {
           "$ref": "#/$defs/InputValueMetadata"
         }

@@ -2,7 +2,7 @@ use crate::base_num::BaseNumT;
 use crate::relativity::Relativity;
 
 use crate::config::MORE_DEBUG;
-use crate::config::WithSanitize;
+use crate::config::WithSelfSanitize;
 use crate::gui_common::{
     DrawEgui, GuiCmd, GuiCmdScriptAuxRename, GuiDndJob, GuiDndJobMoveTfmStep, GuiDndJobNewTfmStep, GuiInKinds,
     ScriptAuxKind, bool_to_simple_change_gui_cmd, draw_collapsing_ui, get_item_name_with_random_suffix,
