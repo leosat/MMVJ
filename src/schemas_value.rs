@@ -1092,7 +1092,7 @@ impl std::fmt::Display for ValueSrcs {
 impl std::fmt::Display for ValueDsts {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match &self {
-            Self::Void => "Dst: void".into(),
+            ValueDsts::Void(..) => "Dst: void".into(),
             Self::Dynamic(dynamic_value_ref_rt) => match dynamic_value_ref_rt {
                 DynValueRefs::DeviceControlMatcher(d) => {
                     format!("Dst: {}.{}", d.device_matcher_key, d.control_key)
@@ -1179,12 +1179,19 @@ impl ValueSrcs {
 
 // ----------------------------------------------------------
 
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Default, TraversableMut, Traversable)]
+#[derive(
+    JsonSchema, Debug, Clone, Serialize, DeserializeUntaggedVerboseError, PartialEq, TraversableMut, Traversable,
+)]
 #[serde(untagged)]
 pub(crate) enum ValueDsts {
     Dynamic(DynValueRefs),
-    #[default]
-    Void,
+    Void(Option<bool>),
+}
+
+impl Default for ValueDsts {
+    fn default() -> Self {
+        Self::Void(None)
+    }
 }
 
 impl ValueDsts {
@@ -1198,7 +1205,7 @@ impl ValueDsts {
 
     pub(crate) fn get_id(&self) -> Option<ObjId> {
         match self {
-            ValueDsts::Void => None,
+            ValueDsts::Void(..) => None,
             ValueDsts::Dynamic(d) => match d {
                 DynValueRefs::DeviceControlMatcher(d) => Some(d.control_matcher.get_id()),
                 DynValueRefs::Variable(v) => Some(v.variable.get_id()),
@@ -1208,18 +1215,18 @@ impl ValueDsts {
 
     pub(crate) fn get_interval(&self) -> NumInterval<BaseNumT> {
         match self {
-            Self::Void => ZERO_INTERVAL,
-            Self::Dynamic(dynamic_value_ref_rt) => match dynamic_value_ref_rt {
+            ValueDsts::Void(..) => ZERO_INTERVAL,
+            Self::Dynamic(d) => match d {
                 DynValueRefs::DeviceControlMatcher(d) => d.control_matcher.get_interval(),
-                DynValueRefs::Variable(v) => v.variable.interval,
+                DynValueRefs::Variable(v) => v.variable.get_interval(),
             },
         }
     }
 
     pub(crate) fn _get_relativity(&self) -> Relativity {
         match self {
-            Self::Void => Relativity::Abs,
-            Self::Dynamic(dynamic_value_ref_rt) => match dynamic_value_ref_rt {
+            ValueDsts::Void(..) => Relativity::Abs,
+            Self::Dynamic(d) => match d {
                 DynValueRefs::DeviceControlMatcher(d) => d.control_matcher.get_relativity(),
                 DynValueRefs::Variable(_) => Relativity::Abs, // TODO: Variables support: always Abs or not ?
             },
@@ -1227,19 +1234,15 @@ impl ValueDsts {
     }
 
     pub(crate) fn _is_void(&self) -> bool {
-        Self::Void == *self
+        matches!(*self, Self::Void(..))
     }
+
     pub(crate) fn _is_dynamic(&self) -> bool {
-        if let Self::Dynamic(..) = *self {
-            return true;
-        }
-        false
+        matches!(*self, Self::Dynamic(..))
     }
+
     pub(crate) fn _is_device_control_matcher(&self) -> bool {
-        if let Self::Dynamic(v) = self {
-            return v._is_device_control_matcher();
-        }
-        false
+        matches!(*self, Self::Dynamic(DynValueRefs::DeviceControlMatcher(..)))
     }
 }
 
@@ -1270,7 +1273,7 @@ impl std::hash::Hash for ValueSrcs {
 impl std::hash::Hash for ValueDsts {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match &self {
-            Self::Void => std::mem::discriminant(self).hash(state),
+            ValueDsts::Void(..) => std::mem::discriminant(self).hash(state),
             Self::Dynamic(dynamic_value_ref_rt) => dynamic_value_ref_rt.hash(state),
         }
     }

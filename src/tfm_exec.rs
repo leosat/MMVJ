@@ -12,6 +12,8 @@ use crate::num_interval::{NumInterval, OutOfRangePolicy};
 use crate::relativity::Relativity;
 
 use crate::schemas_common::WithRuntimeId;
+
+use crate::schemas_transform::TfmCfgDuplicateWithNewState;
 use crate::schemas_transform::WithCommonState;
 use crate::schemas_transform::{
     ClampCfg, EmaCfg, ForceFeedbackComponent, IntegrateCfg, InvertCfg, LinearCfg, NormExpCfg, OneEuroFilterCfg,
@@ -56,7 +58,7 @@ pub(crate) trait TfmExecCtx {
     fn set_ff_y_axis_pos(&self, dk: &str, ck: &str, ivl: NumInterval<BaseNumT>);
 }
 
-pub(crate) trait WithTfmExec {
+pub(crate) trait WithTfmExec: TfmCfgDuplicateWithNewState {
     fn exec(&self, input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT>;
 }
 
@@ -80,6 +82,41 @@ impl WithTfmExec for TfmSeqCfg {
                 input.value = input.interval.clamp(input.value);
             }
         }
+        input
+    }
+}
+
+impl WithTfmExec for TfmStepCfg {
+    fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
+        self.common_state_ref().last_in.store(input.value, Relaxed);
+        #[cfg(feature = "gui")]
+        self.common_state_ref()
+            .gui_trace(TfmStepTraceStage::In, &input, Instant::now());
+
+        input = match self {
+            TfmStepCfg::Nop(_) => input,
+            TfmStepCfg::Invert(s) => s.exec(input, ctx),
+            TfmStepCfg::Integrate(s) => s.exec(input, ctx),
+            TfmStepCfg::Steering(s) => s.exec(input, ctx),
+            TfmStepCfg::Clamp(s) => s.exec(input, ctx),
+            TfmStepCfg::RaiseFall(s) => s.exec(input, ctx),
+            TfmStepCfg::Ema(s) => s.exec(input, ctx),
+            TfmStepCfg::Linear(s) => s.exec(input, ctx),
+            TfmStepCfg::Smoothstep(s) => s.exec(input, ctx),
+            TfmStepCfg::SCurve(s) => s.exec(input, ctx),
+            TfmStepCfg::Exp(s) => s.exec(input, ctx),
+            TfmStepCfg::SignedPower(s) => s.exec(input, ctx),
+            TfmStepCfg::OneEuro(s) => s.exec(input, ctx),
+            TfmStepCfg::Script(s) => s.exec(input, ctx),
+            // TfmStepCfg::_HighPass(_) => input,
+            // TfmStepCfg::_ForceFeedback(_) => input,
+        };
+
+        self.common_state_ref().last_out.store(input.value, Relaxed);
+        #[cfg(feature = "gui")]
+        self.common_state_ref()
+            .gui_trace(TfmStepTraceStage::Out, &input, Instant::now());
+
         input
     }
 }
@@ -265,41 +302,6 @@ impl WithTfmExec for EmaCfg {
         } else if self.on_relative_input_reset_on_idle {
             self.exe_state_reset(input.value);
         }
-
-        input
-    }
-}
-
-impl WithTfmExec for TfmStepCfg {
-    fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
-        self.common_state_ref().last_in.store(input.value, Relaxed);
-        #[cfg(feature = "gui")]
-        self.common_state_ref()
-            .gui_trace(TfmStepTraceStage::In, &input, Instant::now());
-
-        input = match self {
-            TfmStepCfg::Nop(_) => input,
-            TfmStepCfg::Invert(s) => s.exec(input, ctx),
-            TfmStepCfg::Integrate(s) => s.exec(input, ctx),
-            TfmStepCfg::Steering(s) => s.exec(input, ctx),
-            TfmStepCfg::Clamp(s) => s.exec(input, ctx),
-            TfmStepCfg::RaiseFall(s) => s.exec(input, ctx),
-            TfmStepCfg::Ema(s) => s.exec(input, ctx),
-            TfmStepCfg::Linear(s) => s.exec(input, ctx),
-            TfmStepCfg::Smoothstep(s) => s.exec(input, ctx),
-            TfmStepCfg::SCurve(s) => s.exec(input, ctx),
-            TfmStepCfg::Exp(s) => s.exec(input, ctx),
-            TfmStepCfg::SignedPower(s) => s.exec(input, ctx),
-            TfmStepCfg::OneEuro(s) => s.exec(input, ctx),
-            TfmStepCfg::Script(s) => s.exec(input, ctx),
-            TfmStepCfg::_HighPass(_) => input,
-            TfmStepCfg::_ForceFeedback(_) => input,
-        };
-
-        self.common_state_ref().last_out.store(input.value, Relaxed);
-        #[cfg(feature = "gui")]
-        self.common_state_ref()
-            .gui_trace(TfmStepTraceStage::Out, &input, Instant::now());
 
         input
     }
@@ -697,7 +699,7 @@ impl WithTfmExec for ScriptCfg {
                                                 }
                                                 ctx.set_dyn_value(d, value)
                                             }
-                                            ValueDsts::Void => {}
+                                            ValueDsts::Void(..) => {}
                                         };
                                         Ok(())
                                     } else {
@@ -721,7 +723,7 @@ impl WithTfmExec for ScriptCfg {
                                             }
                                             ctx.set_dyn_value(d, value);
                                         }
-                                        ValueDsts::Void => {}
+                                        ValueDsts::Void(..) => {}
                                     })
                                     .ok_or_else(|| {
                                         mlua::Error::RuntimeError(format!("Can't find destination with key {n}"))
@@ -974,7 +976,7 @@ impl WithTfmExec for SteeringCfg {
                         )
                     } else {
                         match &ctx.get_main_dst() {
-                            ValueDsts::Void => 0.0,
+                            ValueDsts::Void(..) => 0.0,
                             ValueDsts::Dynamic(dynamic_value_ref_rt) => match dynamic_value_ref_rt {
                                 DynValueRefs::DeviceControlMatcher(d) => match ff_config.component {
                                     ForceFeedbackComponent::X => {

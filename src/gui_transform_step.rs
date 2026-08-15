@@ -367,11 +367,11 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
                         for step in &*STEPS_TEMPLATES_CACHE.lock().unwrap() {
                             let btn_response = ui.add(Button::new(step.to_string()).sense(Sense::click_and_drag()));
                             if btn_response.clicked() {
-                                step_to_add = Some(step.clone_with_new_state_no_recurse());
+                                step_to_add = Some(step.duplicate_with_new_state());
                             } else if btn_response.drag_started() {
                                 btn_response.dnd_set_drag_payload(GuiDndJob::NewTfmStep(std::sync::Arc::new(
                                     std::sync::Mutex::new(GuiDndJobNewTfmStep {
-                                        step: step.clone_with_new_state_no_recurse(),
+                                        step: step.duplicate_with_new_state(),
                                     }),
                                 )));
                                 // TODO?: maybe visual feedback of draggin the button...
@@ -632,9 +632,8 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                             Self::SignedPower(s) => s.egui((), ui),
                                             Self::OneEuro(s) => {
                                                 s.egui((cfg_variables, cfg_devices, in_is_relative), ui)
-                                            }
-                                            Self::_HighPass(_) => None,
-                                            Self::_ForceFeedback(_) => None,
+                                            } // Self::_HighPass(_) => None,
+                                              // Self::_ForceFeedback(_) => None,
                                         }
                                     },
                                 )
@@ -1279,7 +1278,7 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                             },
                             ValueTargets::Dst(d) => match d {
                                 ValueDsts::Dynamic(d) => Some(d),
-                                ValueDsts::Void => None,
+                                ValueDsts::Void(..) => None,
                             },
                         });
 
