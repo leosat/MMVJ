@@ -10,9 +10,9 @@ use crate::schemas_cfg::{DevicesCfgNew, VariablesCfg};
 
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_mapping::Mapping;
-use crate::schemas_transform::{DuplicateWithNewState, DynValFilter, collect_dynamic_value_matchers};
+use crate::schemas_transform::{DynValFilter, TfmCfgDuplicateTreeWithNewState, collect_dynamic_value_matchers};
 use crate::schemas_transform::{TfmSeqCfg, TfmStepCfg};
-use crate::schemas_value::DynValueRefs;
+use crate::schemas_value::{DynValueRefs, ValueDsts};
 use std::any::Any;
 use std::collections::HashMap;
 use std::ops::ControlFlow;
@@ -104,20 +104,17 @@ impl<'s> DrawEgui<'s> for Mapping {
                                         }
                                         #[allow(clippy::single_match)]
                                         match &self.dst {
-                                            crate::schemas_value::ValueDsts::Void => {}
-                                            crate::schemas_value::ValueDsts::Dynamic(dynamic_value_ref_rt) => {
-                                                match dynamic_value_ref_rt {
-                                                    DynValueRefs::DeviceControlMatcher(d) => {
-                                                        if d.control_matcher.get_idle_tick_enabled_flag().load(Relaxed)
-                                                        {
-                                                            ui.label("On for dest control");
-                                                        } else {
-                                                            ui.label("Off for dest control");
-                                                        }
+                                            ValueDsts::Void(..) => {}
+                                            ValueDsts::Dynamic(d) => match d {
+                                                DynValueRefs::DeviceControlMatcher(d) => {
+                                                    if d.control_matcher.get_idle_tick_enabled_flag().load(Relaxed) {
+                                                        ui.label("On for dest control");
+                                                    } else {
+                                                        ui.label("Off for dest control");
                                                     }
-                                                    _ => {}
                                                 }
-                                            }
+                                                _ => {}
+                                            },
                                         }
                                     });
                                 });
@@ -449,7 +446,7 @@ impl traversable::VisitorMut for DndJobMoveTfmStep_Visitor {
                         dbg!(found);
                     }
                     if self.dnd_job.do_copy {
-                        self.dropped_tfm_step = Some(found.1.clone().duplicate_with_new_state());
+                        self.dropped_tfm_step = Some(found.1.clone().duplicate_tree_with_new_state());
                     } else {
                         self.dropped_tfm_step = Some(found.1.clone());
 

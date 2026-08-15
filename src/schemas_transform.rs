@@ -22,7 +22,6 @@ use crate::{
 use ambassador::{Delegate, delegatable_trait};
 use bitflags::bitflags;
 use crossbeam_utils::CachePadded;
-// use documented::{Documented, DocumentedFields, docs_const};
 use garde::Validate;
 use schemars::JsonSchema;
 use serde::de::IntoDeserializer;
@@ -96,48 +95,42 @@ pub(crate) fn default_ema_tau() -> ValueSrcs {
     })
 }
 
-// pub(crate) fn default_ema_tau() -> EmaCfgTau {
-//     EmaCfgTau::from(ValueSrcs::Static(StaticValueCfg {
-//         value: std::cell::Cell::new(0.04),
-//         interval: AutoOrManual::Auto(NumInterval { from: 1.0e-6, to: 2.0 }),
-//     }))
-// }
+/// This trait ensures that we do not forget to
+/// handle creation of separate state when
+/// tfm steps are duplicated interactively.
+pub(crate) trait TfmCfgDuplicateWithNewState
+where
+    Self: Clone,
+{
+    #[must_use]
+    fn duplicate_with_new_state(&self) -> Self;
+}
 
-pub(crate) trait DuplicateWithNewState
+pub(crate) trait TfmCfgDuplicateTreeWithNewState
 where
     Self: Clone + TraversableMut + WithRuntimeId,
 {
-    fn duplicate_with_new_state(&self) -> Self {
-        struct Visitor {}
-        impl traversable::VisitorMut for Visitor {
+    fn duplicate_tree_with_new_state(&self) -> Self {
+        struct CreateNewStateVisitor {}
+        impl traversable::VisitorMut for CreateNewStateVisitor {
             type Break = ();
             fn enter_mut(&mut self, this: &mut dyn core::any::Any) -> std::ops::ControlFlow<Self::Break> {
-                if let Some(v) = this.downcast_mut::<TfmStepCfg>() {
-                    v.common_state_assign_new();
-                    match v {
-                        TfmStepCfg::Integrate(s) => s.exe_state = Default::default(),
-                        TfmStepCfg::Steering(s) => s.exe_state = Default::default(),
-                        TfmStepCfg::RaiseFall(s) => s.exe_state = Default::default(),
-                        TfmStepCfg::Ema(s) => s.exe_state = Default::default(),
-                        TfmStepCfg::OneEuro(s) => s.exe_state = Default::default(),
-                        TfmStepCfg::Script(s) => s.exe_state = Default::default(),
-                        TfmStepCfg::Nop(_) | TfmStepCfg::Invert(_) | TfmStepCfg::Clamp(_) | TfmStepCfg::Linear(_) => {}
-                        TfmStepCfg::Smoothstep(_) | TfmStepCfg::SCurve(_) => {}
-                        TfmStepCfg::Exp(_) | TfmStepCfg::SignedPower(_) => {}
-                        TfmStepCfg::_HighPass(_s) => {}
-                        TfmStepCfg::_ForceFeedback(_s) => {}
-                    }
-                } else if let Some(v) = this.downcast_mut::<TfmSeqCfg>() {
-                    v.assign_new_id();
+                if let Some(s) = this.downcast_mut::<TfmStepCfg>() {
+                    *s = s.duplicate_with_new_state();
+                } else if let Some(s) = this.downcast_mut::<TfmSeqCfg>() {
+                    s.assign_new_id();
                 }
                 std::ops::ControlFlow::Continue(())
             }
         }
-        let mut duplicate = self.clone();
-        let _ = duplicate.traverse_mut(&mut Visitor {});
-        duplicate
+        let mut cloned = self.clone();
+        let _ = cloned.traverse_mut(&mut CreateNewStateVisitor {});
+        cloned
     }
 }
+
+impl TfmCfgDuplicateTreeWithNewState for TfmStepCfg {}
+impl TfmCfgDuplicateTreeWithNewState for TfmSeqCfg {}
 
 // ============================================================
 #[derive(Clone)]
@@ -278,7 +271,6 @@ impl PartialEq for TfmStepCommonStateShared {
 )]
 #[delegate(WithCommonState)]
 #[delegate(WithCommonStateMut)]
-#[delegate(WithCommonStateAssignedNew)]
 #[strum(serialize_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum TfmStepCfg {
@@ -306,12 +298,33 @@ pub(crate) enum TfmStepCfg {
     SignedPower(#[garde(skip)] SignedPowerCfg),
     OneEuro(#[garde(skip)] Box<OneEuroFilterCfg>),
     Script(#[garde(skip)] ScriptCfg),
-    #[strum(disabled)]
-    #[traverse(skip)]
-    _HighPass(#[garde(skip)] HighPassCfg),
-    #[strum(disabled)]
-    #[traverse(skip)]
-    _ForceFeedback(#[garde(skip)] Box<ForceFeedbackCfg>),
+    // #[strum(disabled)]
+    // #[traverse(skip)]
+    // _HighPass(#[garde(skip)] HighPassCfg),
+    // #[strum(disabled)]
+    // #[traverse(skip)]
+    // _ForceFeedback(#[garde(skip)] Box<ForceFeedbackCfg>),
+}
+
+impl TfmCfgDuplicateWithNewState for TfmStepCfg {
+    fn duplicate_with_new_state(&self) -> Self {
+        match self {
+            Self::Nop(s) => Self::Nop(s.duplicate_with_new_state()),
+            Self::Invert(s) => Self::Invert(s.duplicate_with_new_state()),
+            Self::Integrate(s) => Self::Integrate(s.duplicate_with_new_state()),
+            Self::Steering(s) => Self::Steering(s.duplicate_with_new_state().into()),
+            Self::Clamp(s) => Self::Clamp(s.duplicate_with_new_state()),
+            Self::RaiseFall(s) => Self::RaiseFall(s.duplicate_with_new_state().into()),
+            Self::Ema(s) => Self::Ema(s.duplicate_with_new_state()),
+            Self::Linear(s) => Self::Linear(s.duplicate_with_new_state()),
+            Self::Smoothstep(s) => Self::Smoothstep(s.duplicate_with_new_state()),
+            Self::SCurve(s) => Self::SCurve(s.duplicate_with_new_state()),
+            Self::Exp(s) => Self::Exp(s.duplicate_with_new_state()),
+            Self::SignedPower(s) => Self::SignedPower(s.duplicate_with_new_state()),
+            Self::OneEuro(s) => Self::OneEuro(s.duplicate_with_new_state().into()),
+            Self::Script(s) => Self::Script(s.duplicate_with_new_state()),
+        }
+    }
 }
 
 pub(crate) const DEFAULT_TRANSFORM_DESCRIPTION: &str = "No transform description available... yet.";
@@ -333,8 +346,9 @@ impl TfmStepCfg {
             | TfmStepCfg::SCurve(_)
             | TfmStepCfg::Exp(_)
             | TfmStepCfg::SignedPower(_)
-            | TfmStepCfg::_HighPass(_)
-            | TfmStepCfg::_ForceFeedback(_) => DEFAULT_TRANSFORM_DESCRIPTION,
+            // | TfmStepCfg::_HighPass(_)
+            // | TfmStepCfg::_ForceFeedback(_) 
+            => DEFAULT_TRANSFORM_DESCRIPTION,
         }
     }
 }
@@ -356,15 +370,9 @@ impl TfmStepCfg {
             Self::SignedPower(s) => &mut s.enabled,
             Self::OneEuro(s) => &mut s.enabled,
             Self::Script(s) => &mut s.enabled,
-            Self::_HighPass(s) => &mut s.enabled,
-            Self::_ForceFeedback(s) => &mut s.enabled,
+            // Self::_HighPass(s) => &mut s.enabled,
+            // Self::_ForceFeedback(s) => &mut s.enabled,
         }
-    }
-
-    pub(crate) fn clone_with_new_state_no_recurse(&self) -> Self {
-        let mut cloned = self.clone();
-        cloned.common_state_assign_new();
-        cloned
     }
 }
 
@@ -522,6 +530,14 @@ pub(crate) struct ClampCfg {
     pub(crate) override_range: bool,
 }
 
+impl TfmCfgDuplicateWithNewState for ClampCfg {
+    fn duplicate_with_new_state(&self) -> Self {
+        let mut s = self.clone();
+        s.common_state = Default::default();
+        s
+    }
+}
+
 impl From<ClampCfgCompat__> for ClampCfg {
     fn from(value: ClampCfgCompat__) -> Self {
         let err =
@@ -584,6 +600,14 @@ pub(crate) struct NopCfg {
     pub(crate) enabled: bool,
 }
 
+impl TfmCfgDuplicateWithNewState for NopCfg {
+    fn duplicate_with_new_state(&self) -> Self {
+        let mut s = self.clone();
+        s.common_state = Default::default();
+        s
+    }
+}
+
 impl Default for NopCfg {
     fn default() -> Self {
         Self {
@@ -617,6 +641,14 @@ pub(crate) struct InvertCfg {
     #[garde(skip)]
     #[serde(default = "default_step_enabled")]
     pub(crate) enabled: bool,
+}
+
+impl TfmCfgDuplicateWithNewState for InvertCfg {
+    fn duplicate_with_new_state(&self) -> Self {
+        let mut s = self.clone();
+        s.common_state = Default::default();
+        s
+    }
 }
 
 impl Default for InvertCfg {
@@ -685,6 +717,15 @@ pub(crate) struct EmaCfg {
 make_input_port_port_inner_nutype!(name: EmaCfgTau, inner: ValueSrcs, default: default_ema_tau());
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+impl TfmCfgDuplicateWithNewState for EmaCfg {
+    fn duplicate_with_new_state(&self) -> Self {
+        let mut s = self.clone();
+        s.exe_state = Default::default();
+        s.common_state = Default::default();
+        s
+    }
+}
 
 impl PartialEq for EmaCfg {
     fn eq(&self, other: &Self) -> bool {
@@ -830,6 +871,15 @@ pub(crate) struct OneEuroFilterCfg {
 
 make_input_port_port_inner_nutype!(name:  OneEuroCfgDCutOffHz, inner: ValueSrcs, default: default_1euro_d_cutoff_hz());
 
+impl TfmCfgDuplicateWithNewState for OneEuroFilterCfg {
+    fn duplicate_with_new_state(&self) -> Self {
+        let mut s = self.clone();
+        s.exe_state = Default::default();
+        s.common_state = Default::default();
+        s
+    }
+}
+
 impl PartialEq for OneEuroFilterCfg {
     fn eq(&self, other: &Self) -> bool {
         self.desc == other.desc
@@ -882,6 +932,13 @@ pub(crate) struct LinearCfg {
     pub(crate) on_idle: bool,
 }
 
+impl TfmCfgDuplicateWithNewState for LinearCfg {
+    fn duplicate_with_new_state(&self) -> Self {
+        let mut s = self.clone();
+        s.common_state = Default::default();
+        s
+    }
+}
 impl Default for LinearCfg {
     fn default() -> Self {
         Self {
@@ -910,6 +967,14 @@ pub(crate) struct SmoothstepCfg {
     #[serde(default = "default_on_idle")]
     #[serde(skip_serializing_if = "is_true")]
     pub(crate) on_idle: bool,
+}
+
+impl TfmCfgDuplicateWithNewState for SmoothstepCfg {
+    fn duplicate_with_new_state(&self) -> Self {
+        let mut s = self.clone();
+        s.common_state = Default::default();
+        s
+    }
 }
 
 impl Default for SmoothstepCfg {
@@ -945,6 +1010,13 @@ pub(crate) struct SCurveCfg {
     pub(crate) on_idle: bool,
 }
 
+impl TfmCfgDuplicateWithNewState for SCurveCfg {
+    fn duplicate_with_new_state(&self) -> Self {
+        let mut s = self.clone();
+        s.common_state = Default::default();
+        s
+    }
+}
 impl Default for SCurveCfg {
     fn default() -> Self {
         Self {
@@ -988,6 +1060,14 @@ pub(crate) struct NormExpCfg {
     pub(crate) on_idle: bool,
 }
 
+impl TfmCfgDuplicateWithNewState for NormExpCfg {
+    fn duplicate_with_new_state(&self) -> Self {
+        let mut s = self.clone();
+        s.common_state = Default::default();
+        s
+    }
+}
+
 impl Default for NormExpCfg {
     fn default() -> Self {
         Self {
@@ -1025,6 +1105,14 @@ pub(crate) struct SignedPowerCfg {
     #[serde(skip_serializing_if = "is_true")]
     #[garde(skip)]
     pub(crate) on_idle: bool,
+}
+
+impl TfmCfgDuplicateWithNewState for SignedPowerCfg {
+    fn duplicate_with_new_state(&self) -> Self {
+        let mut s = self.clone();
+        s.common_state = Default::default();
+        s
+    }
 }
 
 impl Default for SignedPowerCfg {
@@ -1089,6 +1177,15 @@ pub(crate) struct IntegrateCfg {
     #[serde(skip_serializing_if = "is_true")]
     #[garde(skip)]
     pub(crate) on_idle: bool,
+}
+
+impl TfmCfgDuplicateWithNewState for IntegrateCfg {
+    fn duplicate_with_new_state(&self) -> Self {
+        let mut s = self.clone();
+        s.exe_state = Default::default();
+        s.common_state = Default::default();
+        s
+    }
 }
 
 impl PartialEq for IntegrateCfg {
@@ -1167,9 +1264,9 @@ impl TfmSeqCfg {
                     };
                     (SYMM_UNIT_INTERVAL, Relativity::Abs)
                 }
-                TfmStepCfg::_ForceFeedback(force_feedback) if force_feedback.enabled => {
-                    (SYMM_UNIT_INTERVAL, Relativity::Abs)
-                }
+                // TfmStepCfg::_ForceFeedback(force_feedback) if force_feedback.enabled => {
+                //     (SYMM_UNIT_INTERVAL, Relativity::Abs)
+                // }
                 TfmStepCfg::Clamp(clamp) if clamp.enabled => {
                     clamp.sanitize_inplace();
                     (clamp.get_out_interval(), in_relativity)
@@ -1186,9 +1283,12 @@ impl TfmSeqCfg {
                 | TfmStepCfg::SCurve(_)
                 | TfmStepCfg::Exp(_)
                 | TfmStepCfg::SignedPower(_)
-                | TfmStepCfg::OneEuro(_)
-                | TfmStepCfg::_HighPass(_)
-                | TfmStepCfg::_ForceFeedback(_) => (in_interval, in_relativity),
+                | TfmStepCfg::OneEuro(_) =>
+                // | TfmStepCfg::_HighPass(_)
+                // | TfmStepCfg::_ForceFeedback(_) =>
+                {
+                    (in_interval, in_relativity)
+                }
             };
 
             step.common_state_mut()
@@ -1379,6 +1479,14 @@ tfm_seq_tpl!(
     meta: serde(from = "TfmSeqVariants", into = "TfmSeqVariants")
 );
 
+impl TfmCfgDuplicateWithNewState for TfmSeqCfg {
+    fn duplicate_with_new_state(&self) -> Self {
+        let mut s = self.duplicate_tree_with_new_state();
+        s.assign_new_id();
+        s
+    }
+}
+
 impl WithDescriptionMut for TfmSeqCfg {
     fn description_mut(&mut self) -> Option<&mut DescriptionCfg> {
         Some(&mut self.desc)
@@ -1448,12 +1556,6 @@ pub(crate) trait WithCommonStateMut {
     fn common_state_mut(&mut self) -> &mut TfmStepCommonState;
 }
 
-#[allow(unused)]
-#[delegatable_trait]
-pub(crate) trait WithCommonStateAssignedNew {
-    fn common_state_assign_new(&mut self);
-}
-
 macro_rules! impl_with_common_state {
     ($($t:ty),* $(,)?) => {
         $(
@@ -1465,11 +1567,6 @@ macro_rules! impl_with_common_state {
             impl WithCommonStateMut for $t {
                 fn common_state_mut(&mut self) -> &mut TfmStepCommonState {
                     &mut self.common_state
-                }
-            }
-            impl WithCommonStateAssignedNew for $t {
-                fn common_state_assign_new(&mut self) {
-                    self.common_state = Default::default();
                 }
             }
         )*
@@ -1518,7 +1615,7 @@ pub(crate) struct SteeringCfg {
     #[traverse(skip)]
     #[garde(skip)]
     /// Internal state
-    exe_state: Arc<std::sync::Mutex<SteeringExeState>>,
+    pub(super) exe_state: Arc<std::sync::Mutex<SteeringExeState>>,
 
     /// Optional human-readable description shown in the GUI.
     #[traverse(skip)]
@@ -1633,6 +1730,15 @@ pub(crate) struct SteeringCfg {
     pub(crate) integrated_user_input_transform: TfmSeqCfg,
 }
 
+impl TfmCfgDuplicateWithNewState for SteeringCfg {
+    fn duplicate_with_new_state(&self) -> Self {
+        let mut s = self.clone();
+        s.exe_state = Default::default();
+        s.common_state = Default::default();
+        s
+    }
+}
+
 impl TfmExeState for SteeringCfg {
     type StateMutT<'a>
         = std::sync::MutexGuard<'a, SteeringExeState>
@@ -1717,6 +1823,15 @@ pub(crate) struct RaiseFallCfg {
     #[serde(default)]
     #[garde(skip)]
     pub(crate) invert_fall_hold_factor: bool,
+}
+
+impl TfmCfgDuplicateWithNewState for RaiseFallCfg {
+    fn duplicate_with_new_state(&self) -> Self {
+        let mut s = self.clone();
+        s.exe_state = Default::default();
+        s.common_state = Default::default();
+        s
+    }
 }
 
 impl PartialEq for RaiseFallCfg {
@@ -1923,6 +2038,15 @@ pub(crate) struct ScriptCfg {
     pub(crate) aux_transformations: BTreeMap<String, TfmSeqCfg>,
 }
 
+impl TfmCfgDuplicateWithNewState for ScriptCfg {
+    fn duplicate_with_new_state(&self) -> Self {
+        let mut s = self.clone();
+        s.exe_state = Default::default();
+        s.common_state = Default::default();
+        s
+    }
+}
+
 impl PartialEq for ScriptCfg {
     fn eq(&self, other: &Self) -> bool {
         self.desc == other.desc
@@ -2057,14 +2181,12 @@ pub(crate) struct ScriptDestinationCfg {
     pub(crate) destination: ValueDsts,
 }
 
-impl DuplicateWithNewState for TfmStepCfg {}
-
 impl WithRuntimeId for TfmStepCfg {
     fn get_id(&self) -> ObjId {
         self.common_state_ref().get_id()
     }
     fn assign_new_id(&mut self) {
-        self.common_state_assign_new();
+        self.common_state_mut().id = Default::default();
     }
 }
 
@@ -2085,8 +2207,8 @@ impl WithDescriptionMut for TfmStepCfg {
             TfmStepCfg::SignedPower(signed_power) => Some(&mut signed_power.desc),
             TfmStepCfg::OneEuro(one_euro) => Some(&mut one_euro.desc),
             TfmStepCfg::Script(script) => Some(&mut script.desc),
-            TfmStepCfg::_HighPass(highpass) => Some(&mut highpass.desc),
-            TfmStepCfg::_ForceFeedback(force_feedback) => Some(&mut force_feedback.desc),
+            // TfmStepCfg::_HighPass(highpass) => Some(&mut highpass.desc),
+            // TfmStepCfg::_ForceFeedback(force_feedback) => Some(&mut force_feedback.desc),
         }
     }
 }

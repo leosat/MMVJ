@@ -489,7 +489,7 @@ impl<
             mapping.set_last_known_io((None, Some(final_value)));
 
             match &mapping.dst {
-                ValueDsts::Void => {}
+                ValueDsts::Void(..) => {}
                 ValueDsts::Dynamic(d) => {
                     self.set_dyn_value(d, final_value, self.debug);
                     self.set_idle_tick_enabled_on_device_control_for_mapping(mapping);
@@ -526,7 +526,7 @@ impl<
             mapping.set_last_known_io((None, Some(final_value)));
 
             match &mapping.dst {
-                ValueDsts::Void => {}
+                ValueDsts::Void(..) => {}
                 ValueDsts::Dynamic(d) => {
                     self.set_dyn_value(d, final_value, self.debug_idle_tick.into());
                 }

@@ -111,7 +111,7 @@ impl<'s> DrawEgui<'s> for ValueDsts {
             }
         }
         match self {
-            ValueDsts::Void => {
+            ValueDsts::Void(..) => {
                 ui.label(egui::RichText::new("Void").size(14.0).monospace().strong());
             }
             ValueDsts::Dynamic(d) => {
@@ -661,7 +661,7 @@ pub(crate) fn draw_value_choice_iface(
                         ui.collapsing("Void", |ui| {
                             ui.separator();
                             if ui.button("Void").clicked() {
-                                static_value = Some(ValueTargets::Dst(ValueDsts::Void));
+                                static_value = Some(ValueTargets::Dst(ValueDsts::Void(None)));
                             }
                         });
                     } else {

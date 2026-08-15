@@ -27,7 +27,7 @@ mod steering_tfm_deserialization_and_exec_tests {
         fn active() -> Self {
             Self {
                 is_idle: false,
-                main_dst: ValueDsts::Void,
+                main_dst: ValueDsts::Void(None),
                 dyn_values: Default::default(),
                 ff_x: 0.0,
                 ff_y: 0.0,
