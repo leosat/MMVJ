@@ -53,14 +53,14 @@ mod steering_tfm_deserialization_and_exec_tests {
         fn get_idle_tick_rate(&self) -> u32 {
             100
         }
-        fn get_main_dst(&self) -> &ValueDsts {
-            &self.main_dst
+        fn get_main_dst(&self) -> Option<&ValueDsts> {
+            Some(&self.main_dst)
         }
         fn set_dyn_value(&self, dst: &DynValueRefs, v: BaseNumT) {
             let key = match dst {
                 DynValueRefs::Variable(v) => v.variable_key.clone(),
                 DynValueRefs::DeviceControlMatcher(d) => {
-                    format!("{}.{}", d.device_matcher_key, d.control_key)
+                    format!("{}.{}", d.device_matcher_key, d.control_matcher_key)
                 }
             };
             self.dyn_values.borrow_mut().insert(key, v);
@@ -70,12 +70,6 @@ mod steering_tfm_deserialization_and_exec_tests {
         }
         fn get_ff_y(&self, _dk: &str) -> BaseNumT {
             self.ff_y
-        }
-        fn set_ff_x_axis_pos(&self, _dk: &str, _ck: &str, _ivl: NumInterval<BaseNumT>) {}
-        fn set_ff_y_axis_pos(&self, _dk: &str, _ck: &str, _ivl: NumInterval<BaseNumT>) {}
-
-        fn get_lua(&self) -> &mlua::Lua {
-            unreachable!()
         }
     }
 

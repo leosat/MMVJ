@@ -328,41 +328,41 @@ impl Config {
                         .get_mut(&d.device_matcher_key)
                         .ok_or_else(|| anyhow::anyhow!("Device with key {} not found!", d.device_matcher_key))?
                         .clone();
-                    if let Some(hid_control) = device.controls.get(&d.control_key) {
+                    if let Some(hid_control) = device.controls.get(&d.control_matcher_key) {
                         return Ok(DynValueRefs::DeviceControlMatcher(DeviceControlMatcherRef {
                             device_matcher_key: d.device_matcher_key.clone(),
-                            control_key: d.control_key.clone(),
+                            control_matcher_key: d.control_matcher_key.clone(),
                             control_matcher: ControlMatchers::Hid(hid_control.clone()),
                         }));
                     }
 
-                    if let Some(predef) = PREDEF_CONTROLS.hid_controls.get(&d.control_key) {
+                    if let Some(predef) = PREDEF_CONTROLS.hid_controls.get(&d.control_matcher_key) {
                         let expanded_control_matcher: HidControlMatcherCfg = predef.clone().into();
 
                         log::warn!(
                             "Automatically back-filling predefined control {:?} into HID matcher definition for {}, \
                             where it was not found while being referenced in a mapping {}",
-                            d.control_key,
+                            d.control_matcher_key,
                             d.device_matcher_key,
                             mapping_name
                         );
 
                         device
                             .controls
-                            .insert(d.control_key.clone(), expanded_control_matcher.clone());
+                            .insert(d.control_matcher_key.clone(), expanded_control_matcher.clone());
 
                         let _ = devices.hid.insert(d.device_matcher_key.clone(), device.clone());
 
                         return Ok(DynValueRefs::DeviceControlMatcher(DeviceControlMatcherRef {
                             device_matcher_key: d.device_matcher_key.clone(),
-                            control_key: d.control_key.clone(),
+                            control_matcher_key: d.control_matcher_key.clone(),
                             control_matcher: ControlMatchers::Hid(expanded_control_matcher.clone()),
                         }));
                     }
 
                     bail!(
                         "Control '{}' not found in device '{}'. Available controls (including predefined): {}",
-                        d.control_key,
+                        d.control_matcher_key,
                         d.device_matcher_key,
                         devices
                             .hid
@@ -390,10 +390,10 @@ impl Config {
                                 .get_mut(&d.device_matcher_key)
                                 .unwrap()
                                 .controls
-                                .get(&d.control_key)
+                                .get(&d.control_matcher_key)
                             {
                                 control.clone()
-                            } else if let Some(predef) = PREDEF_CONTROLS.midi_controls.get(&d.control_key) {
+                            } else if let Some(predef) = PREDEF_CONTROLS.midi_controls.get(&d.control_matcher_key) {
                                 log::warn!(
                                     "Automatically back-filling predefined control into midi definition for {}, \
                                     where it was not found while being referenced in a mapping {}",
@@ -408,13 +408,13 @@ impl Config {
                                     .get_mut(&d.device_matcher_key)
                                     .unwrap()
                                     .controls
-                                    .insert(d.control_key.to_string(), expanded_control_matcher.clone());
+                                    .insert(d.control_matcher_key.to_string(), expanded_control_matcher.clone());
 
                                 expanded_control_matcher
                             } else {
                                 bail!(
                                     "Control '{}' not found in device '{}'. Available controls (including predefined): {}",
-                                    d.control_key,
+                                    d.control_matcher_key,
                                     d.device_matcher_key,
                                     devices
                                         .midi
@@ -430,7 +430,7 @@ impl Config {
 
                         Ok(DynValueRefs::DeviceControlMatcher(DeviceControlMatcherRef {
                             device_matcher_key: d.device_matcher_key.clone(),
-                            control_key: d.control_key.clone(),
+                            control_matcher_key: d.control_matcher_key.clone(),
                             control_matcher: ControlMatchers::Midi(midi_control),
                         }))
                     } else {

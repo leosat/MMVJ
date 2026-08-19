@@ -2269,7 +2269,7 @@ fn test_dst_port() {
     let dst_port_test: ValuePort<InnerPortTest> = Default::default();
     dst_port_test.set_numeric_value(1.0);
 
-    // struct ExeCtx {}
-    // impl TfmExecCtx for ExeCtx { .. }
-    // dst_port_test.write(&ExeCtx {});
+    struct ExeCtx {}
+    impl TfmExecCtx for ExeCtx {}
+    dst_port_test.write(&ExeCtx {});
 }

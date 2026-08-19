@@ -129,7 +129,7 @@ impl traversable::VisitorMut for GuiCmdControlMatcherRemove {
     fn enter_mut(&mut self, node: &mut dyn std::any::Any) -> std::ops::ControlFlow<Self::Break> {
         if let Some(dcr) = node.downcast_mut::<DeviceControlMatcherRef>()
             && dcr.device_matcher_key == self.device_key
-            && dcr.control_key == self.control_key
+            && dcr.control_matcher_key == self.control_key
         {
             return std::ops::ControlFlow::Break(());
         }
