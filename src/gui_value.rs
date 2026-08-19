@@ -58,7 +58,7 @@ impl<'s> DrawEgui<'s> for DynValueRefs {
                     egui::RichText::new(format!(
                         "dev: {} / ctl: {} (range: {}, {:?}, {:08.2})",
                         d.device_matcher_key,
-                        d.control_key,
+                        d.control_matcher_key,
                         d.control_matcher.get_interval(),
                         d.control_matcher.get_relativity(),
                         d.control_matcher.get_last_known_io(),
@@ -559,7 +559,7 @@ pub(crate) fn draw_value_choice_iface_window(
                             {
                                 return Some(DynValueRefs::DeviceControlMatcher(DeviceControlMatcherRef {
                                     device_matcher_key: dm.0.to_string(),
-                                    control_key: cm.0.to_string(),
+                                    control_matcher_key: cm.0.to_string(),
                                     control_matcher: ControlMatchers::Hid(cm.1.clone()),
                                 }));
                             };
@@ -625,7 +625,7 @@ pub(crate) fn draw_value_choice_iface_window(
                                 *gui_out_mut = gui_out_mut.clone().or(Some(DynValueRefs::DeviceControlMatcher(
                                     DeviceControlMatcherRef {
                                         device_matcher_key: d.0.to_string(),
-                                        control_key: c.0.to_string(),
+                                        control_matcher_key: c.0.to_string(),
                                         control_matcher: ControlMatchers::Midi(c.1.clone()),
                                     },
                                 )));

@@ -344,7 +344,7 @@ pub(crate) struct DeviceControlMatcherRef {
     #[serde(alias = "control")]
     #[serde(alias = "control-matcher")]
     #[traverse(skip)]
-    pub(crate) control_key: String,
+    pub(crate) control_matcher_key: String,
     #[serde(skip)]
     #[serde(default = "dummy_control_matcher_rt")]
     pub(crate) control_matcher: ControlMatchers,
@@ -362,10 +362,12 @@ impl Ord for DeviceControlMatcherRef {
 impl PartialOrd for DeviceControlMatcherRef {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match self.device_matcher_key.partial_cmp(&other.device_matcher_key) {
-            Some(core::cmp::Ordering::Equal) => match self.control_key.partial_cmp(&other.control_key) {
-                Some(core::cmp::Ordering::Equal) => Some(core::cmp::Ordering::Equal),
-                ord => ord,
-            },
+            Some(core::cmp::Ordering::Equal) => {
+                match self.control_matcher_key.partial_cmp(&other.control_matcher_key) {
+                    Some(core::cmp::Ordering::Equal) => Some(core::cmp::Ordering::Equal),
+                    ord => ord,
+                }
+            }
             ord => ord,
         }
     }
@@ -420,7 +422,7 @@ impl<'de> Deserialize<'de> for DynValueRefs {
 impl ToString for &DynValueRefs {
     fn to_string(&self) -> String {
         match self {
-            DynValueRefs::DeviceControlMatcher(d) => d.device_matcher_key.to_string() + "/" + &d.control_key,
+            DynValueRefs::DeviceControlMatcher(d) => d.device_matcher_key.to_string() + "/" + &d.control_matcher_key,
             DynValueRefs::Variable(v) => v.variable_key.to_string(),
         }
     }
@@ -1227,7 +1229,7 @@ impl std::fmt::Display for ValueSrcs {
             Self::Static(v) => format!("Static value: {v}"),
             Self::Dynamic(dynamic_value_ref_rt) => match dynamic_value_ref_rt {
                 DynValueRefs::DeviceControlMatcher(d) => {
-                    format!("Src: {}.{}", d.device_matcher_key, d.control_key)
+                    format!("Src: {}.{}", d.device_matcher_key, d.control_matcher_key)
                 }
                 DynValueRefs::Variable(v) => format!("Src var: {}", v.variable_key),
             },
@@ -1242,7 +1244,7 @@ impl std::fmt::Display for ValueDsts {
             ValueDsts::Void(..) => "Dst: void".into(),
             Self::Dynamic(dynamic_value_ref_rt) => match dynamic_value_ref_rt {
                 DynValueRefs::DeviceControlMatcher(d) => {
-                    format!("Dst: {}.{}", d.device_matcher_key, d.control_key)
+                    format!("Dst: {}.{}", d.device_matcher_key, d.control_matcher_key)
                 }
                 DynValueRefs::Variable(v) => format!("Dst var: {}", v.variable_key),
             },
@@ -1266,7 +1268,7 @@ impl ValueSrcs {
         match &self {
             ValueSrcs::Static(_) => None,
             ValueSrcs::Dynamic(dynamic_value_ref_rt) => match dynamic_value_ref_rt {
-                DynValueRefs::DeviceControlMatcher(d) => Some(&d.control_key),
+                DynValueRefs::DeviceControlMatcher(d) => Some(&d.control_matcher_key),
                 DynValueRefs::Variable(_) => None,
             },
         }
@@ -1351,7 +1353,7 @@ impl PortInnerIface for ValueDsts {
 
     fn port_inner_get_device_control_matcher_key(&self) -> Option<(&str, &str)> {
         if let Self::Dynamic(DynValueRefs::DeviceControlMatcher(dcm)) = self {
-            Some((&dcm.device_matcher_key, &dcm.control_key))
+            Some((&dcm.device_matcher_key, &dcm.control_matcher_key))
         } else {
             None
         }
@@ -1452,7 +1454,7 @@ impl std::hash::Hash for DynValueRefs {
         match self {
             Self::DeviceControlMatcher(d) => {
                 d.device_matcher_key.hash(state);
-                d.control_key.hash(state);
+                d.control_matcher_key.hash(state);
             }
             Self::Variable(v) => v.variable_key.hash(state),
         }

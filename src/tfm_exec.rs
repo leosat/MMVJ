@@ -43,19 +43,42 @@ pub(crate) trait TfmExeState {
     fn exe_state_reset(&self, reset_with: Self::ResetInput<'_>);
 }
 
+#[allow(unused)]
 pub(crate) trait TfmExecCtx {
-    fn is_idle_tick(&self) -> bool;
-    #[allow(unused)]
-    fn get_idle_tick_rate(&self) -> u32;
-
-    fn get_main_dst(&self) -> &ValueDsts;
-    fn set_dyn_value(&self, dst: &DynValueRefs, v: BaseNumT);
-
-    fn get_lua(&self) -> &mlua::Lua;
-    fn get_ff_x(&self, dk: &str) -> BaseNumT;
-    fn get_ff_y(&self, dk: &str) -> BaseNumT;
-    fn set_ff_x_axis_pos(&self, dk: &str, ck: &str, ivl: NumInterval<BaseNumT>);
-    fn set_ff_y_axis_pos(&self, dk: &str, ck: &str, ivl: NumInterval<BaseNumT>);
+    fn is_idle_tick(&self) -> bool {
+        false
+    }
+    fn get_idle_tick_rate(&self) -> u32 {
+        crate::config::MIN_BASE_FREQ_HZ
+    }
+    fn get_main_dst(&self) -> Option<&ValueDsts> {
+        None
+    }
+    // TODO?: set_device_control_matcher((&str, &str), BaseNumT)
+    fn set_dyn_value(&self, dyn_value_ref: &DynValueRefs, value: BaseNumT) {}
+    fn get_lua(&self) -> Option<&mlua::Lua> {
+        None
+    }
+    fn get_ff_x(&self, device_matcher_key: &str) -> BaseNumT {
+        Default::default()
+    }
+    fn get_ff_y(&self, device_matcher_key: &str) -> BaseNumT {
+        Default::default()
+    }
+    fn set_ff_x_axis_pos(
+        &self,
+        device_matcher_key: &str,
+        device_control_matcher_key: &str,
+        normalize_from: NumInterval<BaseNumT>,
+    ) {
+    }
+    fn set_ff_y_axis_pos(
+        &self,
+        device_matcher_key: &str,
+        device_control_matcher_key: &str,
+        normalize_from: NumInterval<BaseNumT>,
+    ) {
+    }
 }
 
 pub(crate) trait WithTfmExec: TfmCfgDuplicateWithNewState {
@@ -546,6 +569,13 @@ impl WithTfmExec for ScriptCfg {
             return input;
         }
 
+        let lua = ctx.get_lua();
+        if lua.is_none() {
+            return input;
+        }
+
+        let lua = lua.unwrap();
+
         let mut stats_post_closure_setup: f64 = 0.0;
         let mut stats_post_scope_setup: f64 = 0.0;
         let mut stats_post_env_setup: f64 = 0.0;
@@ -560,7 +590,7 @@ impl WithTfmExec for ScriptCfg {
                     let mut exe_state_guard = self.exe_state_mut();
 
                     if branches::unlikely(exe_state_guard.is_none()) {
-                        self.exe_state_reset((exe_state_guard, ctx.get_lua(), ScriptExeStateResetMode::Init));
+                        self.exe_state_reset((exe_state_guard, lua, ScriptExeStateResetMode::Init));
                         break 'BEGIN;
                     }
 
@@ -570,7 +600,7 @@ impl WithTfmExec for ScriptCfg {
                     if branches::unlikely(self.edit_epoch != exe_state.edit_epoch) {
                         self.exe_state_reset((
                             exe_state_guard,
-                            ctx.get_lua(),
+                            lua,
                             ScriptExeStateResetMode::Recompile {
                                 new_epoch: self.edit_epoch,
                             },
@@ -736,7 +766,7 @@ impl WithTfmExec for ScriptCfg {
                         stats_post_closure_setup = (Instant::now() - now).as_secs_f64();
                     }
 
-                    let _ = ctx.get_lua().scope(|s| {
+                    let _ = lua.scope(|s| {
                         if NAIVE_BENCH {
                             stats_post_scope_setup = (Instant::now() - now).as_secs_f64();
                         }
@@ -975,30 +1005,32 @@ impl WithTfmExec for SteeringCfg {
                             OutOfRangePolicy::WarnIfDebugAndClamp,
                         )
                     } else {
-                        match &ctx.get_main_dst() {
-                            ValueDsts::Void(..) => 0.0,
-                            ValueDsts::Dynamic(dynamic_value_ref_rt) => match dynamic_value_ref_rt {
-                                DynValueRefs::DeviceControlMatcher(d) => match ff_config.component {
-                                    ForceFeedbackComponent::X => {
-                                        ctx.set_ff_x_axis_pos(
-                                            &d.device_matcher_key,
-                                            &d.control_key,
-                                            ctx.get_main_dst().get_interval(),
-                                        );
-                                        ctx.get_ff_x(&d.device_matcher_key)
+                        ctx.get_main_dst()
+                            .and_then(|dst| {
+                                if let ValueDsts::Dynamic(DynValueRefs::DeviceControlMatcher(d)) = dst {
+                                    match ff_config.component {
+                                        ForceFeedbackComponent::X => {
+                                            ctx.set_ff_x_axis_pos(
+                                                &d.device_matcher_key,
+                                                &d.control_matcher_key,
+                                                dst.get_interval(),
+                                            );
+                                            ctx.get_ff_x(&d.device_matcher_key).into()
+                                        }
+                                        ForceFeedbackComponent::Y => {
+                                            ctx.set_ff_y_axis_pos(
+                                                &d.device_matcher_key,
+                                                &d.control_matcher_key,
+                                                dst.get_interval(),
+                                            );
+                                            ctx.get_ff_y(&d.device_matcher_key).into()
+                                        }
                                     }
-                                    ForceFeedbackComponent::Y => {
-                                        ctx.set_ff_y_axis_pos(
-                                            &d.device_matcher_key,
-                                            &d.control_key,
-                                            ctx.get_main_dst().get_interval(),
-                                        );
-                                        ctx.get_ff_y(&d.device_matcher_key)
-                                    }
-                                },
-                                DynValueRefs::Variable(_) => 0.0,
-                            },
-                        }
+                                } else {
+                                    None
+                                }
+                            })
+                            .unwrap_or_default()
                     };
 
                     let filtered_force = if !ff_config.transformation.steps.is_empty() {

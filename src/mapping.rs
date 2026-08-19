@@ -566,10 +566,10 @@ impl<
             vd,
             &MappingTfmExecCtx {
                 mapping_engine: self,
-                current_mapping_src: &mapping.src,
-                current_mapping_dst: &mapping.dst,
+                current_mapping_src: Some(&mapping.src),
+                current_mapping_dst: Some(&mapping.dst),
                 is_idle_tick,
-                lua: self.lua,
+                lua: Some(self.lua),
             },
         );
 
@@ -598,7 +598,7 @@ impl<
                     }
                     ControlMatchers::Hid(_) => self.hid_mgr.set_control_matcher_and_broadcast(
                         &d.device_matcher_key,
-                        &d.control_key,
+                        &d.control_matcher_key,
                         val,
                         !debug.is_on(),
                     ),
@@ -618,10 +618,10 @@ pub(crate) struct MappingTfmExecCtx<
 > {
     mapping_engine: &'m MappingEngine<'d, HidManagerT, MidiManagerT>,
     #[allow(unused)]
-    current_mapping_src: &'m ValueSrcs,
-    current_mapping_dst: &'m ValueDsts,
+    current_mapping_src: Option<&'m ValueSrcs>,
+    current_mapping_dst: Option<&'m ValueDsts>,
     is_idle_tick: bool,
-    lua: &'m mlua::Lua,
+    lua: Option<&'m mlua::Lua>,
 }
 
 impl<
@@ -632,7 +632,7 @@ impl<
     #[cfg(not(feature = "midi"))] MidiManagerT,
 > TfmExecCtx for MappingTfmExecCtx<'m, 'd, HidManagerT, MidiManagerT>
 {
-    fn get_main_dst(&self) -> &ValueDsts {
+    fn get_main_dst(&self) -> Option<&ValueDsts> {
         self.current_mapping_dst
     }
 
@@ -664,7 +664,7 @@ impl<
         self.mapping_engine.get_idle_tick_rate()
     }
 
-    fn get_lua(&self) -> &mlua::Lua {
+    fn get_lua(&self) -> Option<&mlua::Lua> {
         self.lua
     }
 }
