@@ -803,15 +803,11 @@ impl WithTfmExec for ScriptCfg {
                     if NAIVE_BENCH {
                         println!(
                             " Script execution naive perf stats -----
-                  post closures    {}
-                  post scope setup {}
-                  post env setup   {}
-                  post script exe  {}
+                  post closures    {stats_post_closure_setup}
+                  post scope setup {stats_post_scope_setup}
+                  post env setup   {stats_post_env_setup}
+                  post script exe  {stats_post_exec}
                   post exec total  {}\n",
-                            stats_post_closure_setup,
-                            stats_post_scope_setup,
-                            stats_post_env_setup,
-                            stats_post_exec,
                             (Instant::now() - now).as_secs_f64()
                         );
                     }

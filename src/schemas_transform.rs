@@ -2256,20 +2256,92 @@ mod tests {
 
 // =================================================================
 
+#[cfg(test)]
+#[test]
 #[allow(unused)]
 #[allow(non_local_definitions)]
 fn test_dst_port() {
+    use crate::{num_interval::ZERO_INTERVAL, schemas_value::SanPolicyNone};
+
+    fn make_variable() -> DynValueRefs {
+        DynValueRefs::Variable(VariableRef {
+            variable_key: "test".into(),
+            variable: Default::default(),
+        })
+    };
+
+    fn make_output_port_inner_default() -> ValueDsts {
+        ValueDsts::Dynamic(make_variable())
+    };
+
+    fn make_input_port_inner_default() -> ValueSrcs {
+        ValueSrcs::Dynamic(make_variable())
+    };
+
+    //--------------------------------------
+
     make_output_port_inner_nutype!(
-        InnerPortTest,
+        PortInnerSanEpsilonForZero,
         default: ValueDsts::default(),
         san-doc: "Value must not be 0.0",
         san-exe: |v: BaseNumT| { if v.is_zero() {BaseNumT::EPSILON} else {v}}
     );
 
-    let dst_port_test: ValuePort<InnerPortTest> = Default::default();
-    dst_port_test.set_numeric_value(1.0);
+    let p_san_epsilon_for_zero = ValuePort::<PortInnerSanEpsilonForZero>::default();
+    assert!(p_san_epsilon_for_zero.port_get_remap_interval().is_none());
+    assert!(p_san_epsilon_for_zero.port_inner_ref().get_interval() == ZERO_INTERVAL); // Values written to [0,0] will be clamped to 0
+    p_san_epsilon_for_zero.set_numeric_value(100.0);
+    assert_eq!(p_san_epsilon_for_zero.get_numeric_value(), BaseNumT::EPSILON); // At port level 0 is sanitized to epsilon
+    p_san_epsilon_for_zero.set_numeric_value(-100.0);
+    assert_eq!(p_san_epsilon_for_zero.get_numeric_value(), BaseNumT::EPSILON);
 
-    struct ExeCtx {}
-    impl TfmExecCtx for ExeCtx {}
-    dst_port_test.write(&ExeCtx {});
+    // --------------------------------------------------
+
+    {
+        make_output_port_inner_nutype!(
+            PortInnerSanEpsilonGtZero,
+            default: make_output_port_inner_default(),
+            san-doc: "Value must not be < 0.0",
+            san-exe: |v: BaseNumT| { if v < BaseNumT::zero() {BaseNumT::EPSILON} else {v}}
+        );
+
+        let mut p_san_ge_epsilon = ValuePort::<PortInnerSanEpsilonGtZero>::default();
+        {
+            let p = &p_san_ge_epsilon;
+            assert!(p.port_get_remap_interval().is_none());
+            assert!(p.port_inner_ref().get_interval() == PortInnerSanEpsilonGtZero::default().get_interval());
+            assert!(p.port_inner_ref().get_interval() == UNIT_INTERVAL);
+            p.set_numeric_value(1.0);
+            assert_eq!(p.get_numeric_value(), 1.0);
+            assert_eq!(p.port_inner_ref().get_numeric_value(), 1.0);
+            p.set_numeric_value(-1.0);
+            assert_eq!(p.get_numeric_value(), BaseNumT::EPSILON);
+        }
+
+        {
+            use std::ops::{Div, Mul};
+
+            use crate::num_interval::OutOfRangePolicy;
+
+            p_san_ge_epsilon.port_set_remap_interval(SYMM_UNIT_INTERVAL);
+            assert!(p_san_ge_epsilon.port_inner_ref().get_interval() == UNIT_INTERVAL);
+
+            p_san_ge_epsilon.set_numeric_value(-100.0);
+            assert_eq!(p_san_ge_epsilon.get_numeric_value(), BaseNumT::EPSILON);
+            assert!(
+                p_san_ge_epsilon.port_inner_ref().get_numeric_value()
+                    == UNIT_INTERVAL.map_from(BaseNumT::EPSILON, &SYMM_UNIT_INTERVAL, OutOfRangePolicy::Clamp)
+            );
+
+            let mut p_no_san = ValuePort::<PortInnerSanEpsilonGtZero, SanPolicyNone>::default();
+            p_no_san.port_set_remap_interval(SYMM_UNIT_INTERVAL);
+            assert!(p_no_san.port_inner_ref().get_interval() == UNIT_INTERVAL);
+            p_no_san.set_numeric_value(-0.5);
+            assert!((p_no_san.get_numeric_value() - -0.5).abs() < 1e-4);
+            assert!((p_no_san.port_inner_ref().get_numeric_value() - 0.25).abs() <= BaseNumT::EPSILON);
+        }
+        // struct ExeCtx {}
+        // impl TfmExecCtx for ExeCtx {}
+        // port.write(&ExeCtx {});
+    }
 }

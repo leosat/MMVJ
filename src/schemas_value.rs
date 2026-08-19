@@ -582,7 +582,7 @@ where
 {
     type InnerT = PortInnerT;
 
-    fn get_port_identity_str(&self) -> String {
+    fn port_get_identity_str(&self) -> String {
         self.target.port_inner_identity()
     }
 
@@ -594,27 +594,27 @@ where
         &mut self.target
     }
 
-    fn get_default_interval(&self) -> NumInterval<Self::ValueT> {
+    fn port_get_default_interval_from_inner(&self) -> NumInterval<Self::ValueT> {
         Self::InnerT::default().get_interval()
     }
 
-    fn set_remap_interval(&mut self, ri: NumInterval<Self::ValueT>) {
+    fn port_set_remap_interval(&mut self, ri: NumInterval<Self::ValueT>) {
         self.remap = Some(ri);
     }
 
-    fn get_remap_interval(&self) -> Option<NumInterval<Self::ValueT>> {
+    fn port_get_remap_interval(&self) -> Option<NumInterval<Self::ValueT>> {
         self.remap
     }
 
-    fn set_remap_off(&mut self) {
+    fn port_set_remap_off(&mut self) {
         self.remap = None
     }
 
-    fn set_remap_on(&mut self) {
+    fn port_set_remap_from_inner_default(&mut self) {
         self.remap = Some(PortInnerT::default().get_interval())
     }
 
-    fn write(&self, exe_ctx: &impl TfmExecCtx) {
+    fn port_write(&self, exe_ctx: &impl TfmExecCtx) {
         todo!()
     }
 }
@@ -628,13 +628,13 @@ pub(crate) trait WithTriggersMapping {
 // --------------------------------------------------------
 pub(crate) trait ValuePortIface: WithTriggersMapping + From<Self::InnerT> + WithNumericValue {
     type InnerT: PortInnerIface;
-    fn get_default_interval(&self) -> NumInterval<Self::ValueT>;
-    fn get_port_identity_str(&self) -> String;
+    fn port_get_default_interval_from_inner(&self) -> NumInterval<Self::ValueT>;
+    fn port_get_identity_str(&self) -> String;
 
-    fn set_remap_off(&mut self);
-    fn set_remap_on(&mut self);
-    fn get_remap_interval(&self) -> Option<NumInterval<Self::ValueT>>;
-    fn set_remap_interval(&mut self, ri: NumInterval<Self::ValueT>);
+    fn port_set_remap_off(&mut self);
+    fn port_set_remap_from_inner_default(&mut self);
+    fn port_get_remap_interval(&self) -> Option<NumInterval<Self::ValueT>>;
+    fn port_set_remap_interval(&mut self, ri: NumInterval<Self::ValueT>);
 
     fn port_inner_ref(&self) -> &Self::InnerT;
     fn port_inner_mut(&mut self) -> &mut Self::InnerT;
@@ -645,7 +645,7 @@ pub(crate) trait ValuePortIface: WithTriggersMapping + From<Self::InnerT> + With
     // {
     //     self.port_inner_ref().get_numeric_value()
     // }
-    fn write(&self, exe_ctx: &impl TfmExecCtx);
+    fn port_write(&self, exe_ctx: &impl TfmExecCtx);
 
     // fn get_clamp_interval(&self) -> Option<NumInterval<Self::ValueT>> {
     //     todo!()
@@ -849,7 +849,7 @@ pub(crate) struct ValuePort<PortInnerT: PortInnerIface, SanT: PortSanPolicy<Port
 }
 
 // ----------------------------------------------
-impl<SanT: PortSanPolicy<ValueSrcs>> Default for ValuePort<ValueSrcs, SanT> {
+impl<PortInnerT: PortInnerIface, SanT: PortSanPolicy<PortInnerT>> Default for ValuePort<PortInnerT, SanT> {
     fn default() -> Self {
         Self {
             remap: Default::default(),
@@ -900,16 +900,18 @@ where
 impl<SanT, PortInnerT> WithNumericValueSettable for ValuePort<PortInnerT, SanT>
 where
     PortInnerT: PortInnerIface,
+    PortInnerT: WithNumericValueSanitizerStatic,
     SanT: PortSanPolicy<PortInnerT>,
     Self: WithNumericValue<ValueT = <PortInnerT as WithNumericValue>::ValueT>,
 {
-    fn set_numeric_value(&self, value: <Self as WithNumericValue>::ValueT) {
+    fn set_numeric_value(&self, mut value: <Self as WithNumericValue>::ValueT) {
+        value = SanT::san_policy_sanitize_numeric_value(value);
         let value = self
             .remap
             .map(|remap| {
                 self.target
                     .get_interval()
-                    .map_from(value, &remap.cast().unwrap(), OutOfRangePolicy::Clamp)
+                    .map_from(value, &remap, OutOfRangePolicy::Clamp)
             })
             .unwrap_or(value);
         self.target.set_numeric_value(value);
@@ -1389,7 +1391,12 @@ impl WithNumericValue for ValueDsts {
 }
 
 impl WithNumericValueSettable for ValueDsts {
-    fn set_numeric_value(&self, value: Self::ValueT) {}
+    fn set_numeric_value(&self, value: Self::ValueT) {
+        match self {
+            Self::Dynamic(d) => d.set_numeric_value(value),
+            Self::Void(_) => {}
+        }
+    }
 }
 
 impl ValueDsts {
@@ -1648,8 +1655,8 @@ where
         if self.port_inner_ref().port_inner_is_static() {
             self.remap = None;
         } else {
-            self.get_remap_interval()
-                .map(|ri| self.set_remap_interval(PortInnerT::sanitize_interval_static(ri)));
+            self.port_get_remap_interval()
+                .map(|ri| self.port_set_remap_interval(PortInnerT::sanitize_interval_static(ri)));
         }
     }
 }
@@ -1662,7 +1669,8 @@ where
         if self.port_inner_ref().port_inner_is_static() {
             self.remap = None;
         } else {
-            self.get_remap_interval().map(|ri| self.set_remap_interval(ri));
+            self.port_get_remap_interval()
+                .map(|ri| self.port_set_remap_interval(ri));
         }
     }
 }
@@ -1702,10 +1710,11 @@ macro_rules! make_port_inner_nutype {
         sandoc:         $sandoc:literal
     ) => {
         #[nutype::nutype(
-                                    constructor(visibility = pub(crate)),
-                                    default = $inner_default ,
-                                    derive( From, Debug, Clone, AsRef, Serialize, Deserialize, PartialEq, PartialOrd),
-                                    sanitize(with = $nutype_san))]
+                                constructor(visibility = pub(crate)),
+                                default = $inner_default ,
+                                derive( From, Debug, Clone, AsRef, Serialize, Deserialize, PartialEq, PartialOrd),
+                                sanitize(with = $nutype_san)
+                                )]
         pub(crate) struct $name($inner);
 
         impl crate::schemas_value::WithNumericValueSanitizerStatic for $name {
@@ -1769,18 +1778,18 @@ macro_rules! make_port_inner_nutype {
             }
         }
 
-        impl<SanT: crate::schemas_value::PortSanPolicy<$name>> ::core::default::Default
-            for crate::schemas_value::ValuePort<$name, SanT>
-        {
-            fn default() -> Self {
-                Self {
-                    remap: Some($inner_default.get_interval()),
-                    triggers_mapping: Default::default(),
-                    target: Default::default(),
-                    _san_tag: std::marker::PhantomData,
-                }
-            }
-        }
+        // impl<SanT: crate::schemas_value::PortSanPolicy<$name>> ::core::default::Default
+        //     for crate::schemas_value::ValuePort<$name, SanT>
+        // {
+        //     fn default() -> Self {
+        //         Self {
+        //             remap: Some($inner_default.get_interval()),
+        //             triggers_mapping: Default::default(),
+        //             target: Default::default(),
+        //             _san_tag: std::marker::PhantomData,
+        //         }
+        //     }
+        // }
 
         impl crate::schemas_value::PortInnerIface for $name {
             fn port_inner_identity(&self) -> String {
@@ -1791,7 +1800,7 @@ macro_rules! make_port_inner_nutype {
             }
             fn port_inner_get_device_control_matcher_key(&self) -> std::option::Option<(&str, &str)> {
                 self.as_ref().port_inner_get_device_control_matcher_key()
-             }
+            }
         }
 
         impl ::schemars::JsonSchema for $name {
@@ -1803,7 +1812,6 @@ macro_rules! make_port_inner_nutype {
                 $inner::json_schema(generator)
             }
         }
-
 
         impl<SanT: crate::schemas_value::PortSanPolicy<$name>> ::core::convert::From<ValuePort<$name, SanT>> for $name {
             fn from(value: ValuePort<$name, SanT>) -> Self {

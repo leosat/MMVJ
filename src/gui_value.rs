@@ -254,17 +254,17 @@ where
 
         let mut changed = false;
         ui.vertical(|ui| {
-            draw_collapsing_ui(ui, port.get_port_identity_str().into(), None, |ui| {
+            draw_collapsing_ui(ui, port.port_get_identity_str().into(), None, |ui| {
                 ui.label(egui::RichText::new(egui_phosphor::bold::PLUGS).size(14.0));
-                ui.label(port.get_port_identity_str());
+                ui.label(port.port_get_identity_str());
             })
             .body(|ui| {
                 changed |= ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
                 ui.separator();
                 ui.horizontal(|ui| {
-                    if let Some(mut remap_to) = port.get_remap_interval() {
+                    if let Some(mut remap_to) = port.port_get_remap_interval() {
                         ui.label("remapped: ");
-                        if remap_to == port.get_default_interval() {
+                        if remap_to == port.port_get_default_interval_from_inner() {
                             ui.label("(=default)");
                         } else {
                             ui.label("(overridden)");
@@ -281,16 +281,16 @@ where
                             },
                             ui,
                         ) {
-                            port.set_remap_interval(remap_to);
+                            port.port_set_remap_interval(remap_to);
                             changed = true;
                         };
                         if ui.button("turn remapping off").clicked() {
-                            port.set_remap_off();
+                            port.port_set_remap_off();
                             changed = true;
                         }
                     } else {
                         if ui.button("turn remapping on").clicked() {
-                            port.set_remap_on();
+                            port.port_set_remap_from_inner_default();
                             changed = true;
                         }
                     }
