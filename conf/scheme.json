@@ -1514,7 +1514,7 @@
           "description": "Optional external variable (or device control) that persists the raw\naccumulated wheel angle (`pre_filter`) across ticks.\n\nUseful for sharing wheel state across mappings or for inspection.",
           "anyOf": [
             {
-              "$ref": "#/$defs/DynValueRefs"
+              "$ref": "#/$defs/ValuePort"
             },
             {
               "type": "null"
@@ -1567,6 +1567,37 @@
       },
       "required": [
         "input_gain"
+      ]
+    },
+    "ValuePort": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "remap": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NumInterval"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "triggers_mapping": {
+              "type": "boolean"
+            },
+            "target": {
+              "$ref": "#/$defs/ValueDsts"
+            }
+          },
+          "required": [
+            "target"
+          ]
+        },
+        {
+          "$ref": "#/$defs/ValueDsts"
+        }
       ]
     },
     "ForceFeedbackCfg": {

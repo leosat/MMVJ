@@ -18,6 +18,7 @@ use crate::schemas_cfg::{DevicesCfgNew, VariablesCfg};
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_transform::*;
 use crate::schemas_value::AutoOrManual;
+use crate::schemas_value::DynValueRefs;
 use crate::schemas_value::ValueDsts;
 use crate::schemas_value::ValueTargets;
 use crate::schemas_value::{DescriptionCfg, StaticValueCfg, TfmValue, ValueSrcs, WithDescriptionMut, WithNumericValue};
@@ -1246,52 +1247,44 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                     let param_name = "External accumulator";
                     ui.label(param_name);
                     if let Some(acc) = &mut self.accumulator {
-                        changed_simple |= acc.egui(
-                            GuiInValue::Edit(GuiInValueEditParams {
-                                allow_interval_edit: false,
-                                slider_log_scale: false,
-                                cfg_variables,
-                                cfg_devices,
-                                name: param_name,
-                                choice_case: ValueUsageContext::TfmStepAuxSrc,
-                            }),
-                            ui,
-                        );
-                        ui.separator();
                         if ui.button("Use built-in accumulator").clicked() {
                             self.accumulator = None;
+                        } else {
+                            ui.separator();
+                            changed_simple |= acc.egui(
+                                GuiInValue::Edit(GuiInValueEditParams {
+                                    allow_interval_edit: false,
+                                    slider_log_scale: false,
+                                    cfg_variables,
+                                    cfg_devices,
+                                    name: param_name,
+                                    choice_case: ValueUsageContext::TfmStepAuxSrc,
+                                }),
+                                ui,
+                            );
+                            ui.separator();
                         }
                     }
-                    {
-                        let choice = draw_value_choice_iface(
-                            ValueUsageContext::TfmStepAuxDst,
-                            ui,
-                            "Custom accumulator",
-                            "Custom accumulator",
-                            cfg_devices,
-                            cfg_variables,
-                        )
-                        .and_then(|vr| match vr {
-                            ValueTargets::Src(s) => match s {
-                                ValueSrcs::Static(_) => None,
-                                ValueSrcs::Dynamic(d) => Some(d),
-                            },
-                            ValueTargets::Dst(d) => match d {
-                                ValueDsts::Dynamic(d) => Some(d),
-                                ValueDsts::Void(..) => None,
-                            },
-                        });
 
-                        if choice.is_some() {
-                            self.accumulator = choice;
-                            changed_simple |= true;
-                        }
-                    }
+                    if let Some(choice) = draw_value_choice_iface(
+                        ValueUsageContext::TfmStepAuxDst,
+                        ui,
+                        "Custom accumulator",
+                        "Custom accumulator",
+                        cfg_devices,
+                        cfg_variables,
+                    ) && let Ok(acc_inner) = std::convert::TryInto::<ValueDsts>::try_into(choice)
+                        && acc_inner.is_dynamic()
+                    {
+                        self.accumulator = Some(acc_inner.into());
+                        changed_simple = true;
+                    };
                 })
                 .response
                 .on_hover_text(self.accumulator_doc_str());
 
                 ui.separator();
+
                 gui_out.or({
                     let c = ui.collapsing(
                         "Accumulated user input (pre force feedback and autocentering) transform",

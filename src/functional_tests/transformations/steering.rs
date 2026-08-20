@@ -6,9 +6,10 @@ mod steering_tfm_deserialization_and_exec_tests {
     use crate::relativity::Relativity;
     use crate::schemas_transform::{TfmSeqCfg, TfmStepCfg};
     use crate::schemas_value::AutoOrManual;
+    use crate::schemas_value::DeviceControlMatcherRef;
     use crate::schemas_value::ValueDsts;
     use crate::schemas_value::WithNumericValue;
-    use crate::schemas_value::{DynValueRefs, InputValueMetadata, TfmValue};
+    use crate::schemas_value::{InputValueMetadata, TfmValue};
     use crate::tfm_exec::TfmExeState;
     use crate::tfm_exec::{TfmExecCtx, WithTfmExec};
     use std::cell::RefCell;
@@ -50,24 +51,25 @@ mod steering_tfm_deserialization_and_exec_tests {
         fn is_idle_tick(&self) -> bool {
             self.is_idle
         }
+
         fn get_idle_tick_rate(&self) -> u32 {
             100
         }
+
         fn get_main_dst(&self) -> Option<&ValueDsts> {
             Some(&self.main_dst)
         }
-        fn set_dyn_value(&self, dst: &DynValueRefs, v: BaseNumT) {
-            let key = match dst {
-                DynValueRefs::Variable(v) => v.variable_key.clone(),
-                DynValueRefs::DeviceControlMatcher(d) => {
-                    format!("{}.{}", d.device_matcher_key, d.control_matcher_key)
-                }
-            };
-            self.dyn_values.borrow_mut().insert(key, v);
+
+        fn device_control_matcher_ref_write(&self, dcm: &DeviceControlMatcherRef, v: BaseNumT) {
+            self.dyn_values
+                .borrow_mut()
+                .insert(format!("{}.{}", dcm.device_matcher_key, dcm.control_matcher_key), v);
         }
+
         fn get_ff_x(&self, _dk: &str) -> BaseNumT {
             self.ff_x
         }
+
         fn get_ff_y(&self, _dk: &str) -> BaseNumT {
             self.ff_y
         }

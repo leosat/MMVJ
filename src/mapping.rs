@@ -21,7 +21,8 @@ use crate::schemas_mapping::Mapping;
 use crate::schemas_midi::MidiMatcherCfg;
 use crate::schemas_transform::{DynValFilter, collect_dynamic_value_matchers};
 use crate::schemas_value::{
-    DynValueRefs, ValueDsts, WithLastKnownIOSettable, WithNumInterval, WithNumericValueSettable,
+    DeviceControlMatcherRef, DynValueRefs, ValueDsts, WithDeviceControlMatcherRef, WithLastKnownIOSettable,
+    WithNumInterval, WithNumericValueSettable,
 };
 use crate::schemas_value::{TfmValue, WithNumericValue};
 use crate::schemas_value::{ValueSrcs, WithRelativity};
@@ -488,12 +489,11 @@ impl<
             let final_value = self.apply_transformation_for_mapping(triggering_device_id, mapping, input_value, false);
             mapping.set_last_known_io((None, Some(final_value)));
 
-            match &mapping.dst {
-                ValueDsts::Void(..) => {}
-                ValueDsts::Dynamic(d) => {
-                    self.set_dyn_value(d, final_value, self.debug);
-                    self.set_idle_tick_enabled_on_device_control_for_mapping(mapping);
-                }
+            if let Some(d) = &mapping.dst.get_device_control_matcher_ref() {
+                self.dcm_write_to_devices(d, final_value, self.debug);
+                self.set_idle_tick_enabled_on_device_control_for_mapping(mapping);
+            } else {
+                mapping.dst.set_numeric_value(final_value);
             }
 
             if self.debug.is_on() {
@@ -525,11 +525,10 @@ impl<
 
             mapping.set_last_known_io((None, Some(final_value)));
 
-            match &mapping.dst {
-                ValueDsts::Void(..) => {}
-                ValueDsts::Dynamic(d) => {
-                    self.set_dyn_value(d, final_value, self.debug_idle_tick.into());
-                }
+            if let Some(d) = &mapping.dst.get_device_control_matcher_ref() {
+                self.dcm_write_to_devices(d, final_value, self.debug_idle_tick.into());
+            } else {
+                mapping.dst.set_numeric_value(final_value);
             }
         }
     }
@@ -581,30 +580,25 @@ impl<
         vd.value
     }
 
-    fn set_dyn_value(&self, d: &DynValueRefs, val: BaseNumT, debug: DebugLevel) {
-        match d {
-            DynValueRefs::DeviceControlMatcher(d) => {
-                // NB/TODO: for Rel controls in proposed "stable mode": do not reset those buffers
-                // NB/TODO: just emit event for the value to be re-fed into engine later
-                d.control_matcher.set_last_known_io(val);
-                d.control_matcher.set_numeric_value(val);
+    fn dcm_write_to_devices(&self, d: &DeviceControlMatcherRef, value: BaseNumT, debug: DebugLevel) {
+        // NB/TODO: for Rel controls in proposed "stable mode": do not reset those buffers
+        // NB/TODO: just emit event for the value to be re-fed into engine later
+        d.control_matcher.set_last_known_io(value);
+        d.control_matcher.set_numeric_value(value);
 
-                match d.control_matcher {
-                    #[cfg(feature = "midi")]
-                    ControlMatchers::Midi(_) => {
-                        log::warn!(
-                            "MIDI is not yet supported as a destination device. Only supporting variables and HID destinations."
-                        )
-                    }
-                    ControlMatchers::Hid(_) => self.hid_mgr.set_control_matcher_and_broadcast(
-                        &d.device_matcher_key,
-                        &d.control_matcher_key,
-                        val,
-                        !debug.is_on(),
-                    ),
-                }
+        match d.control_matcher {
+            #[cfg(feature = "midi")]
+            ControlMatchers::Midi(_) => {
+                log::warn!(
+                    "MIDI is not yet supported as a destination device. Only supporting variables and HID destinations."
+                )
             }
-            DynValueRefs::Variable(v) => v.variable.value.store(v.variable.interval.clamp(val), Relaxed),
+            ControlMatchers::Hid(_) => self.hid_mgr.set_control_matcher_and_broadcast(
+                &d.device_matcher_key,
+                &d.control_matcher_key,
+                value,
+                !debug.is_on(),
+            ),
         }
     }
 }
@@ -644,8 +638,8 @@ impl<
         self.mapping_engine.hid_mgr.ff_get_y_sum_symm_norm(dk)
     }
 
-    fn set_dyn_value(&self, dst: &DynValueRefs, v: BaseNumT) {
-        self.mapping_engine.set_dyn_value(dst, v, get_debug_level());
+    fn device_control_matcher_ref_write(&self, dcm: &DeviceControlMatcherRef, value: BaseNumT) {
+        self.mapping_engine.dcm_write_to_devices(dcm, value, get_debug_level());
     }
 
     fn set_ff_x_axis_pos(&self, dk: &str, ck: &str, ivl: NumInterval<BaseNumT>) {
