@@ -6,10 +6,13 @@ use crate::config::WithSelfSanitize;
 use crate::gui_common::draw_collapsing_ui;
 use crate::relativity::Relativity;
 
-use crate::schemas_value::{
-    AutoOrManual, PortInnerIface, SanPolicyNone, SanPolicyUseFromPortInner, ValuePort, ValuePortIface,
+use crate::schemas_value::AutoOrManual;
+
+use crate::schemas_value_port::{
+    PortInnerIface, PortSanPolicy, SanPolicyNone, SanPolicyUseFromPortInner, ValuePort, ValuePortIface,
     WithNumIntervalSanitizerStatic, WithNumericValueSanitizerStatic,
 };
+
 use crate::{
     base_num::BaseNumT,
     device_and_device_manager::WithDeviceClassification,
@@ -177,8 +180,6 @@ impl<'s> DrawEgui<'s> for NumInterval<BaseNumT> {
         changed
     }
 }
-
-use crate::schemas_value::PortSanPolicy;
 
 impl<'s, PortInnerT, SanPolicyT> DrawEgui<'s> for ValuePort<PortInnerT, SanPolicyT>
 where

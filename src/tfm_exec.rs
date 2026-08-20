@@ -55,7 +55,7 @@ pub(crate) trait TfmExecCtx {
         None
     }
     fn set_device_control_matcher(&self, dcm_key: crate::schemas_value::DeviceControlMatcherKey, value: BaseNumT) {}
-    #[deprecated]
+    #[deprecated = "Switching to value port and set_device_control_matcher() API"]
     fn set_dyn_value(&self, dyn_value_ref: &DynValueRefs, value: BaseNumT) {}
     fn get_lua(&self) -> Option<&mlua::Lua> {
         None
