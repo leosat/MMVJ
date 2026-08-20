@@ -12,6 +12,7 @@ pub(crate) mod base_num;
 pub(crate) mod interner;
 pub(crate) mod num_interval;
 pub(crate) mod relativity;
+pub(crate) mod test_utils;
 //--------------------------------
 pub(crate) mod hid_device;
 pub(crate) mod hid_owned_and_ffb;

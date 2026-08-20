@@ -645,11 +645,9 @@ impl<T: NumIntervalValue> NumInterval<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::test_utils::fp_approx_eq;
 
-    fn fp_approx_eq<FloatT: Float>(a: FloatT, b: FloatT) -> bool {
-        (a - b).abs() < FloatT::epsilon()
-    }
+    use super::*;
 
     #[test]
     fn contains_interval() {
