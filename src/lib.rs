@@ -48,6 +48,7 @@ pub(crate) mod schemas_midi;
 pub(crate) mod schemas_predefined;
 pub(crate) mod schemas_transform;
 pub(crate) mod schemas_ui;
+pub(crate) mod schemas_value_port;
 
 #[macro_use]
 pub(crate) mod schemas_value;

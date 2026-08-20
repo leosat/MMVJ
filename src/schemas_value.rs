@@ -7,7 +7,6 @@
 
 use std::{
     cell::Cell,
-    marker::PhantomData,
     ops::{Deref, DerefMut},
     sync::{
         Arc,
@@ -15,16 +14,15 @@ use std::{
     },
 };
 
-use crate::relativity::Relativity;
-use crate::{config::WithSelfSanitize, num_interval::ZERO_INTERVAL};
 use crate::{
-    num_interval::{OutOfRangePolicy, UNIT_INTERVAL},
-    tfm_exec::TfmExecCtx,
+    num_interval::UNIT_INTERVAL,
+    schemas_value_port::{WithNumIntervalSanitizerStatic, WithNumericValueSanitizerStatic},
 };
+use crate::{num_interval::ZERO_INTERVAL, schemas_value_port::WithTriggersMapping};
+use crate::{relativity::Relativity, schemas_value_port::PortInnerIface};
 use crossbeam_utils::CachePadded;
 use deserialize_untagged_verbose_error::DeserializeUntaggedVerboseError;
 use garde::{Validate, rules::range::Bounds};
-use num_traits::ToPrimitive;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use traversable::{Traversable, TraversableMut};
@@ -178,9 +176,13 @@ pub(crate) trait WithNumInterval: WithNumericValue {
     fn get_interval(&self) -> NumInterval<Self::ValueT>;
 }
 
-pub(crate) trait WithNumIntervalMut {
-    type ValueT: NumIntervalValue;
+pub(crate) trait WithNumIntervalMut: WithNumericValue {
     fn interval_mut(&mut self) -> &mut NumInterval<Self::ValueT>;
+}
+
+//--------------------------------------------------
+pub(crate) trait WithNumIntervalSettable: WithNumInterval {
+    fn set_interval(&mut self, interval: NumInterval<Self::ValueT>);
 }
 
 pub(crate) mod variable_value_serde {
@@ -239,7 +241,6 @@ pub(crate) struct VariableState {
 }
 
 impl WithNumIntervalMut for VariableState {
-    type ValueT = BaseNumT;
     fn interval_mut(&mut self) -> &mut NumInterval<Self::ValueT> {
         &mut self.interval
     }
@@ -306,11 +307,11 @@ pub(crate) struct VariableRef {
     #[serde(rename = "var")]
     pub(crate) variable_key: String,
     #[serde(skip)]
-    #[serde(default = "dummy_variable_rt")]
+    #[serde(default = "dummy_variable")]
     pub(crate) variable: VariableState,
 }
 
-pub(crate) fn dummy_variable_rt() -> VariableState {
+pub(crate) fn dummy_variable() -> VariableState {
     VariableState::new(ZERO_INTERVAL /*, Relativity::Abs*/)
 }
 
@@ -333,6 +334,12 @@ impl PartialOrd for VariableRef {
     }
 }
 
+// -------------------------------------------------
+pub(crate) type DeviceControlMatcherKey<'k> = (&'k str, &'k str);
+pub(crate) trait WithDeviceControlMatcherKey {
+    fn _get_device_control_matcher_key(&self) -> Option<DeviceControlMatcherKey<'_>>;
+}
+
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, TraversableMut, Traversable)]
 pub(crate) struct DeviceControlMatcherRef {
     #[serde(rename = "dev")]
@@ -346,7 +353,7 @@ pub(crate) struct DeviceControlMatcherRef {
     #[traverse(skip)]
     pub(crate) control_matcher_key: String,
     #[serde(skip)]
-    #[serde(default = "dummy_control_matcher_rt")]
+    #[serde(default = "dummy_control_matcher")]
     pub(crate) control_matcher: ControlMatchers,
 }
 
@@ -373,7 +380,7 @@ impl PartialOrd for DeviceControlMatcherRef {
     }
 }
 
-pub(crate) fn dummy_control_matcher_rt() -> ControlMatchers {
+pub(crate) fn dummy_control_matcher() -> ControlMatchers {
     ControlMatchers::Hid(Default::default())
 }
 
@@ -566,405 +573,6 @@ impl WithTriggersMapping for ValueDsts {
     fn _set_triggers_mapping(&mut self, _flag: bool) {}
 }
 
-impl<SanT: PortSanPolicy<PortInnerT>, PortInnerT: PortInnerIface> WithTriggersMapping for ValuePort<PortInnerT, SanT> {
-    fn _get_triggers_mapping(&self) -> bool {
-        self.triggers_mapping
-    }
-
-    fn _set_triggers_mapping(&mut self, flag: bool) {
-        self.triggers_mapping = flag
-    }
-}
-
-impl<SanT: PortSanPolicy<PortInnerT>, PortInnerT: PortInnerIface> ValuePortIface for ValuePort<PortInnerT, SanT>
-where
-    Self: WithNumericValue<ValueT = <PortInnerT as WithNumericValue>::ValueT>,
-{
-    type InnerT = PortInnerT;
-
-    fn port_get_identity_str(&self) -> String {
-        self.target.port_inner_identity()
-    }
-
-    fn port_inner_ref(&self) -> &Self::InnerT {
-        &self.target
-    }
-
-    fn port_inner_mut(&mut self) -> &mut Self::InnerT {
-        &mut self.target
-    }
-
-    fn port_get_default_interval_from_inner(&self) -> NumInterval<Self::ValueT> {
-        Self::InnerT::default().get_interval()
-    }
-
-    fn port_set_remap_interval(&mut self, ri: NumInterval<Self::ValueT>) {
-        self.remap = Some(ri);
-    }
-
-    fn port_get_remap_interval(&self) -> Option<NumInterval<Self::ValueT>> {
-        self.remap
-    }
-
-    fn port_set_remap_off(&mut self) {
-        self.remap = None
-    }
-
-    fn port_set_remap_from_inner_default(&mut self) {
-        self.remap = Some(PortInnerT::default().get_interval())
-    }
-
-    fn port_write_to_device(&self, exe_ctx: &impl TfmExecCtx)
-    where
-        BaseNumT: From<Self::ValueT>,
-    {
-        if let Some(dcm_key) = self.port_inner_ref()._get_device_control_matcher_key() {
-            exe_ctx.set_device_control_matcher(dcm_key, self.get_numeric_value().into());
-        }
-    }
-}
-
-// -------------------------------------------------
-pub(crate) type DeviceControlMatcherKey<'k> = (&'k str, &'k str);
-pub(crate) trait WithDeviceControlMatcherKey {
-    fn _get_device_control_matcher_key(&self) -> Option<DeviceControlMatcherKey<'_>>;
-}
-
-// -------------------------------------------------
-pub(crate) trait WithTriggersMapping {
-    fn _get_triggers_mapping(&self) -> bool;
-    fn _set_triggers_mapping(&mut self, flag: bool);
-}
-
-// --------------------------------------------------------
-pub(crate) trait ValuePortIface: WithTriggersMapping + From<Self::InnerT> + WithNumericValue {
-    type InnerT: PortInnerIface;
-    fn port_get_default_interval_from_inner(&self) -> NumInterval<Self::ValueT>;
-    fn port_get_identity_str(&self) -> String;
-
-    fn port_set_remap_off(&mut self);
-    fn port_set_remap_from_inner_default(&mut self);
-    fn port_get_remap_interval(&self) -> Option<NumInterval<Self::ValueT>>;
-    fn port_set_remap_interval(&mut self, ri: NumInterval<Self::ValueT>);
-
-    fn port_inner_ref(&self) -> &Self::InnerT;
-    fn port_inner_mut(&mut self) -> &mut Self::InnerT;
-
-    #[allow(unused)]
-    fn port_write_to_device(&self, exe_ctx: &impl TfmExecCtx)
-    where
-        BaseNumT: From<Self::ValueT>;
-}
-
-pub(crate) trait WithNumIntervalSettable: WithNumInterval {
-    fn set_interval(&mut self, interval: NumInterval<Self::ValueT>);
-}
-
-// --------------------------------------------------------
-
-pub(crate) trait PortInnerIface:
-    Clone
-    + Default
-    + PartialEq
-    + PartialOrd
-    + JsonSchema
-    + WithDeviceControlMatcherKey
-    + WithNumInterval
-    + WithNumIntervalSettable
-    + WithNumericValue
-    + WithNumericValueSettable
-    + Serialize
-    + for<'de> Deserialize<'de>
-{
-    fn port_inner_identity(&self) -> String;
-    fn port_inner_is_static(&self) -> bool;
-    #[allow(unused)]
-    fn port_inner_get_device_control_matcher_key(&self) -> Option<(&str, &str)>;
-}
-
-impl<T: Default + PartialOrd> PartialOrd for AutoOrManual<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.deref().partial_cmp(other.deref())
-    }
-}
-
-#[derive(JsonSchema, Debug, Clone, PartialOrd, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-#[serde(bound(serialize = "PortInnerT: PortInnerIface, <PortInnerT as WithNumericValue>::ValueT: serde::Serialize"))]
-#[serde(bound(
-    deserialize = "PortInnerT: PortInnerIface, <PortInnerT as WithNumericValue>::ValueT: serde::Deserialize<'de>"
-))]
-enum ValuePortSerdeHelper<PortInnerT: PortInnerIface> {
-    AsPort {
-        remap: Option<NumInterval<PortInnerT::ValueT>>,
-        #[serde(skip_serializing_if = "crate::schemas_common::is_false")]
-        #[serde(default)]
-        triggers_mapping: bool,
-        //#[serde(flatten)] // Fails when inner is serialized to a single number.
-        target: PortInnerT,
-    },
-    AsInner(PortInnerT),
-}
-
-impl<SanT: PortSanPolicy<PortInnerT>, PortInnerT: PortInnerIface> From<ValuePortSerdeHelper<PortInnerT>>
-    for ValuePort<PortInnerT, SanT>
-where
-    Self: WithNumericValue<ValueT = <PortInnerT as WithNumericValue>::ValueT>,
-{
-    fn from(value: ValuePortSerdeHelper<PortInnerT>) -> Self {
-        match value {
-            ValuePortSerdeHelper::AsInner(i) => i.into(),
-            ValuePortSerdeHelper::AsPort {
-                remap,
-                triggers_mapping,
-                target,
-            } => Self {
-                remap,
-                triggers_mapping,
-                target,
-                _san_tag: PhantomData,
-            },
-        }
-    }
-}
-
-impl<SanT: PortSanPolicy<PortInnerT>, PortInnerT: PortInnerIface> From<ValuePort<PortInnerT, SanT>>
-    for ValuePortSerdeHelper<PortInnerT>
-{
-    fn from(value: ValuePort<PortInnerT, SanT>) -> Self {
-        if !value.target.port_inner_is_static() {
-            ValuePortSerdeHelper::AsPort {
-                remap: value.remap,
-                triggers_mapping: value.triggers_mapping,
-                target: value.target,
-            }
-        } else {
-            ValuePortSerdeHelper::AsInner(value.target)
-        }
-    }
-}
-
-// -------------------------------------------
-pub(crate) trait PortSanPolicy<SanProviderT = ()>:
-    std::fmt::Debug + Copy + Clone + PartialOrd + PartialEq + 'static
-{
-    const _TAG_DESC: &'static str;
-
-    fn san_policy_get_value_san_doc_str() -> &'static str
-    where
-        SanProviderT: WithNumericValueSanitizerStatic,
-    {
-        Self::_TAG_DESC
-    }
-
-    fn san_policy_sanitize_numeric_value(value: SanProviderT::ValueT) -> SanProviderT::ValueT
-    where
-        SanProviderT: WithNumericValueSanitizerStatic;
-
-    fn _san_policy_sanitize_interval(interval: NumInterval<SanProviderT::ValueT>) -> NumInterval<SanProviderT::ValueT>
-    where
-        SanProviderT: WithNumIntervalSanitizerStatic;
-
-    fn san_policy_sanitize_this_inplace<SelfSanitizedT: WithSelfSanitize>(this: &mut SelfSanitizedT);
-    fn _san_policy_sanitize_this<SelfSanitizedT: WithSelfSanitize>(this: SelfSanitizedT) -> SelfSanitizedT;
-}
-
-#[derive(Copy, Clone, PartialEq, PartialOrd, Debug)]
-pub(crate) struct SanPolicyUseFromPortInner;
-#[derive(Copy, Clone, PartialEq, PartialOrd, Debug)]
-pub(crate) struct SanPolicyNone;
-
-impl<SanProviderT> PortSanPolicy<SanProviderT> for SanPolicyUseFromPortInner {
-    const _TAG_DESC: &'static str = "\
-       Values read from this port are strictly sanitized for particular parameter";
-
-    fn san_policy_sanitize_numeric_value(value: SanProviderT::ValueT) -> SanProviderT::ValueT
-    where
-        SanProviderT: WithNumericValueSanitizerStatic,
-    {
-        SanProviderT::sanitize_numeric_value_static(value)
-    }
-
-    fn _san_policy_sanitize_interval(interval: NumInterval<SanProviderT::ValueT>) -> NumInterval<SanProviderT::ValueT>
-    where
-        SanProviderT: WithNumIntervalSanitizerStatic,
-    {
-        SanProviderT::sanitize_interval_static(interval)
-    }
-
-    fn san_policy_sanitize_this_inplace<SelfSanitizedT: WithSelfSanitize>(this: &mut SelfSanitizedT) {
-        this.sanitize_inplace()
-    }
-
-    fn _san_policy_sanitize_this<SelfSanitizedT: WithSelfSanitize>(this: SelfSanitizedT) -> SelfSanitizedT {
-        this.sanitize_self()
-    }
-
-    fn san_policy_get_value_san_doc_str() -> &'static str
-    where
-        SanProviderT: WithNumericValueSanitizerStatic,
-    {
-        <SanProviderT as WithNumericValueSanitizerStatic>::get_value_sanitizer_policy_doc_str()
-    }
-}
-
-impl<SanProviderT> PortSanPolicy<SanProviderT> for SanPolicyNone {
-    const _TAG_DESC: &'static str = "\
-       No predefined sanitization logic applied to value read from this port!";
-
-    fn san_policy_sanitize_numeric_value(value: SanProviderT::ValueT) -> SanProviderT::ValueT
-    where
-        SanProviderT: WithNumericValue,
-    {
-        value
-    }
-
-    fn _san_policy_sanitize_interval(interval: NumInterval<SanProviderT::ValueT>) -> NumInterval<SanProviderT::ValueT>
-    where
-        SanProviderT: WithNumericValue,
-    {
-        interval
-    }
-
-    fn san_policy_sanitize_this_inplace<SelfSanitizedT: WithSelfSanitize>(_this: &mut SelfSanitizedT) {}
-    fn _san_policy_sanitize_this<SelfSanitizedT: WithSelfSanitize>(this: SelfSanitizedT) -> SelfSanitizedT {
-        this
-    }
-}
-
-// -------------------------------------------
-#[derive(JsonSchema, Debug, Clone, PartialOrd, PartialEq, Deserialize, Serialize)]
-#[serde(from = "ValuePortSerdeHelper<PortInnerT>", into = "ValuePortSerdeHelper<PortInnerT>")]
-#[serde(bound(serialize = "
-    PortInnerT: PortInnerIface,
-    ValuePort<PortInnerT, SanT>: WithNumericValue<ValueT = <PortInnerT as WithNumericValue>::ValueT>, 
-    <PortInnerT as WithNumericValue>::ValueT: serde::Serialize
-"))]
-#[serde(bound(deserialize = "
-    PortInnerT: PortInnerIface,
-    ValuePort<PortInnerT, SanT>: WithNumericValue<ValueT = <PortInnerT as WithNumericValue>::ValueT>, 
-    <PortInnerT as WithNumericValue>::ValueT: serde::Deserialize<'de>
-"))]
-pub(crate) struct ValuePort<PortInnerT: PortInnerIface, SanT: PortSanPolicy<PortInnerT> = SanPolicyUseFromPortInner> {
-    pub(super) remap: Option<NumInterval<<PortInnerT as WithNumericValue>::ValueT>>,
-    pub(super) triggers_mapping: bool,
-    pub(super) target: PortInnerT,
-    #[serde(skip)]
-    pub(super) _san_tag: PhantomData<SanT>,
-}
-
-// ----------------------------------------------
-impl<PortInnerT: PortInnerIface, SanT: PortSanPolicy<PortInnerT>> Default for ValuePort<PortInnerT, SanT> {
-    fn default() -> Self {
-        Self {
-            remap: Default::default(),
-            triggers_mapping: Default::default(),
-            target: Default::default(),
-            _san_tag: PhantomData,
-        }
-    }
-}
-
-impl<SanT: PortSanPolicy<ValueSrcs>> ::traversable::Traversable for ValuePort<ValueSrcs, SanT>
-where
-    Self: WithNumericValue,
-{
-    fn traverse<V: traversable::Visitor>(&self, visitor: &mut V) -> std::ops::ControlFlow<V::Break> {
-        self.target.traverse(visitor)
-    }
-}
-
-impl<SanT: PortSanPolicy<ValueSrcs>> ::traversable::TraversableMut for ValuePort<ValueSrcs, SanT>
-where
-    Self: WithNumericValue,
-{
-    fn traverse_mut<V: traversable::VisitorMut>(&mut self, visitor: &mut V) -> std::ops::ControlFlow<V::Break> {
-        self.target.traverse_mut(visitor)
-    }
-}
-// ----------------------------------------------
-
-impl<SanT: PortSanPolicy<PortInnerT>, PortInnerT: PortInnerIface> From<PortInnerT> for ValuePort<PortInnerT, SanT>
-where
-    Self: WithNumericValue,
-{
-    fn from(value: PortInnerT) -> Self {
-        Self {
-            remap: if !value.port_inner_is_static() {
-                Some(PortInnerT::default().get_interval())
-            } else {
-                None
-            },
-            triggers_mapping: false,
-            target: value,
-            _san_tag: PhantomData,
-        }
-    }
-}
-
-impl<SanT, PortInnerT> WithNumericValueSettable for ValuePort<PortInnerT, SanT>
-where
-    PortInnerT: PortInnerIface,
-    PortInnerT: WithNumericValueSanitizerStatic,
-    SanT: PortSanPolicy<PortInnerT>,
-    Self: WithNumericValue<ValueT = <PortInnerT as WithNumericValue>::ValueT>,
-{
-    fn set_numeric_value(&self, mut value: <Self as WithNumericValue>::ValueT) {
-        value = SanT::san_policy_sanitize_numeric_value(value);
-        let value = self
-            .remap
-            .map(|remap| {
-                self.target
-                    .get_interval()
-                    .map_from(value, &remap, OutOfRangePolicy::Clamp)
-            })
-            .unwrap_or(value);
-        self.target.set_numeric_value(value);
-    }
-}
-
-impl<SanT, PortInnerT> WithNumericValue for ValuePort<PortInnerT, SanT>
-where
-    PortInnerT: PortInnerIface + WithNumericValueSanitizerStatic,
-    SanT: PortSanPolicy<PortInnerT>,
-{
-    type ValueT = <PortInnerT as WithNumericValue>::ValueT;
-    fn get_numeric_value(&self) -> Self::ValueT {
-        let mut value = self.target.get_numeric_value();
-        value = self
-            .remap
-            .map(|r| r.map_from(value, &self.target.get_interval(), OutOfRangePolicy::Clamp))
-            .unwrap_or(value);
-        SanT::san_policy_sanitize_numeric_value(value)
-    }
-}
-
-impl<SanT, PortInnerT> Bounds for ValuePort<PortInnerT, SanT>
-where
-    PortInnerT: PortInnerIface,
-    SanT: PortSanPolicy<PortInnerT>,
-    Self: WithNumericValue,
-{
-    type Size = BaseNumT;
-    const MIN: Self::Size = Self::Size::MIN;
-    const MAX: Self::Size = Self::Size::MAX;
-
-    fn validate_bounds(
-        &self,
-        lower_bound: Self::Size,
-        upper_bound: Self::Size,
-    ) -> Result<(), garde::rules::range::OutOfBounds> {
-        let value = self.get_numeric_value();
-        if value.to_f64().unwrap() < lower_bound.to_f64().unwrap() {
-            Err(garde::rules::range::OutOfBounds::Lower)
-        } else if value.to_f64().unwrap() > upper_bound.to_f64().unwrap() {
-            Err(garde::rules::range::OutOfBounds::Upper)
-        } else {
-            Ok(())
-        }
-    }
-}
-
 // -------------------------------------------------
 #[derive(
     JsonSchema,
@@ -1093,31 +701,31 @@ impl WithNumInterval for StaticValueCfg {
     }
 }
 
-#[allow(unused)]
-pub(crate) enum ClampPred {
-    IfStatic,
-    IfDynamic,
-}
+// #[allow(unused)]
+// pub(crate) enum ClampPred {
+//     IfStatic,
+//     IfDynamic,
+// }
 
-impl WithNumericValueClampedPredicated for ValueSrcs {
-    type PredicationParamsT = ClampPred;
+// impl WithNumericValueClampedPredicated for ValueSrcs {
+//     type PredicationParamsT = ClampPred;
 
-    fn get_numeric_value_clamped_predicated(
-        &self,
-        params: Self::PredicationParamsT,
-    ) -> <Self as WithNumericValue>::ValueT {
-        match self {
-            Self::Static(s) => match params {
-                ClampPred::IfStatic => s.get_interval().clamp(s.get_numeric_value()),
-                ClampPred::IfDynamic => s.get_numeric_value(),
-            },
-            Self::Dynamic(d) => match params {
-                ClampPred::IfDynamic => d.get_interval().clamp(d.get_numeric_value()),
-                ClampPred::IfStatic => d.get_numeric_value(),
-            },
-        }
-    }
-}
+//     fn get_numeric_value_clamped_predicated(
+//         &self,
+//         params: Self::PredicationParamsT,
+//     ) -> <Self as WithNumericValue>::ValueT {
+//         match self {
+//             Self::Static(s) => match params {
+//                 ClampPred::IfStatic => s.get_interval().clamp(s.get_numeric_value()),
+//                 ClampPred::IfDynamic => s.get_numeric_value(),
+//             },
+//             Self::Dynamic(d) => match params {
+//                 ClampPred::IfDynamic => d.get_interval().clamp(d.get_numeric_value()),
+//                 ClampPred::IfStatic => d.get_numeric_value(),
+//             },
+//         }
+//     }
+// }
 
 impl WithNumericValueSettable for ValueSrcs {
     fn set_numeric_value(&self, value: Self::ValueT) {
@@ -1555,6 +1163,12 @@ pub(crate) enum AutoOrManual<T: Default> {
     Manual(T),
 }
 
+impl<T: Default + PartialOrd> PartialOrd for AutoOrManual<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.deref().partial_cmp(other.deref())
+    }
+}
+
 #[test]
 fn auto_or_manual_check_serialization() {
     assert!(
@@ -1662,426 +1276,16 @@ impl<T: Default> Default for AutoOrManual<T> {
     }
 }
 
-// --------------------------------------------
-
-pub(crate) trait _WithRelativitySanitizerStatic: WithRelativity {
-    fn sanitize_relativity_static(rel: Relativity) -> Relativity;
-}
-
-pub(crate) trait WithNumericValueSanitizerStatic: WithNumericValue {
-    fn sanitize_numeric_value_static(value: Self::ValueT) -> Self::ValueT;
-    fn get_value_sanitizer_policy_doc_str() -> &'static str {
-        "Policy unknown"
-    }
-}
-
-pub(crate) trait WithNumIntervalSanitizerStatic: WithNumericValueSanitizerStatic {
-    fn sanitize_interval_static(interval: NumInterval<Self::ValueT>) -> NumInterval<Self::ValueT>;
-}
-
-// --------------------------------------------
-
-trait _WithNumericValueSanitized: WithNumericValue {
-    fn get_numeric_value_sanitized(&self) -> <Self as WithNumericValue>::ValueT;
-}
-
-// --------------------------------------------
-impl<PortInnerT: PortInnerIface + WithNumIntervalSanitizerStatic> WithSelfSanitize
-    for ValuePort<PortInnerT, SanPolicyUseFromPortInner>
-where
-    Self: WithNumericValue<ValueT = <PortInnerT as WithNumericValue>::ValueT>,
-{
-    fn sanitize_inplace(&mut self) {
-        if self.port_inner_ref().port_inner_is_static() {
-            self.remap = None;
-        } else {
-            self.port_get_remap_interval()
-                .map(|ri| self.port_set_remap_interval(PortInnerT::sanitize_interval_static(ri)));
-        }
-    }
-}
-
-impl<PortInnerT: PortInnerIface> WithSelfSanitize for ValuePort<PortInnerT, SanPolicyNone>
-where
-    Self: WithNumericValue<ValueT = <PortInnerT as WithNumericValue>::ValueT>,
-{
-    fn sanitize_inplace(&mut self) {
-        if self.port_inner_ref().port_inner_is_static() {
-            self.remap = None;
-        } else {
-            self.port_get_remap_interval()
-                .map(|ri| self.port_set_remap_interval(ri));
-        }
-    }
-}
-
-impl<PortInnerT: PortInnerIface + WithNumIntervalSanitizerStatic> WithNumIntervalSanitizerStatic
-    for ValuePort<PortInnerT, SanPolicyUseFromPortInner>
-where
-    Self: WithNumIntervalSanitizerStatic,
-    Self: WithNumericValue<ValueT = <PortInnerT as WithNumericValue>::ValueT>,
-{
-    fn sanitize_interval_static(interval: NumInterval<Self::ValueT>) -> NumInterval<Self::ValueT> {
-        PortInnerT::sanitize_interval_static(interval)
-    }
-}
+// ---------------
 
 impl WithNumericValueSanitizerStatic for ValueSrcs {
     fn sanitize_numeric_value_static(value: Self::ValueT) -> Self::ValueT {
         value
     }
 }
+
 impl WithNumIntervalSanitizerStatic for ValueSrcs {
     fn sanitize_interval_static(interval: NumInterval<Self::ValueT>) -> NumInterval<Self::ValueT> {
         interval
-    }
-}
-
-// --------------------------------------------
-#[macro_export]
-
-macro_rules! make_port_inner_nutype {
-    (
-        name:           $name:ident,
-        inner:          $inner:ident,
-        inner_default:  $inner_default:expr,
-        nutype_san:     $nutype_san:stmt,
-        value_sanitize: $value_sanitize:expr,
-        sandoc:         $sandoc:literal
-    ) => {
-        #[nutype::nutype(
-                                constructor(visibility = pub(crate)),
-                                default = $inner_default ,
-                                derive( From, Debug, Clone, AsRef, Serialize, Deserialize, PartialEq, PartialOrd),
-                                sanitize(with = $nutype_san)
-                                )]
-        pub(crate) struct $name($inner);
-
-        impl crate::schemas_value::WithNumericValueSanitizerStatic for $name {
-            fn sanitize_numeric_value_static(value: Self::ValueT) -> Self::ValueT {
-                $value_sanitize(value)
-            }
-
-            fn get_value_sanitizer_policy_doc_str() -> &'static str {
-                $sandoc
-            }
-        }
-
-        impl crate::schemas_value::WithNumIntervalSanitizerStatic for $name {
-            fn sanitize_interval_static(mut interval: NumInterval<Self::ValueT>) -> NumInterval<Self::ValueT> {
-                use crate::schemas_value::WithNumericValueSanitizerStatic;
-                interval.from = Self::sanitize_numeric_value_static(interval.from);
-                interval.to = Self::sanitize_numeric_value_static(interval.to);
-                interval
-            }
-        }
-
-        impl Default for $name {
-            fn default() -> Self {
-                Self::new($inner_default)
-            }
-        }
-
-        impl<SanT: crate::schemas_value::PortSanPolicy<$name>> ::traversable::Traversable for ValuePort<$name, SanT>
-        where
-            Self: WithNumericValue,
-        {
-            fn traverse<V: traversable::Visitor>(&self, visitor: &mut V) -> std::ops::ControlFlow<V::Break> {
-                self.target.as_ref().traverse(visitor)
-            }
-        }
-
-        impl<SanT: crate::schemas_value::PortSanPolicy<$name>> ::traversable::TraversableMut for ValuePort<$name, SanT>
-        where
-            Self: WithNumericValue,
-        {
-            fn traverse_mut<V: traversable::VisitorMut>(&mut self, visitor: &mut V) -> std::ops::ControlFlow<V::Break> {
-                let mut tmp = self.target.clone().into_inner();
-                let ret = tmp.traverse_mut(visitor);
-                self.target = $name::new(tmp);
-                ret
-            }
-        }
-
-        impl ::traversable::Traversable for $name {
-            fn traverse<V: traversable::Visitor>(&self, visitor: &mut V) -> std::ops::ControlFlow<V::Break> {
-                self.as_ref().traverse(visitor)
-            }
-        }
-
-        impl ::traversable::TraversableMut for $name {
-            fn traverse_mut<V: traversable::VisitorMut>(&mut self, visitor: &mut V) -> std::ops::ControlFlow<V::Break> {
-                let mut tmp = self.clone().into_inner();
-                let ret = tmp.traverse_mut(visitor);
-                *self = $name::new(tmp);
-                ret
-            }
-        }
-
-
-        impl crate::schemas_value::WithDeviceControlMatcherKey for  $name  {
-            fn _get_device_control_matcher_key(&self) -> Option<crate::schemas_value::DeviceControlMatcherKey<'_>> {
-                self.as_ref()._get_device_control_matcher_key()
-            }
-        }
-
-
-        impl crate::schemas_value::PortInnerIface for $name {
-            fn port_inner_identity(&self) -> String {
-                self.as_ref().port_inner_identity()
-            }
-            fn port_inner_is_static(&self) -> bool {
-                self.as_ref().is_static()
-            }
-            fn port_inner_get_device_control_matcher_key(&self) -> std::option::Option<(&str, &str)> {
-                self.as_ref().port_inner_get_device_control_matcher_key()
-            }
-        }
-
-        impl ::schemars::JsonSchema for $name {
-            fn schema_name() -> std::borrow::Cow<'static, str> {
-                stringify!($name).into()
-            }
-
-            fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
-                $inner::json_schema(generator)
-            }
-        }
-
-        impl<SanT: crate::schemas_value::PortSanPolicy<$name>> ::core::convert::From<ValuePort<$name, SanT>> for $name {
-            fn from(value: ValuePort<$name, SanT>) -> Self {
-                value.target
-            }
-        }
-
-        impl crate::schemas_value::WithNumericValue for $name {
-            type ValueT = BaseNumT;
-
-            fn get_numeric_value(&self) -> Self::ValueT {
-                self.as_ref().get_numeric_value()
-            }
-        }
-
-        impl crate::schemas_value::WithNumInterval for $name {
-            fn get_interval(&self) -> NumInterval<Self::ValueT> {
-                self.as_ref().get_interval()
-            }
-        }
-
-        impl crate::schemas_value::WithNumericValueSettable for $name {
-            fn set_numeric_value(&self, value: Self::ValueT) {
-                self.as_ref().set_numeric_value(value);
-            }
-        }
-
-        impl crate::schemas_value::WithNumIntervalSettable for $name {
-            fn set_interval(&mut self, interval: NumInterval<Self::ValueT>) {
-                let mut tmp = self.clone().into_inner();
-                tmp.set_interval(interval);
-                *self = Self::new(tmp)
-            }
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! make_output_port_inner_nutype {
-    (
-        $name:ident,
-        default:  $inner_default:expr,
-        san-doc:  $sandoc:literal,
-        san-exe:  $value_sanitize:expr
-    ) => {
-        crate::make_port_inner_nutype!(
-            name:     $name,
-            inner:    ValueDsts,
-            inner_default:  $inner_default,
-            nutype_san: |mut s| { s },
-            value_sanitize: $value_sanitize,
-            sandoc:         $sandoc
-        );
-    };
-}
-#[macro_export]
-macro_rules! make_input_port_inner_nutype {
-    (
-        $name:ident,
-        default:  $inner_default:expr,
-        san-doc:  $sandoc:literal,
-        san-exe:  $value_sanitize:expr
-    ) => {
-        crate::make_port_inner_nutype!(
-            name:     $name,
-            inner:    ValueSrcs,
-            inner_default:  $inner_default,
-            nutype_san: |mut s| {
-                use crate::schemas_value::WithNumIntervalSanitizerStatic;
-                if let ValueSrcs::Static(ref mut s) = s {
-                    // s.interval = AutoOrManual::Auto($inner_default.get_interval());
-                    if s.get_interval() == $inner_default.get_interval() {
-                        s.interval = AutoOrManual::Auto(Self::sanitize_interval_static(s.get_interval()));
-                    } else {
-                        s.interval = AutoOrManual::Manual(Self::sanitize_interval_static(s.get_interval()));
-                    }
-                }; s
-            },
-            value_sanitize: $value_sanitize,
-            sandoc:         $sandoc
-        );
-
-        impl<'s> crate::gui_common::DrawEgui<'s> for $name {
-            type In = crate::gui_value::GuiInValue<'s>;
-            type Out = bool;
-
-            fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
-                let mut changed = false;
-                changed |= crate::gui_value::draw_egui_for_input_port_inner(self, gui_in, ui);
-                changed
-            }
-        }
-    };
-}
-
-// =================================================================
-
-#[cfg(test)]
-mod testing {
-    use super::*;
-    use num_traits::Zero;
-
-    #[test]
-    #[allow(unused)]
-    #[allow(non_local_definitions)]
-    fn port_to_variable() {
-        fn make_variable() -> DynValueRefs {
-            DynValueRefs::Variable(VariableRef {
-                variable_key: "test".into(),
-                variable: Default::default(),
-            })
-        };
-
-        fn make_output_port_inner_variable() -> ValueDsts {
-            ValueDsts::Dynamic(make_variable())
-        };
-
-        fn make_input_port_inner_variable() -> ValueSrcs {
-            ValueSrcs::Dynamic(make_variable())
-        };
-        //--------------------------------------
-
-        make_output_port_inner_nutype!(
-            PortInnerSanEpsilonForZero,
-            default: ValueDsts::default(),
-            san-doc: "Value must not be 0.0",
-            san-exe: |v: BaseNumT| { if v.is_zero() {BaseNumT::EPSILON} else {v}}
-        );
-
-        let p_san_epsilon_for_zero = ValuePort::<PortInnerSanEpsilonForZero>::default();
-        assert!(p_san_epsilon_for_zero.port_get_remap_interval().is_none());
-        assert!(p_san_epsilon_for_zero.port_inner_ref().get_interval() == ZERO_INTERVAL); // Values written to [0,0] will be clamped to 0
-        p_san_epsilon_for_zero.set_numeric_value(100.0);
-        assert_eq!(p_san_epsilon_for_zero.get_numeric_value(), BaseNumT::EPSILON); // At port level 0 is sanitized to epsilon
-        p_san_epsilon_for_zero.set_numeric_value(-100.0);
-        assert_eq!(p_san_epsilon_for_zero.get_numeric_value(), BaseNumT::EPSILON);
-
-        // --------------------------------------------------
-
-        {
-            make_output_port_inner_nutype!(
-                PortInnerDeviceSanEpsilonGtZero,
-                default: make_output_port_inner_variable(),
-                san-doc: "Value must be > 0.0",
-                san-exe: |v: BaseNumT| { if v <= BaseNumT::zero() {BaseNumT::EPSILON} else {v}}
-            );
-
-            let mut p_san_ge_epsilon = ValuePort::<PortInnerDeviceSanEpsilonGtZero>::default();
-            {
-                let p = &p_san_ge_epsilon;
-                assert!(p.port_get_remap_interval().is_none());
-                assert!(p.port_inner_ref().get_interval() == PortInnerDeviceSanEpsilonGtZero::default().get_interval());
-                assert!(p.port_inner_ref().get_interval() == UNIT_INTERVAL);
-                p.set_numeric_value(1.0);
-                assert_eq!(p.get_numeric_value(), 1.0);
-                assert_eq!(p.port_inner_ref().get_numeric_value(), 1.0);
-                p.set_numeric_value(-1.0);
-                assert_eq!(p.get_numeric_value(), BaseNumT::EPSILON);
-            }
-
-            {
-                use std::ops::{Div, Mul};
-
-                use crate::{
-                    num_interval::{OutOfRangePolicy, SYMM_UNIT_INTERVAL},
-                    test_utils::fp_approx_eq,
-                };
-
-                p_san_ge_epsilon.port_set_remap_interval(SYMM_UNIT_INTERVAL);
-                assert!(p_san_ge_epsilon.port_inner_ref().get_interval() == UNIT_INTERVAL);
-
-                p_san_ge_epsilon.set_numeric_value(-100.0);
-                assert_eq!(p_san_ge_epsilon.get_numeric_value(), BaseNumT::EPSILON);
-                assert!(
-                    p_san_ge_epsilon.port_inner_ref().get_numeric_value()
-                        == UNIT_INTERVAL.map_from(BaseNumT::EPSILON, &SYMM_UNIT_INTERVAL, OutOfRangePolicy::Clamp)
-                );
-
-                let mut p_no_san = ValuePort::<PortInnerDeviceSanEpsilonGtZero, SanPolicyNone>::default();
-                p_no_san.port_set_remap_interval(SYMM_UNIT_INTERVAL);
-                assert!(p_no_san.port_inner_ref().get_interval() == UNIT_INTERVAL);
-                p_no_san.set_numeric_value(-0.5);
-                assert!(fp_approx_eq(p_no_san.get_numeric_value(), -0.5));
-                assert!(fp_approx_eq(p_no_san.port_inner_ref().get_numeric_value(), 0.25));
-            }
-        }
-    }
-
-    #[test]
-    fn port_to_device() {
-        fn make_device_control_matcher() -> DynValueRefs {
-            DynValueRefs::DeviceControlMatcher(DeviceControlMatcherRef {
-                device_matcher_key: "test".into(),
-                control_matcher_key: "test".into(),
-                control_matcher: ControlMatchers::Hid(Default::default()),
-            })
-        };
-
-        fn make_output_port_inner_dcm() -> ValueDsts {
-            ValueDsts::Dynamic(make_device_control_matcher())
-        };
-
-        fn make_input_port_inner_dcm() -> ValueSrcs {
-            ValueSrcs::Dynamic(make_device_control_matcher())
-        };
-
-        // ----------------------------------
-        {
-            make_output_port_inner_nutype!(
-                PortInnerDeviceSanEpsilonGtZero,
-                default: make_output_port_inner_dcm(),
-                san-doc: "Value must be > 0.0",
-                san-exe: |v: BaseNumT| { if v <= BaseNumT::zero() {BaseNumT::EPSILON} else {v}}
-            );
-
-            let port_to_devie_san_gt_zero = ValuePort::<PortInnerDeviceSanEpsilonGtZero>::default();
-
-            struct MockExeCtx {
-                device_control_value_received: std::cell::Cell<BaseNumT>,
-            }
-
-            impl TfmExecCtx for MockExeCtx {
-                fn set_device_control_matcher(&self, _dcm_key: DeviceControlMatcherKey, value: BaseNumT) {
-                    self.device_control_value_received.set(value);
-                }
-            }
-
-            let exe_ctx = MockExeCtx {
-                device_control_value_received: Default::default(),
-            };
-
-            port_to_devie_san_gt_zero.set_numeric_value(42.0);
-            assert!(exe_ctx.device_control_value_received.get() == BaseNumT::default());
-            port_to_devie_san_gt_zero.port_write_to_device(&exe_ctx);
-            assert_eq!(exe_ctx.device_control_value_received.get(), 42.0)
-        }
     }
 }
