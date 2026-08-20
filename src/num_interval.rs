@@ -1,4 +1,5 @@
 use crate::base_num::*;
+use crate::num_interval::num_interval_span_impl__::WithSpanTo;
 use anyhow::{Result, bail};
 use num_traits::{Bounded, Float, FromPrimitive, Num, NumCast, ToPrimitive, Zero};
 use schemars::JsonSchema;
@@ -445,18 +446,40 @@ impl<T: NumIntervalValue> NumInterval<T> {
     ) -> T {
         val_norm = UNIT_INTERVAL
             .cast::<InputT>()
-            .unwrap()
+            .unwrap_or_else(|| {
+                panic!(
+                    "{UNIT_INTERVAL} is expected to cast to {}... are zero and one representable in it?...",
+                    std::any::type_name::<InputT>()
+                )
+            })
             .value_cast_with_out_of_range_policy(val_norm, out_of_range_policy);
 
-        if branches::unlikely(self.is_unit()) {
-            return T::from(val_norm).expect("Magnitude must fit.");
+        if self.is_unit() {
+            return T::from(val_norm).unwrap_or_else(|| {
+                panic!(
+                    "{val_norm} of type {} must fit within target type of {}",
+                    std::any::type_name_of_val(&val_norm),
+                    std::any::type_name::<T>()
+                )
+            });
         }
 
-        let magnitude = InputT::from(self.span()).unwrap() * val_norm;
+        let span_to_value_remapped = InputT::from(self.span()).unwrap_or_else(|| {
+            panic!(
+                "{} of type {} is expected to cast to {}",
+                self.span(),
+                std::any::type_name_of_val(&self.span()),
+                std::any::type_name::<InputT>()
+            )
+        }) * val_norm;
+
         self.from
-            + T::from(magnitude).unwrap_or_else(|| {
-                branches::mark_unlikely();
-                panic!("Magnitude {magnitude} must fit in {}.", std::any::type_name::<T>())
+            + T::from(span_to_value_remapped).unwrap_or_else(|| {
+                if span_to_value_remapped.is_sign_positive() {
+                    T::max_value()
+                } else {
+                    T::min_value()
+                }
             })
     }
 
@@ -471,12 +494,32 @@ impl<T: NumIntervalValue> NumInterval<T> {
             .value_cast_with_out_of_range_policy(val_symm_norm, out_of_range_policy);
 
         if self.is_symm_unit() {
-            return T::from(val_symm_norm).expect("Magnitude must fit.");
+            return T::from(val_symm_norm).unwrap_or_else(|| {
+                panic!(
+                    "{val_symm_norm} of type {} must fit within target type of {}",
+                    std::any::type_name_of_val(&val_symm_norm),
+                    std::any::type_name::<T>()
+                )
+            });
         }
 
-        let magnitude = InputT::from(self.span()).expect("Can't fail")
-            * ((val_symm_norm + InputT::one()) / InputT::from(2).expect("Can't fail"));
-        self.from + T::from(magnitude).expect("Magnitude {magnitude} must fit.")
+        let span_to_value_remapped = InputT::from(self.span()).unwrap_or_else(|| {
+            panic!(
+                "{} of type {} is expected to cast to {}",
+                self.span(),
+                std::any::type_name_of_val(&self.span()),
+                std::any::type_name::<InputT>()
+            )
+        }) * ((val_symm_norm + InputT::one()).div(InputT::one() + InputT::one()));
+
+        self.from
+            + T::from(span_to_value_remapped).unwrap_or_else(|| {
+                if span_to_value_remapped.is_sign_positive() {
+                    T::max_value()
+                } else {
+                    T::min_value()
+                }
+            })
     }
 
     #[allow(unused)]
@@ -603,14 +646,9 @@ impl<T: NumIntervalValue> NumInterval<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    const EPSILON: BaseNumT = 0.0001;
 
-    fn approx_eq(a: BaseNumT, b: BaseNumT) -> bool {
-        (a - b).abs() < EPSILON
-    }
-
-    fn f64_approx_eq(a: f64, b: f64) -> bool {
-        (a - b).abs() < 0.0001
+    fn fp_approx_eq<FloatT: Float>(a: FloatT, b: FloatT) -> bool {
+        (a - b).abs() < FloatT::epsilon()
     }
 
     #[test]
@@ -668,25 +706,43 @@ mod tests {
         let target = NumInterval::new(10.0 as BaseNumT, 20.0);
 
         // Normal in-range mapping
-        assert!(approx_eq(target.map_from_unit(0.5, OutOfRangePolicy::Allow), 15.0));
+        assert!(fp_approx_eq(target.map_from_unit(0.5, OutOfRangePolicy::Allow), 15.0));
 
         // Allow: extrapolation
-        assert!(approx_eq(target.map_from_unit(2.0, OutOfRangePolicy::Allow), 30.0));
-        assert!(approx_eq(target.map_from_unit(-0.5, OutOfRangePolicy::Allow), 5.0));
-        assert!(approx_eq(target.map_to_unit(0.0, OutOfRangePolicy::Allow), -1.0));
-        assert!(approx_eq(target.map_to_unit(5.0, OutOfRangePolicy::Allow), -0.5));
-        assert!(approx_eq(target.map_to_unit(25.0, OutOfRangePolicy::Allow), 1.5));
-        assert!(approx_eq(target.map_to_unit(30.0, OutOfRangePolicy::Allow), 2.0));
-        assert!(approx_eq(target.map_to_symm_unit(30.0, OutOfRangePolicy::Allow), 3.0));
-        assert!(approx_eq(target.map_to_symm_unit(25.0, OutOfRangePolicy::Allow), 2.0));
-        assert!(approx_eq(target.map_to_symm_unit(5.0, OutOfRangePolicy::Allow), -2.0));
-        assert!(approx_eq(target.map_to_symm_unit(0.0, OutOfRangePolicy::Allow), -3.0));
-        assert!(approx_eq(target.map_to_symm_unit(-5.0, OutOfRangePolicy::Allow), -4.0));
-        assert!(approx_eq(target.map_to_symm_unit(-7.5, OutOfRangePolicy::Allow), -4.5));
+        assert!(fp_approx_eq(target.map_from_unit(2.0, OutOfRangePolicy::Allow), 30.0));
+        assert!(fp_approx_eq(target.map_from_unit(-0.5, OutOfRangePolicy::Allow), 5.0));
+        assert!(fp_approx_eq(target.map_to_unit(0.0, OutOfRangePolicy::Allow), -1.0));
+        assert!(fp_approx_eq(target.map_to_unit(5.0, OutOfRangePolicy::Allow), -0.5));
+        assert!(fp_approx_eq(target.map_to_unit(25.0, OutOfRangePolicy::Allow), 1.5));
+        assert!(fp_approx_eq(target.map_to_unit(30.0, OutOfRangePolicy::Allow), 2.0));
+        assert!(fp_approx_eq(
+            target.map_to_symm_unit(30.0, OutOfRangePolicy::Allow),
+            3.0
+        ));
+        assert!(fp_approx_eq(
+            target.map_to_symm_unit(25.0, OutOfRangePolicy::Allow),
+            2.0
+        ));
+        assert!(fp_approx_eq(
+            target.map_to_symm_unit(5.0, OutOfRangePolicy::Allow),
+            -2.0
+        ));
+        assert!(fp_approx_eq(
+            target.map_to_symm_unit(0.0, OutOfRangePolicy::Allow),
+            -3.0
+        ));
+        assert!(fp_approx_eq(
+            target.map_to_symm_unit(-5.0, OutOfRangePolicy::Allow),
+            -4.0
+        ));
+        assert!(fp_approx_eq(
+            target.map_to_symm_unit(-7.5, OutOfRangePolicy::Allow),
+            -4.5
+        ));
 
         // Clamp & WarnAndClamp: should clamp to [0.0, 1.0] range
-        assert!(approx_eq(target.map_from_unit(1.5, OutOfRangePolicy::Clamp), 20.0));
-        assert!(approx_eq(
+        assert!(fp_approx_eq(target.map_from_unit(1.5, OutOfRangePolicy::Clamp), 20.0));
+        assert!(fp_approx_eq(
             target.map_from_unit(-0.2, OutOfRangePolicy::WarnAndClamp),
             10.0
         ));
@@ -696,25 +752,25 @@ mod tests {
     fn test_map_from_symm_unit_boundaries() {
         let target = NumInterval::new(10.0f64, 30.0);
         // -1.0 -> from, 0.0 -> midpoint, 1.0 -> to
-        assert!(f64_approx_eq(
+        assert!(fp_approx_eq(
             target.map_from_symm_unit(-1.0_f32, OutOfRangePolicy::Allow),
             10.0
         ));
-        assert!(f64_approx_eq(
+        assert!(fp_approx_eq(
             target.map_from_symm_unit(0.0_f32, OutOfRangePolicy::Allow),
             20.0
         ));
-        assert!(f64_approx_eq(
+        assert!(fp_approx_eq(
             target.map_from_symm_unit(1.0_f32, OutOfRangePolicy::Allow),
             30.0
         ));
 
         // Out of bounds with clamp
-        assert!(f64_approx_eq(
+        assert!(fp_approx_eq(
             target.map_from_symm_unit(-5.0_f32, OutOfRangePolicy::Clamp),
             10.0
         ));
-        assert!(f64_approx_eq(
+        assert!(fp_approx_eq(
             target.map_from_symm_unit(5.0_f32, OutOfRangePolicy::Clamp),
             30.0
         ));
@@ -725,14 +781,14 @@ mod tests {
         let interval = NumInterval::new(0.0 as BaseNumT, 10.0);
 
         // Inside: clamp is identity, invert reflects across midpoint
-        assert!(approx_eq(interval.clamp_and_invert(3.0), 7.0));
-        assert!(approx_eq(interval.clamp_and_invert(0.0), 10.0));
-        assert!(approx_eq(interval.clamp_and_invert(10.0), 0.0));
+        assert!(fp_approx_eq(interval.clamp_and_invert(3.0), 7.0));
+        assert!(fp_approx_eq(interval.clamp_and_invert(0.0), 10.0));
+        assert!(fp_approx_eq(interval.clamp_and_invert(10.0), 0.0));
 
         // Below: clamps to `from`, inverts to `to`
-        assert!(approx_eq(interval.clamp_and_invert(-5.0), 10.0));
+        assert!(fp_approx_eq(interval.clamp_and_invert(-5.0), 10.0));
         // Above: clamps to `to`, inverts to `from`
-        assert!(approx_eq(interval.clamp_and_invert(15.0), 0.0));
+        assert!(fp_approx_eq(interval.clamp_and_invert(15.0), 0.0));
     }
 
     #[test]
@@ -784,8 +840,8 @@ mod tests {
         assert_eq!(NumInterval::new(i8::MIN + 2, i8::MAX).midpoint(), 0_i8);
 
         // Float precision
-        assert!(approx_eq(NumInterval::new(0.0, 1.0).midpoint(), 0.5));
-        assert!(f64_approx_eq(NumInterval::new(-1.5, 2.5).midpoint(), 0.5));
+        assert!(fp_approx_eq(NumInterval::new(0.0, 1.0).midpoint(), 0.5));
+        assert!(fp_approx_eq(NumInterval::new(-1.5, 2.5).midpoint(), 0.5));
     }
 
     #[test]
@@ -980,14 +1036,14 @@ mod tests {
         let interval = NumInterval::new(10_i8, 20);
         let mapped = interval.map_to_unit::<BaseNumT>(5, OutOfRangePolicy::Allow);
         assert!(
-            approx_eq(-0.5 as BaseNumT, mapped),
+            fp_approx_eq(-0.5 as BaseNumT, mapped),
             "Extrapolation below 'from' failed. Expected -0.5, got {}",
             mapped
         );
 
         let mapped = interval.map_to_unit::<BaseNumT>(25, OutOfRangePolicy::Allow);
         assert!(
-            approx_eq(1.5 as BaseNumT, mapped),
+            fp_approx_eq(1.5 as BaseNumT, mapped),
             "Extrapolation below 'from' failed. Expected 1.5, got {}",
             mapped
         );
@@ -1136,21 +1192,25 @@ mod tests {
         let output_interval = NumInterval::<BaseNumT>::new(-10.0, 20.0);
 
         let result_min = output_interval.map_from(0.0, &input_interval, OutOfRangePolicy::WarnAndClamp);
-        assert!(approx_eq(result_min, -10.0), "Min mapping failed: Got {}", result_min);
+        assert!(
+            fp_approx_eq(result_min, -10.0),
+            "Min mapping failed: Got {}",
+            result_min
+        );
 
         let result_mid = output_interval.map_from(50.0, &input_interval, OutOfRangePolicy::WarnAndClamp);
         assert!(
-            approx_eq(result_mid, 5.0),
+            fp_approx_eq(result_mid, 5.0),
             "Midpoint mapping failed: Got {}",
             result_mid
         );
 
         let result_max = output_interval.map_from(100.0, &input_interval, OutOfRangePolicy::WarnAndClamp);
-        assert!(approx_eq(result_max, 20.0), "Max mapping failed: Got {}", result_max);
+        assert!(fp_approx_eq(result_max, 20.0), "Max mapping failed: Got {}", result_max);
 
         let result_outside = output_interval.map_from(150.0, &input_interval, OutOfRangePolicy::Allow);
         assert!(
-            approx_eq(result_outside, 35.0),
+            fp_approx_eq(result_outside, 35.0),
             "Extrapolation mapping failed: Got {}",
             result_outside
         );
@@ -1175,9 +1235,35 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn test_extrapolation_no_panic() {
-        let _ = NumInterval::new(0_i8, 10_i8).map_from_unit(100.0_f64, OutOfRangePolicy::Allow);
+    fn test_extrapolation_over_dst_type_range_no_panic_sat_at_max() {
+        assert_eq!(
+            NumInterval::new(0_i8, 10_i8).map_from_unit(100.0_f64, OutOfRangePolicy::Allow),
+            i8::MAX
+        );
+        assert_eq!(
+            NumInterval::new(0_i8, 10_i8).map_from_symm_unit(100.0_f64, OutOfRangePolicy::Allow),
+            i8::MAX
+        )
+    }
+
+    #[test]
+    fn test_extrapolation_over_dst_type_range_no_panic_sat_at_min() {
+        assert_eq!(
+            NumInterval::new(0_i8, 10_i8).map_from_unit(-100.0_f64, OutOfRangePolicy::Allow),
+            i8::MIN
+        );
+        assert_eq!(
+            NumInterval::new(0_u8, 10_u8).map_from_unit(-100.0_f64, OutOfRangePolicy::Allow),
+            u8::MIN
+        );
+        assert_eq!(
+            NumInterval::new(0_i8, 10_i8).map_from_symm_unit(-100.0_f64, OutOfRangePolicy::Allow),
+            i8::MIN
+        );
+        assert_eq!(
+            NumInterval::new(0_u8, 10_u8).map_from_symm_unit(-100.0_f64, OutOfRangePolicy::Allow),
+            u8::MIN
+        )
     }
 
     #[test]
@@ -1221,12 +1307,12 @@ mod tests {
         let value =
             NumInterval::new(42.0_f64, f64::MAX).value_cast_with_out_of_range_policy(-5.0_f32, OutOfRangePolicy::Clamp);
 
-        assert!(f64_approx_eq(value, 42.0_f64));
+        assert!(fp_approx_eq(value, 42.0_f64));
 
         let value =
             NumInterval::new(42.0_f32, f32::MAX).value_cast_with_out_of_range_policy(f64::MIN, OutOfRangePolicy::Clamp);
 
-        assert!(approx_eq(value as BaseNumT, 42.0 as BaseNumT));
+        assert!(fp_approx_eq(value as BaseNumT, 42.0 as BaseNumT));
     }
 
     #[cfg(debug_assertions)]
