@@ -7,12 +7,20 @@ pub mod debug;
 pub mod driver;
 pub use debug::DebugLevel;
 
+// --------------------------
+pub mod cli;
+
+// --------------------------
+#[cfg(test)]
+mod functional_tests;
+#[cfg(test)]
+pub(crate) mod test_utils;
+
 //--------------------------------
 pub(crate) mod base_num;
 pub(crate) mod interner;
 pub(crate) mod num_interval;
 pub(crate) mod relativity;
-pub(crate) mod test_utils;
 //--------------------------------
 pub(crate) mod hid_device;
 pub(crate) mod hid_owned_and_ffb;
@@ -70,8 +78,3 @@ pub(crate) mod gui_telemetry_graph;
 pub(crate) mod gui_transform_step;
 #[cfg(feature = "gui")]
 pub(crate) mod gui_value;
-
-// --------------------------
-pub mod cli;
-// --------------------------
-mod functional_tests;

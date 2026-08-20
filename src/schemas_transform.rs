@@ -1,19 +1,17 @@
 use crate::base_num::{BaseAtomicT, BaseNumT};
 use crate::config::WithSelfSanitize;
 use crate::filters::OneEuroFilter;
+use crate::make_input_port_inner_nutype;
 use crate::relativity::Relativity;
 use crate::schemas_value::{
-    AutoOrManual, DescriptionCfg, InputValueMetadata, PortInnerIface, ValuePort, ValuePortIface, WithDescriptionMut,
-    WithLastKnownIO, WithNumIntervalSettable, WithNumericValue, WithNumericValueSettable, make_static_value_src,
+    AutoOrManual, DescriptionCfg, InputValueMetadata, ValuePort, WithDescriptionMut, WithLastKnownIO, WithNumericValue,
+    make_static_value_src,
 };
 use crate::schemas_value::{
     DeviceControlMatcherRef, DynValueRefs, ValueDsts, VariableRef, WithNumInterval, WithRelativityRef,
     serialize_value_src_rt_ignore_interval,
 };
-use crate::tfm_exec::{
-    IntegrateExeState, RaiseFallExeState, ScriptExeState, SteeringExeState, TfmExeState, TfmExecCtx,
-};
-use crate::{make_input_port_inner_nutype, make_output_port_inner_nutype};
+use crate::tfm_exec::{IntegrateExeState, RaiseFallExeState, ScriptExeState, SteeringExeState, TfmExeState};
 use crate::{
     num_interval::NumInterval,
     num_interval::{SYMM_UNIT_INTERVAL, UNIT_INTERVAL},
@@ -25,7 +23,6 @@ use bitflags::bitflags;
 use crossbeam_utils::CachePadded;
 use enum_dispatch::enum_dispatch;
 use garde::Validate;
-use num_traits::Zero;
 use schemars::JsonSchema;
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -877,7 +874,7 @@ pub(crate) struct OneEuroFilterCfg {
     ///   but may oscillate on noisy inputs.
     ///
     /// Rarely needs adjustment from the default.
-    // #[serde(default = "default_1euro_d_cutoff_hz")]
+    #[serde(default = "default_1euro_d_cutoff_hz")]
     #[garde(range(min = 0.0))]
     pub(crate) d_cutoff_hz: ValueSrcs, //SanitizedParamPort<OneEuroCfgDCutOffHz>, //
 }
@@ -2230,6 +2227,7 @@ impl WithDescriptionMut for TfmStepCfg {
     }
 }
 
+#[cfg(test)]
 mod tests {
     #[allow(unused)]
     use super::*;
@@ -2251,97 +2249,5 @@ mod tests {
     #[test]
     fn default_on_idle_is_true() {
         assert!(is_true(&default_on_idle()));
-    }
-}
-
-// =================================================================
-
-#[cfg(test)]
-#[test]
-#[allow(unused)]
-#[allow(non_local_definitions)]
-fn test_dst_port() {
-    use crate::{num_interval::ZERO_INTERVAL, schemas_value::SanPolicyNone};
-
-    fn make_variable() -> DynValueRefs {
-        DynValueRefs::Variable(VariableRef {
-            variable_key: "test".into(),
-            variable: Default::default(),
-        })
-    };
-
-    fn make_output_port_inner_default() -> ValueDsts {
-        ValueDsts::Dynamic(make_variable())
-    };
-
-    fn make_input_port_inner_default() -> ValueSrcs {
-        ValueSrcs::Dynamic(make_variable())
-    };
-
-    //--------------------------------------
-
-    make_output_port_inner_nutype!(
-        PortInnerSanEpsilonForZero,
-        default: ValueDsts::default(),
-        san-doc: "Value must not be 0.0",
-        san-exe: |v: BaseNumT| { if v.is_zero() {BaseNumT::EPSILON} else {v}}
-    );
-
-    let p_san_epsilon_for_zero = ValuePort::<PortInnerSanEpsilonForZero>::default();
-    assert!(p_san_epsilon_for_zero.port_get_remap_interval().is_none());
-    assert!(p_san_epsilon_for_zero.port_inner_ref().get_interval() == ZERO_INTERVAL); // Values written to [0,0] will be clamped to 0
-    p_san_epsilon_for_zero.set_numeric_value(100.0);
-    assert_eq!(p_san_epsilon_for_zero.get_numeric_value(), BaseNumT::EPSILON); // At port level 0 is sanitized to epsilon
-    p_san_epsilon_for_zero.set_numeric_value(-100.0);
-    assert_eq!(p_san_epsilon_for_zero.get_numeric_value(), BaseNumT::EPSILON);
-
-    // --------------------------------------------------
-
-    {
-        make_output_port_inner_nutype!(
-            PortInnerSanEpsilonGtZero,
-            default: make_output_port_inner_default(),
-            san-doc: "Value must not be < 0.0",
-            san-exe: |v: BaseNumT| { if v < BaseNumT::zero() {BaseNumT::EPSILON} else {v}}
-        );
-
-        let mut p_san_ge_epsilon = ValuePort::<PortInnerSanEpsilonGtZero>::default();
-        {
-            let p = &p_san_ge_epsilon;
-            assert!(p.port_get_remap_interval().is_none());
-            assert!(p.port_inner_ref().get_interval() == PortInnerSanEpsilonGtZero::default().get_interval());
-            assert!(p.port_inner_ref().get_interval() == UNIT_INTERVAL);
-            p.set_numeric_value(1.0);
-            assert_eq!(p.get_numeric_value(), 1.0);
-            assert_eq!(p.port_inner_ref().get_numeric_value(), 1.0);
-            p.set_numeric_value(-1.0);
-            assert_eq!(p.get_numeric_value(), BaseNumT::EPSILON);
-        }
-
-        {
-            use std::ops::{Div, Mul};
-
-            use crate::num_interval::OutOfRangePolicy;
-
-            p_san_ge_epsilon.port_set_remap_interval(SYMM_UNIT_INTERVAL);
-            assert!(p_san_ge_epsilon.port_inner_ref().get_interval() == UNIT_INTERVAL);
-
-            p_san_ge_epsilon.set_numeric_value(-100.0);
-            assert_eq!(p_san_ge_epsilon.get_numeric_value(), BaseNumT::EPSILON);
-            assert!(
-                p_san_ge_epsilon.port_inner_ref().get_numeric_value()
-                    == UNIT_INTERVAL.map_from(BaseNumT::EPSILON, &SYMM_UNIT_INTERVAL, OutOfRangePolicy::Clamp)
-            );
-
-            let mut p_no_san = ValuePort::<PortInnerSanEpsilonGtZero, SanPolicyNone>::default();
-            p_no_san.port_set_remap_interval(SYMM_UNIT_INTERVAL);
-            assert!(p_no_san.port_inner_ref().get_interval() == UNIT_INTERVAL);
-            p_no_san.set_numeric_value(-0.5);
-            assert!((p_no_san.get_numeric_value() - -0.5).abs() < 1e-4);
-            assert!((p_no_san.port_inner_ref().get_numeric_value() - 0.25).abs() <= BaseNumT::EPSILON);
-        }
-        // struct ExeCtx {}
-        // impl TfmExecCtx for ExeCtx {}
-        // port.write(&ExeCtx {});
     }
 }

@@ -1,5 +1,4 @@
 use crate::base_num::*;
-use crate::num_interval::num_interval_span_impl__::WithSpanTo;
 use anyhow::{Result, bail};
 use num_traits::{Bounded, Float, FromPrimitive, Num, NumCast, ToPrimitive, Zero};
 use schemars::JsonSchema;

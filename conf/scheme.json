@@ -1900,13 +1900,11 @@
         },
         "d_cutoff_hz": {
           "description": "Cutoff frequency in Hz for the derivative (speed) low-pass\nfilter.\n\nThe raw derivative `(x - x̂_prev) / dt` amplifies sensor jitter.\nThis secondary filter smooths the derivative so the adaptive\ncutoff does not oscillate.\n\n- `0.01 – 0.1` — very smooth derivative; stable but slow to\n  react to speed changes.\n- `1.0` *(default)* — balanced; works well for most devices.\n- `10.0 – 100.0` — barely filtered derivative; fast tracking\n  but may oscillate on noisy inputs.\n\nRarely needs adjustment from the default.",
-          "$ref": "#/$defs/ValueSrcs"
+          "$ref": "#/$defs/ValueSrcs",
+          "default": 1.0
         }
       },
-      "additionalProperties": false,
-      "required": [
-        "d_cutoff_hz"
-      ]
+      "additionalProperties": false
     },
     "ScriptCfg": {
       "description": "User-script transform step.\n\nEmbeds a Luau script that runs on **every tick** of the mapping\npipeline, giving full programmatic control over the signal. The script\ncan read the main pipeline input and any number of auxiliary data\nsources, execute arbitrary logic (with persistent global state across\nticks), and write results back to the main pipeline output and/or\nauxiliary destinations.\n\nFive global API functions are injected into the Luau environment for\nthe duration of each tick:\n\n| Function | Purpose |\n|----------|---------|\n| `read(key)` | Read the main input (`0`) or an auxiliary source (string / 1-based index). |\n| `write(key, value)` | Write the main output (`0`) or an auxiliary destination. |\n| `transform(name, value)` | Invoke a named sub-pipeline from `aux_transformations`. |\n| `is_idle()` | `true` when the tick is an idle-clock tick (no user input). |\n| `base_rate()` | The configured idle tick rate in Hz. |\n\nSee `doc/script.md` for a full guide, signal-flow diagram, API\nreference, and configuration examples.",
