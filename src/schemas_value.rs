@@ -1012,14 +1012,21 @@ impl PortInnerIface for ValueSrcs {
     }
 
     fn port_inner_get_device_control_matcher_key(&self) -> Option<(&str, &str)> {
-        todo!()
+        if let Self::Dynamic(DynValueRefs::DeviceControlMatcher(dcm)) = self {
+            Some((&dcm.device_matcher_key, &dcm.control_matcher_key))
+        } else {
+            None
+        }
     }
 }
 
 impl WithNumIntervalSettable for ValueSrcs {
     fn set_interval(&mut self, interval: NumInterval<Self::ValueT>) {
         match self {
-            Self::Static(s) => s.set_interval(interval),
+            Self::Static(s) => {
+                s.set_interval(interval);
+                s.set_numeric_value(s.get_interval().clamp(s.get_numeric_value()));
+            }
             Self::Dynamic(_) => {
                 log::error!(
                     "Setting interval on dynamic value reference is not possible: modify the definition itself."
