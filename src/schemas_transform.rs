@@ -11,7 +11,7 @@ use crate::schemas_value::{
     DeviceControlMatcherRef, DynValueRefs, ValueDsts, VariableRef, WithNumInterval, WithRelativityRef,
     serialize_value_src_rt_ignore_interval,
 };
-use crate::schemas_value_port::ValuePort;
+use crate::schemas_value_port::{PortRemapPolicy, PortSanPolicy, RemapPolicyDefault, SanPolicyNone, ValuePort};
 use crate::tfm_exec::{IntegrateExeState, RaiseFallExeState, ScriptExeState, SteeringExeState, TfmExeState};
 use crate::{
     num_interval::NumInterval,
@@ -1651,7 +1651,7 @@ pub(crate) struct SteeringCfg {
     #[garde(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) accumulator: Option<DynValueRefs>,
+    pub(crate) accumulator: Option<SteeringAccPort>, // SteeringAccRemapPol
 
     /// *(Reserved — currently unused.)*
     ///
@@ -1743,6 +1743,18 @@ pub(crate) struct SteeringCfg {
     #[serde(default)]
     #[garde(skip)]
     pub(crate) integrated_user_input_transform: TfmSeqCfg,
+}
+
+type SteeringAccPort = ValuePort<ValueDsts, SanPolicyNone, SteeringAccPortRemapPol>;
+
+#[derive(
+    PartialEq, PartialOrd, Clone, Copy, std::fmt::Debug, Default, Serialize, Deserialize, TraversableMut, Traversable,
+)]
+pub(crate) struct SteeringAccPortRemapPol {}
+impl PortRemapPolicy<ValueDsts> for SteeringAccPortRemapPol {
+    fn get_remap_range() -> Option<NumInterval<BaseNumT>> {
+        SYMM_UNIT_INTERVAL.into()
+    }
 }
 
 impl TfmCfgDuplicateWithNewState for SteeringCfg {

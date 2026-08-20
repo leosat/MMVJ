@@ -20,9 +20,13 @@ use crate::schemas_transform::{
     RaiseFallCfg, SCurveCfg, ScriptCfg, SignedPowerCfg, SmoothstepCfg, SteeringCfg, TfmSeqCfg, TfmStepCfg,
 };
 
+use crate::schemas_value::DeviceControlMatcherRef;
+use crate::schemas_value::WithDeviceControlMatcherRef;
+use crate::schemas_value::WithNumericValueSettable;
 use crate::schemas_value::{DynValueRefs, ValueDsts, WithNumInterval, WithRelativity};
 use crate::schemas_value::{TfmValue, WithNumericValue};
 
+use crate::schemas_value_port::ValuePortIface;
 #[cfg(feature = "gui")]
 use crate::tracing::GraphDisplayStyle;
 #[cfg(feature = "gui")]
@@ -48,24 +52,30 @@ pub(crate) trait TfmExecCtx {
     fn is_idle_tick(&self) -> bool {
         false
     }
+
     fn get_idle_tick_rate(&self) -> u32 {
         crate::config::MIN_BASE_FREQ_HZ
     }
+
     fn get_main_dst(&self) -> Option<&ValueDsts> {
         None
     }
-    fn set_device_control_matcher(&self, dcm_key: crate::schemas_value::DeviceControlMatcherKey, value: BaseNumT) {}
-    #[deprecated = "Switching to value port and set_device_control_matcher() API"]
-    fn set_dyn_value(&self, dyn_value_ref: &DynValueRefs, value: BaseNumT) {}
+
+    #[deprecated = "Raw usage of this API is deprecated, replace with ValuePort usage when API is complete."]
+    fn device_control_matcher_ref_write(&self, dcm_ref: &DeviceControlMatcherRef, value: BaseNumT);
+
     fn get_lua(&self) -> Option<&mlua::Lua> {
         None
     }
+
     fn get_ff_x(&self, device_matcher_key: &str) -> BaseNumT {
         Default::default()
     }
+
     fn get_ff_y(&self, device_matcher_key: &str) -> BaseNumT {
         Default::default()
     }
+
     fn set_ff_x_axis_pos(
         &self,
         device_matcher_key: &str,
@@ -73,6 +83,7 @@ pub(crate) trait TfmExecCtx {
         normalize_from: NumInterval<BaseNumT>,
     ) {
     }
+
     fn set_ff_y_axis_pos(
         &self,
         device_matcher_key: &str,
@@ -719,19 +730,10 @@ impl WithTfmExec for ScriptCfg {
                                 }
                                 SrcOrDstKey::Str(key) => {
                                     if let Some(dst) = self.aux_dsts.get(&key) {
-                                        match dst.destination {
-                                            ValueDsts::Dynamic(ref d) => {
-                                                if let Some(remap_interval) = dst.remap_from_interval {
-                                                    value = dst.destination.get_interval().map_from(
-                                                        value,
-                                                        &remap_interval,
-                                                        OutOfRangePolicy::Clamp,
-                                                    )
-                                                }
-                                                ctx.set_dyn_value(d, value)
-                                            }
-                                            ValueDsts::Void(..) => {}
-                                        };
+                                        dst.destination.set_numeric_value(value);
+                                        if let Some(d) = dst.destination.get_device_control_matcher_ref() {
+                                            ctx.device_control_matcher_ref_write(d, value);
+                                        }
                                         Ok(())
                                     } else {
                                         Err(mlua::Error::RuntimeError(format!(
@@ -752,7 +754,10 @@ impl WithTfmExec for ScriptCfg {
                                                     OutOfRangePolicy::Clamp,
                                                 )
                                             }
-                                            ctx.set_dyn_value(d, value);
+                                            d.set_numeric_value(value);
+                                            if let Some(dcm) = d.get_device_control_matcher_ref() {
+                                                ctx.device_control_matcher_ref_write(dcm, value);
+                                            }
                                         }
                                         ValueDsts::Void(..) => {}
                                     })
@@ -914,11 +919,7 @@ impl WithTfmExec for SteeringCfg {
         let mut post_filter: BaseNumT;
 
         if let Some(acc) = &self.accumulator {
-            state.pre_filter = SYMM_UNIT_INTERVAL.map_from(
-                acc.get_numeric_value(),
-                &acc.get_interval(),
-                OutOfRangePolicy::WarnIfDebugAndClamp,
-            );
+            state.pre_filter = acc.get_numeric_value();
         }
 
         state.pre_filter = SYMM_UNIT_INTERVAL.clamp(state.pre_filter.add(delta));
@@ -1120,13 +1121,9 @@ impl WithTfmExec for SteeringCfg {
 
         state.last_time = now;
 
-        if let Some(acc) = &self.accumulator {
-            ctx.set_dyn_value(
-                acc,
-                acc.get_interval()
-                    .map_from_symm_unit(state.pre_filter, OutOfRangePolicy::Clamp),
-            );
-        }
+        self.accumulator.as_ref().map(|acc| {
+            acc.port_set_numeric_value_and_flush_to_devices(state.pre_filter, ctx);
+        });
 
         out
     }

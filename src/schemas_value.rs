@@ -335,10 +335,38 @@ impl PartialOrd for VariableRef {
 }
 
 // -------------------------------------------------
+#[allow(unused)]
 pub(crate) type DeviceControlMatcherKey<'k> = (&'k str, &'k str);
 pub(crate) trait WithDeviceControlMatcherKey {
     fn _get_device_control_matcher_key(&self) -> Option<DeviceControlMatcherKey<'_>>;
 }
+
+pub(crate) trait WithDeviceControlMatcherRef {
+    fn get_device_control_matcher_ref(&self) -> Option<&DeviceControlMatcherRef>;
+}
+// ----------------------------------------------------
+
+impl WithDeviceControlMatcherRef for ValueSrcs {
+    fn get_device_control_matcher_ref(&self) -> Option<&crate::schemas_value::DeviceControlMatcherRef> {
+        if let Self::Dynamic(DynValueRefs::DeviceControlMatcher(d)) = self {
+            Some(d)
+        } else {
+            None
+        }
+    }
+}
+
+impl WithDeviceControlMatcherRef for ValueDsts {
+    fn get_device_control_matcher_ref(&self) -> Option<&crate::schemas_value::DeviceControlMatcherRef> {
+        if let Self::Dynamic(DynValueRefs::DeviceControlMatcher(d)) = self {
+            Some(d)
+        } else {
+            None
+        }
+    }
+}
+
+// -----------------------------------------
 
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, TraversableMut, Traversable)]
 pub(crate) struct DeviceControlMatcherRef {
@@ -355,6 +383,12 @@ pub(crate) struct DeviceControlMatcherRef {
     #[serde(skip)]
     #[serde(default = "dummy_control_matcher")]
     pub(crate) control_matcher: ControlMatchers,
+}
+
+impl WithNumInterval for DeviceControlMatcherRef {
+    fn get_interval(&self) -> NumInterval<Self::ValueT> {
+        self.control_matcher.get_interval()
+    }
 }
 
 impl Eq for DeviceControlMatcherRef {}
@@ -389,6 +423,16 @@ pub(crate) fn dummy_control_matcher() -> ControlMatchers {
 pub(crate) enum DynValueRefs {
     DeviceControlMatcher(DeviceControlMatcherRef),
     Variable(VariableRef),
+}
+
+impl WithDeviceControlMatcherRef for DynValueRefs {
+    fn get_device_control_matcher_ref(&self) -> Option<&DeviceControlMatcherRef> {
+        if let DynValueRefs::DeviceControlMatcher(d) = self {
+            Some(d)
+        } else {
+            None
+        }
+    }
 }
 
 impl WithRelativity for DynValueRefs {
@@ -974,6 +1018,46 @@ impl Default for ValueDsts {
     }
 }
 
+impl From<DynValueRefs> for ValueDsts {
+    fn from(value: DynValueRefs) -> Self {
+        ValueDsts::Dynamic(value)
+    }
+}
+
+impl From<DynValueRefs> for ValueSrcs {
+    fn from(value: DynValueRefs) -> Self {
+        ValueSrcs::Dynamic(value)
+    }
+}
+
+impl TryFrom<ValueTargets> for ValueDsts {
+    type Error = String;
+
+    fn try_from(value: ValueTargets) -> Result<Self, Self::Error> {
+        match value {
+            ValueTargets::Src(s) => match s {
+                ValueSrcs::Static(_) => Err("Can't convert from a static source value target to a detination".into()),
+                ValueSrcs::Dynamic(d) => Ok(ValueDsts::Dynamic(d)),
+            },
+            ValueTargets::Dst(d) => Ok(d),
+        }
+    }
+}
+
+impl TryFrom<ValueTargets> for ValueSrcs {
+    type Error = String;
+
+    fn try_from(value: ValueTargets) -> Result<Self, Self::Error> {
+        match value {
+            ValueTargets::Src(s) => Ok(s),
+            ValueTargets::Dst(d) => match d {
+                ValueDsts::Dynamic(d) => Ok(ValueSrcs::Dynamic(d)),
+                ValueDsts::Void(_) => Err("Can't convert from a stvoidatic source value target to a source".into()),
+            },
+        }
+    }
+}
+
 impl WithDeviceControlMatcherKey for ValueDsts {
     fn _get_device_control_matcher_key(&self) -> Option<DeviceControlMatcherKey<'_>> {
         if let Self::Dynamic(DynValueRefs::DeviceControlMatcher(d)) = self {
@@ -1094,7 +1178,7 @@ impl ValueDsts {
         matches!(*self, Self::Void(..))
     }
 
-    pub(crate) fn _is_dynamic(&self) -> bool {
+    pub(crate) fn is_dynamic(&self) -> bool {
         matches!(*self, Self::Dynamic(..))
     }
 
@@ -1141,6 +1225,14 @@ pub(crate) enum ValueTargets {
     Src(ValueSrcs),
     Dst(ValueDsts),
     // TODO: Xrc(DynValueRefs),
+}
+
+impl TryFrom<ValueTargets> for DynValueRefs {
+    type Error = String;
+
+    fn try_from(value: ValueTargets) -> Result<Self, Self::Error> {
+        value.try_into()
+    }
 }
 
 impl _WithDstRefCount for VariableState {
@@ -1285,6 +1377,18 @@ impl WithNumericValueSanitizerStatic for ValueSrcs {
 }
 
 impl WithNumIntervalSanitizerStatic for ValueSrcs {
+    fn sanitize_interval_static(interval: NumInterval<Self::ValueT>) -> NumInterval<Self::ValueT> {
+        interval
+    }
+}
+
+impl WithNumericValueSanitizerStatic for ValueDsts {
+    fn sanitize_numeric_value_static(value: Self::ValueT) -> Self::ValueT {
+        value
+    }
+}
+
+impl WithNumIntervalSanitizerStatic for ValueDsts {
     fn sanitize_interval_static(interval: NumInterval<Self::ValueT>) -> NumInterval<Self::ValueT> {
         interval
     }

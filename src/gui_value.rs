@@ -9,8 +9,8 @@ use crate::relativity::Relativity;
 use crate::schemas_value::AutoOrManual;
 
 use crate::schemas_value_port::{
-    PortInnerIface, PortSanPolicy, SanPolicyNone, SanPolicyUseFromPortInner, ValuePort, ValuePortIface,
-    WithNumIntervalSanitizerStatic, WithNumericValueSanitizerStatic,
+    PortInnerIface, PortRemapPolicy, PortSanPolicy, SanPolicyNone, SanPolicyUseFromPortInner, ValuePort,
+    ValuePortIface, WithNumIntervalSanitizerStatic, WithNumericValueSanitizerStatic,
 };
 
 use crate::{
@@ -97,25 +97,7 @@ impl<'s> DrawEgui<'s> for ValueDsts {
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut changed = false;
-        match gui_in {
-            GuiInValue::Edit(params) => {
-                if let Some(ValueTargets::Dst(dst)) = draw_value_choice_iface(
-                    params.choice_case,
-                    ui,
-                    params.name,
-                    params.name,
-                    params.cfg_devices,
-                    params.cfg_variables,
-                ) {
-                    *self = dst.into();
-                    changed |= true;
-                }
-                ui.separator();
-            }
-            GuiInValue::Display { .. } => {}
-        }
-
-        changed |= draw_egui_for_input_port_inner(self, gui_in, ui);
+        changed |= draw_egui_for_a_value(self, gui_in, ui);
         changed
     }
 }
@@ -181,12 +163,13 @@ impl<'s> DrawEgui<'s> for NumInterval<BaseNumT> {
     }
 }
 
-impl<'s, PortInnerT, SanPolicyT> DrawEgui<'s> for ValuePort<PortInnerT, SanPolicyT>
+impl<'s, PortInnerT, SanPolicyT, RemapT> DrawEgui<'s> for ValuePort<PortInnerT, SanPolicyT, RemapT>
 where
+    RemapT: PortRemapPolicy<PortInnerT>,
     SanPolicyT: PortSanPolicy<PortInnerT> + GuiSanInfo<PortInnerT>,
     PortInnerT: PortInnerIface
         + WithNumIntervalSanitizerStatic
-        + From<ValueSrcs>
+        + TryFrom<ValueTargets>
         + DrawEgui<'s, In = GuiInValue<'s>, Out = bool>,
     NumInterval<<Self as WithNumericValue>::ValueT>: DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
     <Self as WithNumericValue>::ValueT: eframe::emath::Numeric,
@@ -196,9 +179,27 @@ where
     type Out = bool;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
-        let changed = draw_egui_for_port::<SanPolicyT, Self, PortInnerT>(self, gui_in, ui);
+        let mut changed = false;
+        changed |= draw_egui_for_port::<SanPolicyT, Self, PortInnerT>(self, gui_in, ui);
         SanPolicyT::san_policy_sanitize_this_inplace(self);
         changed
+    }
+}
+
+fn get_new_value_target<'s, OutT: TryFrom<ValueTargets>>(gui_in: GuiInValue<'s>, ui: &mut egui::Ui) -> Option<OutT> {
+    if let GuiInValue::Edit(params) = gui_in
+        && let Some(target) = draw_value_choice_iface(
+            params.choice_case,
+            ui,
+            params.name,
+            params.name,
+            params.cfg_devices,
+            params.cfg_variables,
+        )
+    {
+        target.try_into().ok()
+    } else {
+        None
     }
 }
 
@@ -229,37 +230,20 @@ where
     PortInnerT: WithNumericValueSanitizerStatic,
     SanPolicyT: GuiSanInfo<PortInnerT>,
     PortT: ValuePortIface,
-    <PortT as ValuePortIface>::InnerT: PortInnerIface + From<ValueSrcs> + DrawEgui<'s, In = GuiInValue<'s>, Out = bool>,
+    <PortT as ValuePortIface>::InnerT: PortInnerIface + DrawEgui<'s, In = GuiInValue<'s>, Out = bool>,
     NumInterval<<PortT as WithNumericValue>::ValueT>: DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
     <PortT as WithNumericValue>::ValueT: eframe::emath::Numeric,
 {
     let mut changed = false;
 
-    match gui_in {
-        crate::gui_value::GuiInValue::Edit(params) => {
-            ui.separator();
-            if let Some(crate::schemas_value::ValueTargets::Src(new_value_src)) =
-                crate::gui_value::draw_value_choice_iface(
-                    params.choice_case,
-                    ui,
-                    params.name,
-                    params.name,
-                    params.cfg_devices,
-                    params.cfg_variables,
-                )
-            {
-                *port.port_inner_mut() = new_value_src.into();
-                changed |= true;
-            }
-            ui.separator();
-        }
-        crate::gui_value::GuiInValue::Display { .. } => {}
-    }
-
     if port.port_inner_ref().port_inner_is_static() {
         changed |= ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
     } else {
-        ui.label(egui::RichText::new(format!("{:+012.5}", port.get_numeric_value())));
+        ui.label(
+            egui::RichText::new(format!("{:+012.5}", port.get_numeric_value()))
+                .monospace()
+                .size(11.0),
+        );
 
         ui.separator();
         SanPolicyT::draw_san_info(ui);
@@ -272,9 +256,8 @@ where
                 ui.label(format!("PORT({})", port.port_get_identity_str()));
             })
             .body(|ui| {
-                changed |= ui
-                    .group(|ui| ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner)
-                    .inner;
+                ui.separator();
+                changed |= ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
                 ui.separator();
 
                 ui.horizontal(|ui| {
@@ -310,13 +293,17 @@ where
                             changed = true;
                         }
                     } else {
-                        if ui
-                            .button("Enable remapping")
-                            .on_hover_text("Turn remapping On")
-                            .clicked()
+                        let policy_enforced_remap_range = PortT::RemapT::get_remap_range();
+                        if policy_enforced_remap_range.is_none()
+                            && ui
+                                .button("Enable remapping")
+                                .on_hover_text("Turn remapping On")
+                                .clicked()
                         {
                             port.port_set_remap_from_inner_default();
                             changed = true;
+                        } else if let Some(policy_enforced_remap_range) = policy_enforced_remap_range {
+                            ui.label(format!("Port-enforced remapping range: {policy_enforced_remap_range}",));
                         }
                     }
                 })
@@ -326,32 +313,40 @@ where
     changed
 }
 
-pub(crate) fn draw_egui_for_input_port_inner<'s, T>(this: &mut T, gui_in: GuiInValue<'s>, ui: &mut egui::Ui) -> bool
+pub(crate) fn draw_egui_for_a_value<'s, ValueT>(this: &mut ValueT, gui_in: GuiInValue<'s>, ui: &mut egui::Ui) -> bool
 where
-    T: PortInnerIface,
-    NumInterval<<T as WithNumericValue>::ValueT>: DrawEgui<'s, Out = bool, In = GuiInInterval<'s>>,
-    <T as WithNumericValue>::ValueT: eframe::emath::Numeric,
+    ValueT: PortInnerIface,
+    NumInterval<<ValueT as WithNumericValue>::ValueT>: DrawEgui<'s, Out = bool, In = GuiInInterval<'s>>,
+    <ValueT as WithNumericValue>::ValueT: eframe::emath::Numeric,
 {
     match &gui_in {
         GuiInValue::Edit(params) => {
             let mut changed = false;
+
+            if let Some(new_target) = get_new_value_target(gui_in, ui) {
+                *this = new_target;
+                changed = true; // TODO: !!! handle advanced target switch here uniformly
+            }
 
             ui.label(this.port_inner_identity());
 
             ui.label("Value:");
             let mut value = this.get_numeric_value();
 
-            if ui
-                .add(
-                    egui::Slider::new(&mut value, this.get_interval().make_range_inclusive())
-                        .logarithmic(params.slider_log_scale)
-                        .fixed_decimals(4)
-                        .step_by(0.0001),
-                )
-                .changed()
-            {
-                this.set_numeric_value(value);
-                changed = true;
+            let value_slider = ui.add(
+                egui::Slider::new(&mut value, this.get_interval().make_range_inclusive())
+                    .logarithmic(params.slider_log_scale)
+                    .fixed_decimals(4)
+                    .step_by(0.0001),
+            );
+
+            if value_slider.changed() && (value_slider.drag_stopped() || value_slider.dragged()) {
+                if !this.get_device_control_matcher_ref().is_some() {
+                    this.set_numeric_value(value);
+                }
+                if this.port_inner_is_static() {
+                    changed = true;
+                }
             }
 
             // --
@@ -406,25 +401,27 @@ impl<'s> DrawEgui<'s> for ValueSrcs {
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut changed = false;
-        match gui_in {
-            GuiInValue::Edit(params) => {
-                if let Some(ValueTargets::Src(new_value_src)) = draw_value_choice_iface(
-                    params.choice_case,
-                    ui,
-                    params.name,
-                    params.name,
-                    params.cfg_devices,
-                    params.cfg_variables,
-                ) {
-                    *self = new_value_src.into();
-                    changed |= true;
-                }
-                ui.separator();
-            }
-            GuiInValue::Display { .. } => {}
-        }
+        // TODO: handle static param value change vs change of value target here, avoid code duplication in caller
+        // TODO: (in this case it's not even handled uniformly).
+        // match gui_in {
+        //     GuiInValue::Edit(params) => {
+        //         if let Some(ValueTargets::Src(new_value_src)) = draw_value_choice_iface(
+        //             params.choice_case,
+        //             ui,
+        //             params.name,
+        //             params.name,
+        //             params.cfg_devices,
+        //             params.cfg_variables,
+        //         ) {
+        //             *self = new_value_src.into();
+        //             changed |= true;
+        //         }
+        //         ui.separator();
+        //     }
+        //     GuiInValue::Display { .. } => {}
+        // }
 
-        changed |= draw_egui_for_input_port_inner(self, gui_in, ui);
+        changed |= draw_egui_for_a_value(self, gui_in, ui);
         changed
     }
 }
