@@ -1555,7 +1555,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                                                                 item_idx: idx,
                                                                 a_value_gui_in: GuiInValue::Edit(
                                                                     GuiInValueEditParams {
-                                                                        name,
+                                                                        name: &window_title,
                                                                         choice_case: ValueUsageContext::TfmStepAuxSrc,
                                                                         allow_interval_edit: true,
                                                                         slider_log_scale: false,
@@ -1579,7 +1579,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                                                                 item_idx: idx,
                                                                 a_value_gui_in: GuiInValue::Edit(
                                                                     GuiInValueEditParams {
-                                                                        name,
+                                                                        name: &window_title,
                                                                         choice_case: ValueUsageContext::TfmStepAuxDst,
                                                                         allow_interval_edit: true,
                                                                         slider_log_scale: false,

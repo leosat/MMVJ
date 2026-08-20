@@ -296,7 +296,7 @@ impl crate::gui_main::GuiMain {
             ui,
             Some("Mappings list"),
             Some(&format!(
-                "{} List (total: {}) ",
+                "{} Mappings list (total: {}) ",
                 egui_phosphor::bold::LIST,
                 self.cfg.mappings.len(),
             )),
@@ -360,8 +360,7 @@ impl crate::gui_main::GuiMain {
                             &mut self.gui_tab_mappings_current_opened_mapping_idx,
                             mapping_idx,
                             format!(
-                                "{} ({mapping_idx}) {} {}",
-                                egui_phosphor::bold::DOTS_SIX_VERTICAL,
+                                "({mapping_idx}) {} {}",
                                 mapping.name,
                                 egui_phosphor::bold::DOTS_SIX_VERTICAL,
                             ),

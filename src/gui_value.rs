@@ -7,8 +7,8 @@ use crate::gui_common::draw_collapsing_ui;
 use crate::relativity::Relativity;
 
 use crate::schemas_value::{
-    AutoOrManual, PortInnerIface, SanPolicyNone, SanPolicyUseFromPortInner, StaticValueCfg, ValuePort, ValuePortIface,
-    WithNumIntervalSanitizerStatic, WithNumIntervalSettable, WithNumericValueSanitizerStatic,
+    AutoOrManual, PortInnerIface, SanPolicyNone, SanPolicyUseFromPortInner, ValuePort, ValuePortIface,
+    WithNumIntervalSanitizerStatic, WithNumericValueSanitizerStatic,
 };
 use crate::{
     base_num::BaseNumT,
@@ -104,23 +104,15 @@ impl<'s> DrawEgui<'s> for ValueDsts {
                     params.cfg_devices,
                     params.cfg_variables,
                 ) {
-                    *self = dst;
+                    *self = dst.into();
                     changed |= true;
                 }
                 ui.separator();
             }
-            GuiInValue::Display { .. } => {
-                // ui.label(self.to_string());
-            }
+            GuiInValue::Display { .. } => {}
         }
-        match self {
-            ValueDsts::Void(..) => {
-                ui.label(egui::RichText::new("Void").size(14.0).monospace().strong());
-            }
-            ValueDsts::Dynamic(d) => {
-                d.egui(gui_in, ui);
-            }
-        }
+
+        changed |= draw_egui_for_input_port_inner(self, gui_in, ui);
         changed
     }
 }
@@ -240,42 +232,59 @@ where
     NumInterval<<PortT as WithNumericValue>::ValueT>: DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
     <PortT as WithNumericValue>::ValueT: eframe::emath::Numeric,
 {
+    let mut changed = false;
+
+    match gui_in {
+        crate::gui_value::GuiInValue::Edit(params) => {
+            ui.separator();
+            if let Some(crate::schemas_value::ValueTargets::Src(new_value_src)) =
+                crate::gui_value::draw_value_choice_iface(
+                    params.choice_case,
+                    ui,
+                    params.name,
+                    params.name,
+                    params.cfg_devices,
+                    params.cfg_variables,
+                )
+            {
+                *port.port_inner_mut() = new_value_src.into();
+                changed |= true;
+            }
+            ui.separator();
+        }
+        crate::gui_value::GuiInValue::Display { .. } => {}
+    }
+
     if port.port_inner_ref().port_inner_is_static() {
-        ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner
+        changed |= ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
     } else {
-        ui.label(
-            egui::RichText::new(format!("{:+012.5}", port.get_numeric_value()))
-                .monospace()
-                .size(13.0),
-        );
+        ui.label(egui::RichText::new(format!("{:+012.5}", port.get_numeric_value())));
+
         ui.separator();
         SanPolicyT::draw_san_info(ui);
         ui.separator();
 
-        let mut changed = false;
         ui.vertical(|ui| {
             draw_collapsing_ui(ui, port.port_get_identity_str().into(), None, |ui| {
-                ui.label(egui::RichText::new(egui_phosphor::bold::PLUGS).size(14.0));
-                ui.label(port.port_get_identity_str());
+                ui.label(egui::RichText::new(egui_phosphor::bold::PLUGS).size(14.0))
+                    .on_hover_text("Value port: allows sanitization and optional range remapping");
+                ui.label(format!("PORT({})", port.port_get_identity_str()));
             })
             .body(|ui| {
-                changed |= ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
+                changed |= ui
+                    .group(|ui| ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner)
+                    .inner;
                 ui.separator();
+
                 ui.horizontal(|ui| {
                     if let Some(mut remap_to) = port.port_get_remap_interval() {
-                        ui.label("remapped: ");
-                        if remap_to == port.port_get_default_interval_from_inner() {
-                            ui.label("(=default)");
-                        } else {
-                            ui.label("(overridden)");
-                        }
-                        ui.separator();
+                        ui.label("Remapping range: ");
 
                         if remap_to.egui(
                             GuiInInterval::Edit {
                                 max_range: BaseNumT::MIN..=BaseNumT::MAX, // port.get_max_interval().cast().unwrap().make_range_inclusive(),
-                                from_label: &"",
-                                to_label: &"",
+                                from_label: &"From",
+                                to_label: &"To",
                                 sanitize_and_sort: true,
                                 truncate: false,
                             },
@@ -284,12 +293,27 @@ where
                             port.port_set_remap_interval(remap_to);
                             changed = true;
                         };
-                        if ui.button("turn remapping off").clicked() {
+
+                        if remap_to == port.port_get_default_interval_from_inner() {
+                            ui.label("(=default range)");
+                        } else {
+                            ui.label("(overridden range)");
+                        }
+
+                        if ui
+                            .button(egui::RichText::new(egui_phosphor::bold::TRASH).size(14.0))
+                            .on_hover_text("Turn remapping Off")
+                            .clicked()
+                        {
                             port.port_set_remap_off();
                             changed = true;
                         }
                     } else {
-                        if ui.button("turn remapping on").clicked() {
+                        if ui
+                            .button("Enable remapping")
+                            .on_hover_text("Turn remapping On")
+                            .clicked()
+                        {
                             port.port_set_remap_from_inner_default();
                             changed = true;
                         }
@@ -297,8 +321,8 @@ where
                 })
             })
         });
-        changed
     }
+    changed
 }
 
 pub(crate) fn draw_egui_for_input_port_inner<'s, T>(this: &mut T, gui_in: GuiInValue<'s>, ui: &mut egui::Ui) -> bool
@@ -306,25 +330,16 @@ where
     T: PortInnerIface,
     NumInterval<<T as WithNumericValue>::ValueT>: DrawEgui<'s, Out = bool, In = GuiInInterval<'s>>,
     <T as WithNumericValue>::ValueT: eframe::emath::Numeric,
-    T: From<ValueSrcs>,
 {
     match &gui_in {
         GuiInValue::Edit(params) => {
             let mut changed = false;
-            if let Some(ValueTargets::Src(new_value_src)) = draw_value_choice_iface(
-                params.choice_case,
-                ui,
-                params.name,
-                params.name,
-                params.cfg_devices,
-                params.cfg_variables,
-            ) {
-                *this = new_value_src.into();
-                changed |= true;
-            }
+
+            ui.label(this.port_inner_identity());
 
             ui.label("Value:");
             let mut value = this.get_numeric_value();
+
             if ui
                 .add(
                     egui::Slider::new(&mut value, this.get_interval().make_range_inclusive())
@@ -337,8 +352,10 @@ where
                 this.set_numeric_value(value);
                 changed = true;
             }
+
             // --
             ui.separator();
+
             ui.label("Range: ");
             if params.allow_interval_edit && this.port_inner_is_static() {
                 let mut interval = this.get_interval();
@@ -387,7 +404,27 @@ impl<'s> DrawEgui<'s> for ValueSrcs {
     type Out = bool;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
-        draw_egui_for_input_port_inner(self, gui_in, ui)
+        let mut changed = false;
+        match gui_in {
+            GuiInValue::Edit(params) => {
+                if let Some(ValueTargets::Src(new_value_src)) = draw_value_choice_iface(
+                    params.choice_case,
+                    ui,
+                    params.name,
+                    params.name,
+                    params.cfg_devices,
+                    params.cfg_variables,
+                ) {
+                    *self = new_value_src.into();
+                    changed |= true;
+                }
+                ui.separator();
+            }
+            GuiInValue::Display { .. } => {}
+        }
+
+        changed |= draw_egui_for_input_port_inner(self, gui_in, ui);
+        changed
     }
 }
 

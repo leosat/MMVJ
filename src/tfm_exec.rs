@@ -54,7 +54,8 @@ pub(crate) trait TfmExecCtx {
     fn get_main_dst(&self) -> Option<&ValueDsts> {
         None
     }
-    // TODO?: set_device_control_matcher((&str, &str), BaseNumT)
+    fn set_device_control_matcher(&self, dcm_key: crate::schemas_value::DeviceControlMatcherKey, value: BaseNumT) {}
+    #[deprecated]
     fn set_dyn_value(&self, dyn_value_ref: &DynValueRefs, value: BaseNumT) {}
     fn get_lua(&self) -> Option<&mlua::Lua> {
         None

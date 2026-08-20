@@ -551,27 +551,27 @@ impl std::fmt::Display for StaticValueCfg {
 
 // -------------------------------------------------
 impl WithTriggersMapping for ValueSrcs {
-    fn get_triggers_mapping(&self) -> bool {
+    fn _get_triggers_mapping(&self) -> bool {
         true
     }
 
-    fn set_triggers_mapping(&mut self, _flag: bool) {}
+    fn _set_triggers_mapping(&mut self, _flag: bool) {}
 }
 
 impl WithTriggersMapping for ValueDsts {
-    fn get_triggers_mapping(&self) -> bool {
+    fn _get_triggers_mapping(&self) -> bool {
         false
     }
 
-    fn set_triggers_mapping(&mut self, _flag: bool) {}
+    fn _set_triggers_mapping(&mut self, _flag: bool) {}
 }
 
 impl<SanT: PortSanPolicy<PortInnerT>, PortInnerT: PortInnerIface> WithTriggersMapping for ValuePort<PortInnerT, SanT> {
-    fn get_triggers_mapping(&self) -> bool {
+    fn _get_triggers_mapping(&self) -> bool {
         self.triggers_mapping
     }
 
-    fn set_triggers_mapping(&mut self, flag: bool) {
+    fn _set_triggers_mapping(&mut self, flag: bool) {
         self.triggers_mapping = flag
     }
 }
@@ -614,15 +614,26 @@ where
         self.remap = Some(PortInnerT::default().get_interval())
     }
 
-    fn port_write(&self, exe_ctx: &impl TfmExecCtx) {
-        todo!()
+    fn port_write_to_device(&self, exe_ctx: &impl TfmExecCtx)
+    where
+        BaseNumT: From<Self::ValueT>,
+    {
+        if let Some(dcm_key) = self.port_inner_ref()._get_device_control_matcher_key() {
+            exe_ctx.set_device_control_matcher(dcm_key, self.get_numeric_value().into());
+        }
     }
 }
 
 // -------------------------------------------------
+pub(crate) type DeviceControlMatcherKey<'k> = (&'k str, &'k str);
+pub(crate) trait WithDeviceControlMatcherKey {
+    fn _get_device_control_matcher_key(&self) -> Option<DeviceControlMatcherKey<'_>>;
+}
+
+// -------------------------------------------------
 pub(crate) trait WithTriggersMapping {
-    fn get_triggers_mapping(&self) -> bool;
-    fn set_triggers_mapping(&mut self, flag: bool);
+    fn _get_triggers_mapping(&self) -> bool;
+    fn _set_triggers_mapping(&mut self, flag: bool);
 }
 
 // --------------------------------------------------------
@@ -639,18 +650,10 @@ pub(crate) trait ValuePortIface: WithTriggersMapping + From<Self::InnerT> + With
     fn port_inner_ref(&self) -> &Self::InnerT;
     fn port_inner_mut(&mut self) -> &mut Self::InnerT;
 
-    // fn read(&self) -> Self::ValueT
-    // where
-    //     Self: WithNumericValue<ValueT = <<Self as PortIface>::InnerT as WithNumericValue>::ValueT>,
-    // {
-    //     self.port_inner_ref().get_numeric_value()
-    // }
-    fn port_write(&self, exe_ctx: &impl TfmExecCtx);
-
-    // fn get_clamp_interval(&self) -> Option<NumInterval<Self::ValueT>> {
-    //     todo!()
-    // }
-    // fn set_clamp_interval(&mut self, ri: NumInterval<Self::ValueT>);
+    #[allow(unused)]
+    fn port_write_to_device(&self, exe_ctx: &impl TfmExecCtx)
+    where
+        BaseNumT: From<Self::ValueT>;
 }
 
 pub(crate) trait WithNumIntervalSettable: WithNumInterval {
@@ -665,6 +668,7 @@ pub(crate) trait PortInnerIface:
     + PartialEq
     + PartialOrd
     + JsonSchema
+    + WithDeviceControlMatcherKey
     + WithNumInterval
     + WithNumIntervalSettable
     + WithNumericValue
@@ -674,6 +678,7 @@ pub(crate) trait PortInnerIface:
 {
     fn port_inner_identity(&self) -> String;
     fn port_inner_is_static(&self) -> bool;
+    #[allow(unused)]
     fn port_inner_get_device_control_matcher_key(&self) -> Option<(&str, &str)>;
 }
 
@@ -756,12 +761,12 @@ pub(crate) trait PortSanPolicy<SanProviderT = ()>:
     where
         SanProviderT: WithNumericValueSanitizerStatic;
 
-    fn san_policy_sanitize_interval(interval: NumInterval<SanProviderT::ValueT>) -> NumInterval<SanProviderT::ValueT>
+    fn _san_policy_sanitize_interval(interval: NumInterval<SanProviderT::ValueT>) -> NumInterval<SanProviderT::ValueT>
     where
         SanProviderT: WithNumIntervalSanitizerStatic;
 
     fn san_policy_sanitize_this_inplace<SelfSanitizedT: WithSelfSanitize>(this: &mut SelfSanitizedT);
-    fn san_policy_sanitize_this<SelfSanitizedT: WithSelfSanitize>(this: SelfSanitizedT) -> SelfSanitizedT;
+    fn _san_policy_sanitize_this<SelfSanitizedT: WithSelfSanitize>(this: SelfSanitizedT) -> SelfSanitizedT;
 }
 
 #[derive(Copy, Clone, PartialEq, PartialOrd, Debug)]
@@ -780,7 +785,7 @@ impl<SanProviderT> PortSanPolicy<SanProviderT> for SanPolicyUseFromPortInner {
         SanProviderT::sanitize_numeric_value_static(value)
     }
 
-    fn san_policy_sanitize_interval(interval: NumInterval<SanProviderT::ValueT>) -> NumInterval<SanProviderT::ValueT>
+    fn _san_policy_sanitize_interval(interval: NumInterval<SanProviderT::ValueT>) -> NumInterval<SanProviderT::ValueT>
     where
         SanProviderT: WithNumIntervalSanitizerStatic,
     {
@@ -791,7 +796,7 @@ impl<SanProviderT> PortSanPolicy<SanProviderT> for SanPolicyUseFromPortInner {
         this.sanitize_inplace()
     }
 
-    fn san_policy_sanitize_this<SelfSanitizedT: WithSelfSanitize>(this: SelfSanitizedT) -> SelfSanitizedT {
+    fn _san_policy_sanitize_this<SelfSanitizedT: WithSelfSanitize>(this: SelfSanitizedT) -> SelfSanitizedT {
         this.sanitize_self()
     }
 
@@ -814,7 +819,7 @@ impl<SanProviderT> PortSanPolicy<SanProviderT> for SanPolicyNone {
         value
     }
 
-    fn san_policy_sanitize_interval(interval: NumInterval<SanProviderT::ValueT>) -> NumInterval<SanProviderT::ValueT>
+    fn _san_policy_sanitize_interval(interval: NumInterval<SanProviderT::ValueT>) -> NumInterval<SanProviderT::ValueT>
     where
         SanProviderT: WithNumericValue,
     {
@@ -822,7 +827,7 @@ impl<SanProviderT> PortSanPolicy<SanProviderT> for SanPolicyNone {
     }
 
     fn san_policy_sanitize_this_inplace<SelfSanitizedT: WithSelfSanitize>(_this: &mut SelfSanitizedT) {}
-    fn san_policy_sanitize_this<SelfSanitizedT: WithSelfSanitize>(this: SelfSanitizedT) -> SelfSanitizedT {
+    fn _san_policy_sanitize_this<SelfSanitizedT: WithSelfSanitize>(this: SelfSanitizedT) -> SelfSanitizedT {
         this
     }
 }
@@ -980,12 +985,22 @@ pub(crate) enum ValueSrcs {
     Dynamic(#[garde(skip)] DynValueRefs),
 }
 
+impl WithDeviceControlMatcherKey for ValueSrcs {
+    fn _get_device_control_matcher_key(&self) -> Option<DeviceControlMatcherKey<'_>> {
+        if let Self::Dynamic(DynValueRefs::DeviceControlMatcher(d)) = self {
+            Some((&d.device_matcher_key, &d.control_matcher_key))
+        } else {
+            None
+        }
+    }
+}
+
 impl PortInnerIface for ValueSrcs {
     fn port_inner_identity(&self) -> String {
         match self {
             ValueSrcs::Static(_) => egui_phosphor::bold::PENCIL.into(),
             ValueSrcs::Dynamic(d) => format!(
-                "{}({})",
+                "Src({}({}))",
                 if d._is_device_control_matcher() { "CTL:" } else { "VAR:" },
                 d.to_string()
             ),
@@ -1344,9 +1359,26 @@ impl Default for ValueDsts {
     }
 }
 
+impl WithDeviceControlMatcherKey for ValueDsts {
+    fn _get_device_control_matcher_key(&self) -> Option<DeviceControlMatcherKey<'_>> {
+        if let Self::Dynamic(DynValueRefs::DeviceControlMatcher(d)) = self {
+            Some((&d.device_matcher_key, &d.control_matcher_key))
+        } else {
+            None
+        }
+    }
+}
+
 impl PortInnerIface for ValueDsts {
     fn port_inner_identity(&self) -> String {
-        self.to_string()
+        match self {
+            Self::Void(_) => egui_phosphor::bold::EMPTY.into(),
+            Self::Dynamic(d) => format!(
+                "Dst({}({}))",
+                if d._is_device_control_matcher() { "CTL:" } else { "VAR:" },
+                d.to_string()
+            ),
+        }
     }
 
     fn port_inner_is_static(&self) -> bool {
@@ -1375,7 +1407,7 @@ where
 }
 
 impl WithNumIntervalSettable for ValueDsts {
-    fn set_interval(&mut self, interval: NumInterval<Self::ValueT>) {
+    fn set_interval(&mut self, _: NumInterval<Self::ValueT>) {
         log::error!("Can't set interval on dynamic value ref.")
     }
 }
@@ -1400,6 +1432,7 @@ impl WithNumericValueSettable for ValueDsts {
 }
 
 impl ValueDsts {
+    #[allow(unused)]
     pub(crate) fn is_static(&self) -> bool {
         matches!(self, Self::Void(..))
     }
@@ -1624,7 +1657,7 @@ impl<T: Default> Default for AutoOrManual<T> {
 
 // --------------------------------------------
 
-pub(crate) trait WithRelativitySanitizerStatic: WithRelativity {
+pub(crate) trait _WithRelativitySanitizerStatic: WithRelativity {
     fn sanitize_relativity_static(rel: Relativity) -> Relativity;
 }
 
@@ -1641,7 +1674,7 @@ pub(crate) trait WithNumIntervalSanitizerStatic: WithNumericValueSanitizerStatic
 
 // --------------------------------------------
 
-trait WithNumericValueSanitized: WithNumericValue {
+trait _WithNumericValueSanitized: WithNumericValue {
     fn get_numeric_value_sanitized(&self) -> <Self as WithNumericValue>::ValueT;
 }
 
@@ -1778,18 +1811,13 @@ macro_rules! make_port_inner_nutype {
             }
         }
 
-        // impl<SanT: crate::schemas_value::PortSanPolicy<$name>> ::core::default::Default
-        //     for crate::schemas_value::ValuePort<$name, SanT>
-        // {
-        //     fn default() -> Self {
-        //         Self {
-        //             remap: Some($inner_default.get_interval()),
-        //             triggers_mapping: Default::default(),
-        //             target: Default::default(),
-        //             _san_tag: std::marker::PhantomData,
-        //         }
-        //     }
-        // }
+
+        impl crate::schemas_value::WithDeviceControlMatcherKey for  $name  {
+            fn _get_device_control_matcher_key(&self) -> Option<crate::schemas_value::DeviceControlMatcherKey<'_>> {
+                self.as_ref()._get_device_control_matcher_key()
+            }
+        }
+
 
         impl crate::schemas_value::PortInnerIface for $name {
             fn port_inner_identity(&self) -> String {
@@ -1899,8 +1927,154 @@ macro_rules! make_input_port_inner_nutype {
             type Out = bool;
 
             fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
-                crate::gui_value::draw_egui_for_input_port_inner(self, gui_in, ui)
+                let mut changed = false;
+                changed |= crate::gui_value::draw_egui_for_input_port_inner(self, gui_in, ui);
+                changed
             }
         }
     };
+}
+
+// =================================================================
+
+#[cfg(test)]
+mod testing {
+    use super::*;
+    use num_traits::Zero;
+
+    #[test]
+    #[allow(unused)]
+    #[allow(non_local_definitions)]
+    fn port_to_variable() {
+        fn make_variable() -> DynValueRefs {
+            DynValueRefs::Variable(VariableRef {
+                variable_key: "test".into(),
+                variable: Default::default(),
+            })
+        };
+
+        fn make_output_port_inner_variable() -> ValueDsts {
+            ValueDsts::Dynamic(make_variable())
+        };
+
+        fn make_input_port_inner_variable() -> ValueSrcs {
+            ValueSrcs::Dynamic(make_variable())
+        };
+        //--------------------------------------
+
+        make_output_port_inner_nutype!(
+            PortInnerSanEpsilonForZero,
+            default: ValueDsts::default(),
+            san-doc: "Value must not be 0.0",
+            san-exe: |v: BaseNumT| { if v.is_zero() {BaseNumT::EPSILON} else {v}}
+        );
+
+        let p_san_epsilon_for_zero = ValuePort::<PortInnerSanEpsilonForZero>::default();
+        assert!(p_san_epsilon_for_zero.port_get_remap_interval().is_none());
+        assert!(p_san_epsilon_for_zero.port_inner_ref().get_interval() == ZERO_INTERVAL); // Values written to [0,0] will be clamped to 0
+        p_san_epsilon_for_zero.set_numeric_value(100.0);
+        assert_eq!(p_san_epsilon_for_zero.get_numeric_value(), BaseNumT::EPSILON); // At port level 0 is sanitized to epsilon
+        p_san_epsilon_for_zero.set_numeric_value(-100.0);
+        assert_eq!(p_san_epsilon_for_zero.get_numeric_value(), BaseNumT::EPSILON);
+
+        // --------------------------------------------------
+
+        {
+            make_output_port_inner_nutype!(
+                PortInnerDeviceSanEpsilonGtZero,
+                default: make_output_port_inner_variable(),
+                san-doc: "Value must be > 0.0",
+                san-exe: |v: BaseNumT| { if v <= BaseNumT::zero() {BaseNumT::EPSILON} else {v}}
+            );
+
+            let mut p_san_ge_epsilon = ValuePort::<PortInnerDeviceSanEpsilonGtZero>::default();
+            {
+                let p = &p_san_ge_epsilon;
+                assert!(p.port_get_remap_interval().is_none());
+                assert!(p.port_inner_ref().get_interval() == PortInnerDeviceSanEpsilonGtZero::default().get_interval());
+                assert!(p.port_inner_ref().get_interval() == UNIT_INTERVAL);
+                p.set_numeric_value(1.0);
+                assert_eq!(p.get_numeric_value(), 1.0);
+                assert_eq!(p.port_inner_ref().get_numeric_value(), 1.0);
+                p.set_numeric_value(-1.0);
+                assert_eq!(p.get_numeric_value(), BaseNumT::EPSILON);
+            }
+
+            {
+                use std::ops::{Div, Mul};
+
+                use crate::{
+                    num_interval::{OutOfRangePolicy, SYMM_UNIT_INTERVAL},
+                    test_utils::fp_approx_eq,
+                };
+
+                p_san_ge_epsilon.port_set_remap_interval(SYMM_UNIT_INTERVAL);
+                assert!(p_san_ge_epsilon.port_inner_ref().get_interval() == UNIT_INTERVAL);
+
+                p_san_ge_epsilon.set_numeric_value(-100.0);
+                assert_eq!(p_san_ge_epsilon.get_numeric_value(), BaseNumT::EPSILON);
+                assert!(
+                    p_san_ge_epsilon.port_inner_ref().get_numeric_value()
+                        == UNIT_INTERVAL.map_from(BaseNumT::EPSILON, &SYMM_UNIT_INTERVAL, OutOfRangePolicy::Clamp)
+                );
+
+                let mut p_no_san = ValuePort::<PortInnerDeviceSanEpsilonGtZero, SanPolicyNone>::default();
+                p_no_san.port_set_remap_interval(SYMM_UNIT_INTERVAL);
+                assert!(p_no_san.port_inner_ref().get_interval() == UNIT_INTERVAL);
+                p_no_san.set_numeric_value(-0.5);
+                assert!(fp_approx_eq(p_no_san.get_numeric_value(), -0.5));
+                assert!(fp_approx_eq(p_no_san.port_inner_ref().get_numeric_value(), 0.25));
+            }
+        }
+    }
+
+    #[test]
+    fn port_to_device() {
+        fn make_device_control_matcher() -> DynValueRefs {
+            DynValueRefs::DeviceControlMatcher(DeviceControlMatcherRef {
+                device_matcher_key: "test".into(),
+                control_matcher_key: "test".into(),
+                control_matcher: ControlMatchers::Hid(Default::default()),
+            })
+        };
+
+        fn make_output_port_inner_dcm() -> ValueDsts {
+            ValueDsts::Dynamic(make_device_control_matcher())
+        };
+
+        fn make_input_port_inner_dcm() -> ValueSrcs {
+            ValueSrcs::Dynamic(make_device_control_matcher())
+        };
+
+        // ----------------------------------
+        {
+            make_output_port_inner_nutype!(
+                PortInnerDeviceSanEpsilonGtZero,
+                default: make_output_port_inner_dcm(),
+                san-doc: "Value must be > 0.0",
+                san-exe: |v: BaseNumT| { if v <= BaseNumT::zero() {BaseNumT::EPSILON} else {v}}
+            );
+
+            let port_to_devie_san_gt_zero = ValuePort::<PortInnerDeviceSanEpsilonGtZero>::default();
+
+            struct MockExeCtx {
+                device_control_value_received: std::cell::Cell<BaseNumT>,
+            }
+
+            impl TfmExecCtx for MockExeCtx {
+                fn set_device_control_matcher(&self, _dcm_key: DeviceControlMatcherKey, value: BaseNumT) {
+                    self.device_control_value_received.set(value);
+                }
+            }
+
+            let exe_ctx = MockExeCtx {
+                device_control_value_received: Default::default(),
+            };
+
+            port_to_devie_san_gt_zero.set_numeric_value(42.0);
+            assert!(exe_ctx.device_control_value_received.get() == BaseNumT::default());
+            port_to_devie_san_gt_zero.port_write_to_device(&exe_ctx);
+            assert_eq!(exe_ctx.device_control_value_received.get(), 42.0)
+        }
+    }
 }
