@@ -10,18 +10,19 @@ use std::{
     ops::{Deref, DerefMut},
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicUsize},
+        atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed},
     },
 };
 
+use crate::{num_interval::ZERO_INTERVAL, schemas_value_port::WithTriggersMapping};
 use crate::{
-    num_interval::UNIT_INTERVAL,
+    num_interval::{MAX_SPAN_INTERVAL, UNIT_INTERVAL},
     schemas_value_port::{WithNumIntervalSanitizerStatic, WithNumericValueSanitizerStatic},
 };
-use crate::{num_interval::ZERO_INTERVAL, schemas_value_port::WithTriggersMapping};
 use crate::{relativity::Relativity, schemas_value_port::PortInnerIface};
 use crossbeam_utils::CachePadded;
 use deserialize_untagged_verbose_error::DeserializeUntaggedVerboseError;
+use enum_dispatch::enum_dispatch;
 use garde::{Validate, rules::range::Bounds};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -34,26 +35,10 @@ use crate::{
     schemas_control_matcher::ControlMatchers,
 };
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
-pub(crate) struct DescriptionCfg(pub(crate) String);
-
-pub(crate) trait WithDescriptionMut {
-    fn description_mut(&mut self) -> Option<&mut DescriptionCfg>;
-}
-
-impl Deref for DescriptionCfg {
-    type Target = String;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for DescriptionCfg {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
+const XRC_SINK_VALUE_INTERVAL: NumInterval<BaseNumT> = NumInterval {
+    from: -8675309.0,
+    to: 8675309.0,
+};
 
 pub(crate) trait _WithDstRefCount {
     fn _get_dst_refs_count(&self) -> usize;
@@ -106,18 +91,22 @@ impl<ValueT: NumIntervalValue> WithNumInterval for TfmValue<ValueT> {
 /// The difference takes place for relative values, where current (in-the-moment) value may be 0,
 /// whereas last memorized input or output may be != 0. In other cases both traits if implemented
 /// may return the same value.
+#[enum_dispatch]
 pub(crate) trait WithLastKnownIO<T> {
     fn get_last_known_io(&self) -> T;
 }
 
+#[enum_dispatch]
 pub(crate) trait WithLastKnownIOSettable<T> {
     fn set_last_known_io(&self, value: T);
 }
 
+#[enum_dispatch]
 pub(crate) trait WithRelativity {
     fn get_relativity(&self) -> Relativity;
 }
 
+#[enum_dispatch]
 pub(crate) trait WithRelativityRef {
     fn relativity_ref(&self) -> &Relativity;
 }
@@ -147,40 +136,45 @@ pub(crate) trait _WithRelativityMut {
     fn relativity_mut(&mut self) -> &mut Relativity;
 }
 
+#[enum_dispatch]
 pub(crate) trait WithNumericValue {
-    type ValueT: NumIntervalValue; // RRRRR
+    type ValueT: NumIntervalValue;
     fn get_numeric_value(&self) -> Self::ValueT;
 }
 
-#[allow(unused)]
-pub(crate) trait WithNumericValueClamped: WithNumericValue /*+ WithNumInterval*/ {
-    fn get_numeric_value_clamped(&self) -> <Self as WithNumericValue>::ValueT;
-}
+// #[allow(unused)]
+// pub(crate) trait WithNumericValueClamped: WithNumericValue /*+ WithNumInterval*/ {
+//     fn get_numeric_value_clamped(&self) -> <Self as WithNumericValue>::ValueT;
+// }
 
-#[allow(unused)]
-pub(crate) trait WithNumericValueClampedPredicated: WithNumericValue /*+ WithNumInterval*/ {
-    type PredicationParamsT;
-    fn get_numeric_value_clamped_predicated(
-        &self,
-        params: Self::PredicationParamsT,
-    ) -> <Self as WithNumericValue>::ValueT;
-}
+// #[allow(unused)]
+// pub(crate) trait WithNumericValueClampedPredicated: WithNumericValue /*+ WithNumInterval*/ {
+//     type PredicationParamsT;
+//     fn get_numeric_value_clamped_predicated(
+//         &self,
+//         params: Self::PredicationParamsT,
+//     ) -> <Self as WithNumericValue>::ValueT;
+// }
 
 /// This trait sets a numeric value within configuration tree/transformation state cache.
 /// NB: It does not actually write to any devices!
+#[enum_dispatch]
 pub(crate) trait WithNumericValueSettable: WithNumericValue {
     fn set_numeric_value(&self, value: Self::ValueT);
 }
 
+#[enum_dispatch]
 pub(crate) trait WithNumInterval: WithNumericValue {
     fn get_interval(&self) -> NumInterval<Self::ValueT>;
 }
 
+#[enum_dispatch]
 pub(crate) trait WithNumIntervalMut: WithNumericValue {
     fn interval_mut(&mut self) -> &mut NumInterval<Self::ValueT>;
 }
 
 //--------------------------------------------------
+#[enum_dispatch]
 pub(crate) trait WithNumIntervalSettable: WithNumInterval {
     fn set_interval(&mut self, interval: NumInterval<Self::ValueT>);
 }
@@ -335,11 +329,11 @@ impl PartialOrd for VariableRef {
 }
 
 // -------------------------------------------------
-#[allow(unused)]
-pub(crate) type DeviceControlMatcherKey<'k> = (&'k str, &'k str);
-pub(crate) trait WithDeviceControlMatcherKey {
-    fn _get_device_control_matcher_key(&self) -> Option<DeviceControlMatcherKey<'_>>;
-}
+// #[allow(unused)]
+// pub(crate) type DeviceControlMatcherKey<'k> = (&'k str, &'k str);
+// pub(crate) trait WithDeviceControlMatcherKey {
+//     fn _get_device_control_matcher_key(&self) -> Option<DeviceControlMatcherKey<'_>>;
+// }
 
 pub(crate) trait WithDeviceControlMatcherRef {
     fn get_device_control_matcher_ref(&self) -> Option<&DeviceControlMatcherRef>;
@@ -637,15 +631,15 @@ pub(crate) enum ValueSrcs {
     Dynamic(#[garde(skip)] DynValueRefs),
 }
 
-impl WithDeviceControlMatcherKey for ValueSrcs {
-    fn _get_device_control_matcher_key(&self) -> Option<DeviceControlMatcherKey<'_>> {
-        if let Self::Dynamic(DynValueRefs::DeviceControlMatcher(d)) = self {
-            Some((&d.device_matcher_key, &d.control_matcher_key))
-        } else {
-            None
-        }
-    }
-}
+// impl WithDeviceControlMatcherKey for ValueSrcs {
+//     fn _get_device_control_matcher_key(&self) -> Option<DeviceControlMatcherKey<'_>> {
+//         if let Self::Dynamic(DynValueRefs::DeviceControlMatcher(d)) = self {
+//             Some((&d.device_matcher_key, &d.control_matcher_key))
+//         } else {
+//             None
+//         }
+//     }
+// }
 
 impl PortInnerIface for ValueSrcs {
     fn port_inner_identity(&self) -> String {
@@ -661,14 +655,6 @@ impl PortInnerIface for ValueSrcs {
 
     fn port_inner_is_static(&self) -> bool {
         self.is_static()
-    }
-
-    fn port_inner_get_device_control_matcher_key(&self) -> Option<(&str, &str)> {
-        if let Self::Dynamic(DynValueRefs::DeviceControlMatcher(dcm)) = self {
-            Some((&dcm.device_matcher_key, &dcm.control_matcher_key))
-        } else {
-            None
-        }
     }
 }
 
@@ -1012,6 +998,141 @@ pub(crate) enum ValueDsts {
     Void(Option<bool>),
 }
 
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize)]
+#[serde(from = "BaseNumT", into = "BaseNumT")]
+pub(crate) struct XrcSink(#[schemars(with = "BaseNumT")] pub(crate) Arc<CachePadded<BaseAtomicT>>);
+
+impl WithNumericValue for XrcSink {
+    type ValueT = BaseNumT;
+
+    fn get_numeric_value(&self) -> Self::ValueT {
+        self.0.as_ref().load(Relaxed)
+    }
+}
+
+impl WithNumericValueSettable for XrcSink {
+    fn set_numeric_value(&self, value: Self::ValueT) {
+        self.0.as_ref().store(value, Relaxed);
+    }
+}
+
+impl WithNumInterval for XrcSink {
+    fn get_interval(&self) -> NumInterval<Self::ValueT> {
+        XRC_SINK_VALUE_INTERVAL
+    }
+}
+
+impl From<XrcSink> for BaseNumT {
+    fn from(value: XrcSink) -> Self {
+        value.get_numeric_value()
+    }
+}
+
+impl From<BaseNumT> for XrcSink {
+    fn from(value: BaseNumT) -> Self {
+        Self(Arc::new(CachePadded::new(BaseAtomicT::from(value))))
+    }
+}
+
+impl PartialOrd for XrcSink {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.get_numeric_value().partial_cmp(&other.get_numeric_value())
+    }
+}
+
+impl PartialEq for XrcSink {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl Default for XrcSink {
+    fn default() -> Self {
+        Self(Arc::new(CachePadded::new(0.0.into())))
+    }
+}
+
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd, TraversableMut, Traversable)]
+#[serde(untagged)]
+
+pub(crate) enum ValueXrcs {
+    #[traverse(skip)]
+    Sink(#[serde(skip)] XrcSink),
+    Dynamic(DynValueRefs),
+}
+
+impl WithNumericValue for ValueXrcs {
+    type ValueT = <DynValueRefs as WithNumericValue>::ValueT;
+
+    fn get_numeric_value(&self) -> Self::ValueT {
+        match self {
+            Self::Dynamic(d) => d.get_numeric_value(),
+            Self::Sink(v) => v.get_numeric_value(),
+        }
+    }
+}
+impl WithNumericValueSettable for ValueXrcs {
+    fn set_numeric_value(&self, value: Self::ValueT) {
+        match self {
+            Self::Dynamic(d) => d.set_numeric_value(value),
+            Self::Sink(s) => s.set_numeric_value(value),
+        }
+    }
+}
+impl WithNumInterval for ValueXrcs {
+    fn get_interval(&self) -> NumInterval<Self::ValueT> {
+        match self {
+            Self::Dynamic(d) => d.get_interval(),
+            Self::Sink(s) => s.get_interval(),
+        }
+    }
+}
+impl WithNumIntervalSettable for ValueXrcs {
+    fn set_interval(&mut self, interval: NumInterval<Self::ValueT>) {
+        match self {
+            Self::Dynamic(_) => log::error!("Can't set interval on a sink dynamic value ref."),
+            Self::Sink(s) => log::error!(
+                "Can't set interval other than the default one {} on a xrc sink value.",
+                s.get_interval()
+            ),
+        }
+    }
+}
+
+impl Default for ValueXrcs {
+    fn default() -> Self {
+        Self::Sink(Default::default())
+    }
+}
+
+impl PortInnerIface for ValueXrcs {
+    fn port_inner_identity(&self) -> String {
+        match self {
+            Self::Dynamic(d) => d.to_string(),
+            Self::Sink(_) => "XRC(sink value)".into(),
+        }
+    }
+
+    fn port_inner_is_static(&self) -> bool {
+        false
+    }
+}
+
+impl WithDeviceControlMatcherRef for ValueXrcs {
+    fn get_device_control_matcher_ref(&self) -> Option<&DeviceControlMatcherRef> {
+        match self {
+            Self::Dynamic(d) => d.get_device_control_matcher_ref(),
+            Self::Sink(xrc_sink) => None,
+        }
+    }
+}
+
+impl WithNumericValueSanitizerStatic for ValueXrcs {
+    fn sanitize_numeric_value_static(value: Self::ValueT) -> Self::ValueT {
+        value
+    }
+}
+
 impl Default for ValueDsts {
     fn default() -> Self {
         Self::Void(None)
@@ -1030,43 +1151,42 @@ impl From<DynValueRefs> for ValueSrcs {
     }
 }
 
-impl TryFrom<ValueTargets> for ValueDsts {
-    type Error = String;
-
-    fn try_from(value: ValueTargets) -> Result<Self, Self::Error> {
+impl From<ValueXrcs> for ValueDsts {
+    fn from(value: ValueXrcs) -> Self {
         match value {
-            ValueTargets::Src(s) => match s {
-                ValueSrcs::Static(_) => Err("Can't convert from a static source value target to a detination".into()),
-                ValueSrcs::Dynamic(d) => Ok(ValueDsts::Dynamic(d)),
-            },
-            ValueTargets::Dst(d) => Ok(d),
+            ValueXrcs::Dynamic(d) => ValueDsts::Dynamic(d),
+            ValueXrcs::Sink(_) => ValueDsts::Void(None),
         }
     }
 }
 
-impl TryFrom<ValueTargets> for ValueSrcs {
-    type Error = String;
+impl From<XrcSink> for StaticValueCfg {
+    fn from(value: XrcSink) -> Self {
+        Self {
+            value: value.get_numeric_value().into(),
+            interval: AutoOrManual::Auto(value.get_interval()),
+        }
+    }
+}
 
-    fn try_from(value: ValueTargets) -> Result<Self, Self::Error> {
+impl From<ValueXrcs> for ValueSrcs {
+    fn from(value: ValueXrcs) -> Self {
         match value {
-            ValueTargets::Src(s) => Ok(s),
-            ValueTargets::Dst(d) => match d {
-                ValueDsts::Dynamic(d) => Ok(ValueSrcs::Dynamic(d)),
-                ValueDsts::Void(_) => Err("Can't convert from a stvoidatic source value target to a source".into()),
-            },
+            ValueXrcs::Dynamic(d) => ValueSrcs::Dynamic(d),
+            ValueXrcs::Sink(x) => ValueSrcs::Static(x.into()),
         }
     }
 }
 
-impl WithDeviceControlMatcherKey for ValueDsts {
-    fn _get_device_control_matcher_key(&self) -> Option<DeviceControlMatcherKey<'_>> {
-        if let Self::Dynamic(DynValueRefs::DeviceControlMatcher(d)) = self {
-            Some((&d.device_matcher_key, &d.control_matcher_key))
-        } else {
-            None
-        }
-    }
-}
+// impl WithDeviceControlMatcherKey for ValueDsts {
+//     fn _get_device_control_matcher_key(&self) -> Option<DeviceControlMatcherKey<'_>> {
+//         if let Self::Dynamic(DynValueRefs::DeviceControlMatcher(d)) = self {
+//             Some((&d.device_matcher_key, &d.control_matcher_key))
+//         } else {
+//             None
+//         }
+//     }
+// }
 
 impl PortInnerIface for ValueDsts {
     fn port_inner_identity(&self) -> String {
@@ -1082,14 +1202,6 @@ impl PortInnerIface for ValueDsts {
 
     fn port_inner_is_static(&self) -> bool {
         matches!(self, Self::Void(..))
-    }
-
-    fn port_inner_get_device_control_matcher_key(&self) -> Option<(&str, &str)> {
-        if let Self::Dynamic(DynValueRefs::DeviceControlMatcher(dcm)) = self {
-            Some((&dcm.device_matcher_key, &dcm.control_matcher_key))
-        } else {
-            None
-        }
     }
 }
 
@@ -1224,7 +1336,7 @@ impl std::hash::Hash for ValueDsts {
 pub(crate) enum ValueTargets {
     Src(ValueSrcs),
     Dst(ValueDsts),
-    // TODO: Xrc(DynValueRefs),
+    Xrc(ValueXrcs),
 }
 
 impl TryFrom<ValueTargets> for DynValueRefs {
@@ -1382,6 +1494,12 @@ impl WithNumIntervalSanitizerStatic for ValueSrcs {
     }
 }
 
+impl WithNumIntervalSanitizerStatic for ValueXrcs {
+    fn sanitize_interval_static(interval: NumInterval<Self::ValueT>) -> NumInterval<Self::ValueT> {
+        interval
+    }
+}
+
 impl WithNumericValueSanitizerStatic for ValueDsts {
     fn sanitize_numeric_value_static(value: Self::ValueT) -> Self::ValueT {
         value
@@ -1393,3 +1511,96 @@ impl WithNumIntervalSanitizerStatic for ValueDsts {
         interval
     }
 }
+
+impl From<ValueTargets> for ValueXrcs {
+    fn from(value: ValueTargets) -> Self {
+        match value {
+            ValueTargets::Src(s) => match s {
+                ValueSrcs::Static(s) => Self::Sink(XrcSink::from(s.value.get())),
+                ValueSrcs::Dynamic(d) => Self::Dynamic(d),
+            },
+            ValueTargets::Dst(d) => match d {
+                ValueDsts::Dynamic(d) => Self::Dynamic(d),
+                ValueDsts::Void(_) => Self::Sink(Default::default()),
+            },
+            ValueTargets::Xrc(x) => x,
+        }
+    }
+}
+impl From<ValueTargets> for ValueSrcs {
+    fn from(value: ValueTargets) -> Self {
+        match value {
+            ValueTargets::Src(s) => s,
+            ValueTargets::Dst(d) => match d {
+                ValueDsts::Dynamic(d) => d.into(),
+                ValueDsts::Void(_) => Self::Static(Default::default()),
+            },
+            ValueTargets::Xrc(x) => match x {
+                ValueXrcs::Sink(_) => Self::Static(Default::default()),
+                ValueXrcs::Dynamic(d) => Self::Dynamic(d),
+            },
+        }
+    }
+}
+impl From<ValueTargets> for ValueDsts {
+    fn from(value: ValueTargets) -> Self {
+        match value {
+            ValueTargets::Src(s) => match s {
+                ValueSrcs::Static(s) => Self::Void(None),
+                ValueSrcs::Dynamic(d) => Self::Dynamic(d),
+            },
+            ValueTargets::Dst(d) => d,
+            ValueTargets::Xrc(x) => match x {
+                ValueXrcs::Sink(_) => Self::Void(None),
+                ValueXrcs::Dynamic(d) => Self::Dynamic(d),
+            },
+        }
+    }
+}
+
+// impl TryFrom<ValueTargets> for ValueXrcs {
+//     type Error = String;
+//     fn try_from(value: ValueTargets) -> Result<Self, Self::Error> {
+//         match value {
+//             ValueTargets::Src(s) => match s {
+//                 ValueSrcs::Static(s) => Err("Can't convert a static value to a source-destination".into()),
+//                 ValueSrcs::Dynamic(d) => Ok(Self::Dynamic(d)),
+//             },
+//             ValueTargets::Dst(d) => match d {
+//                 ValueDsts::Dynamic(d) => Ok(Self::Dynamic(d)),
+//                 ValueDsts::Void(_) => Err("Can't convert void to a source-detination".into()),
+//             },
+//             ValueTargets::Xrc(x) => Ok(x),
+//         }
+//     }
+// }
+
+// impl TryFrom<ValueTargets> for ValueDsts {
+//     type Error = String;
+
+//     fn try_from(value: ValueTargets) -> Result<Self, Self::Error> {
+//         match value {
+//             ValueTargets::Src(s) => match s {
+//                 ValueSrcs::Static(_) => Err("Can't convert from a static source value target to a detination".into()),
+//                 ValueSrcs::Dynamic(d) => Ok(ValueDsts::Dynamic(d)),
+//             },
+//             ValueTargets::Dst(d) => Ok(d),
+//             ValueTargets::Xrc(x) => Ok(x.into()),
+//         }
+//     }
+// }
+
+// impl TryFrom<ValueTargets> for ValueSrcs {
+//     type Error = String;
+
+//     fn try_from(value: ValueTargets) -> Result<Self, Self::Error> {
+//         match value {
+//             ValueTargets::Src(s) => Ok(s),
+//             ValueTargets::Dst(d) => match d {
+//                 ValueDsts::Dynamic(d) => Ok(ValueSrcs::Dynamic(d)),
+//                 ValueDsts::Void(_) => Err("Can't convert from a stvoidatic source value target to a source".into()),
+//             },
+//             ValueTargets::Xrc(x) => Ok(x.into()),
+//         }
+//     }
+// }

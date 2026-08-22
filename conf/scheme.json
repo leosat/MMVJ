@@ -1588,7 +1588,7 @@
               "type": "boolean"
             },
             "value": {
-              "$ref": "#/$defs/ValueDsts"
+              "$ref": "#/$defs/ValueXrcs"
             }
           },
           "required": [
@@ -1596,9 +1596,25 @@
           ]
         },
         {
-          "$ref": "#/$defs/ValueDsts"
+          "$ref": "#/$defs/ValueXrcs"
         }
       ]
+    },
+    "ValueXrcs": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/XrcSink",
+          "readOnly": true,
+          "writeOnly": true
+        },
+        {
+          "$ref": "#/$defs/DynValueRefs"
+        }
+      ]
+    },
+    "XrcSink": {
+      "type": "number",
+      "format": "float"
     },
     "ForceFeedbackCfg": {
       "description": "Force-feedback configuration for the steering transform.\n\nControls how FFB forces from the game (read via the virtual HID device)\nare filtered, scaled, and applied as positional offsets to the emulated\nsteering wheel.",
@@ -1993,7 +2009,7 @@
           "description": "Auxiliary data **destinations** writable from the script via\n`write(\"<key>\", value)` or `write(<1-based index>, value)`.\n\nAccepts a YAML **map** or a **list**, same as [`aux_srcs`](Self::aux_srcs).\n\nYAML alias: `destinations`.",
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/$defs/ValuePort"
+            "$ref": "#/$defs/ValuePort3"
           }
         },
         "aux_transformations": {
@@ -2050,6 +2066,37 @@
         },
         {
           "$ref": "#/$defs/ValueSrcs"
+        }
+      ]
+    },
+    "ValuePort3": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "remap": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NumInterval"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "triggers_mapping": {
+              "type": "boolean"
+            },
+            "value": {
+              "$ref": "#/$defs/ValueDsts"
+            }
+          },
+          "required": [
+            "value"
+          ]
+        },
+        {
+          "$ref": "#/$defs/ValueDsts"
         }
       ]
     },

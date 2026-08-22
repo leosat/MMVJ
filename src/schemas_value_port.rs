@@ -5,11 +5,10 @@ use crate::schemas_value::{ValueTargets, WithDeviceControlMatcherRef};
 use crate::tfm_exec::TfmExecCtx;
 use crate::{
     config::WithSelfSanitize,
-    schemas_value::{
-        WithDeviceControlMatcherKey, WithNumInterval, WithNumIntervalSettable, WithNumericValueSettable, WithRelativity,
-    },
+    schemas_value::{WithNumInterval, WithNumIntervalSettable, WithNumericValueSettable, WithRelativity},
 };
 use crate::{relativity::Relativity, schemas_value::WithNumericValue};
+use enum_dispatch::enum_dispatch;
 use garde::rules::range::Bounds;
 use num_traits::ToPrimitive;
 use schemars::JsonSchema;
@@ -71,7 +70,7 @@ pub(crate) trait PortInnerIface:
     + PartialEq
     + PartialOrd
     + JsonSchema
-    + WithDeviceControlMatcherKey
+    // + WithDeviceControlMatcherKey
     + WithDeviceControlMatcherRef
     + WithNumInterval
     + WithNumIntervalSettable
@@ -83,8 +82,6 @@ pub(crate) trait PortInnerIface:
 {
     fn port_inner_identity(&self) -> String;
     fn port_inner_is_static(&self) -> bool;
-    #[allow(unused)]
-    fn port_inner_get_device_control_matcher_key(&self) -> Option<(&str, &str)>;
 }
 
 // ---------------------------------
@@ -535,6 +532,7 @@ pub(crate) trait _WithRelativitySanitizerStatic: WithRelativity {
     fn sanitize_relativity_static(rel: Relativity) -> Relativity;
 }
 
+#[enum_dispatch]
 pub(crate) trait WithNumericValueSanitizerStatic: WithNumericValue {
     fn sanitize_numeric_value_static(value: Self::ValueT) -> Self::ValueT;
     fn get_value_sanitizer_policy_doc_str() -> &'static str {
@@ -633,12 +631,11 @@ macro_rules! make_port_inner_nutype {
             }
         }
 
-
-        impl crate::schemas_value::WithDeviceControlMatcherKey for  $name  {
-            fn _get_device_control_matcher_key(&self) -> Option<crate::schemas_value::DeviceControlMatcherKey<'_>> {
-                self.as_ref()._get_device_control_matcher_key()
-            }
-        }
+        // impl crate::schemas_value::WithDeviceControlMatcherKey for  $name  {
+        //     fn _get_device_control_matcher_key(&self) -> Option<crate::schemas_value::DeviceControlMatcherKey<'_>> {
+        //         self.as_ref()._get_device_control_matcher_key()
+        //     }
+        // }
 
         impl crate::schemas_value::WithDeviceControlMatcherRef for $name {
             fn get_device_control_matcher_ref(&self) -> Option<&crate::schemas_value::DeviceControlMatcherRef> {
@@ -646,11 +643,17 @@ macro_rules! make_port_inner_nutype {
             }
         }
 
-      impl ::core::convert::TryFrom<crate::schemas_value::ValueTargets> for $name  {
-            type Error = String;
+        // impl ::core::convert::TryFrom<crate::schemas_value::ValueTargets> for $name  {
+        //     type Error = String;
 
-            fn try_from(value: crate::schemas_value::ValueTargets) -> Result<Self, Self::Error> {
-                $inner::try_from(value).and_then(|v| Ok(v.into()))
+        //     fn try_from(value: crate::schemas_value::ValueTargets) -> Result<Self, Self::Error> {
+        //         $inner::try_from(value).and_then(|v| Ok(v.into()))
+        //     }
+        // }
+
+        impl ::core::convert::From<crate::schemas_value::ValueTargets> for $name  {
+            fn from(value: crate::schemas_value::ValueTargets) -> Self {
+                $name::new($inner::from(value))
             }
         }
 
@@ -660,9 +663,6 @@ macro_rules! make_port_inner_nutype {
             }
             fn port_inner_is_static(&self) -> bool {
                 self.as_ref().is_static()
-            }
-            fn port_inner_get_device_control_matcher_key(&self) -> std::option::Option<(&str, &str)> {
-                self.as_ref().port_inner_get_device_control_matcher_key()
             }
         }
 
@@ -759,12 +759,10 @@ macro_rules! make_input_port_inner_nutype {
 
         impl<'s> crate::gui_common::DrawEgui<'s> for $name {
             type In = crate::gui_value::GuiInValue<'s>;
-            type Out = bool;
+            type Out = Option<crate::gui_common::GuiCmd>;
 
             fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
-                let mut changed = false;
-                changed |= crate::gui_value::draw_egui_for_a_value(self, gui_in, ui);
-                changed
+                crate::gui_value::draw_egui_for_a_value(self, gui_in, ui)
             }
         }
     };
