@@ -1587,12 +1587,12 @@
             "triggers_mapping": {
               "type": "boolean"
             },
-            "target": {
+            "value": {
               "$ref": "#/$defs/ValueDsts"
             }
           },
           "required": [
-            "target"
+            "value"
           ]
         },
         {
@@ -1986,14 +1986,14 @@
           "description": "Auxiliary data **sources** readable from the script via\n`read(\"<key>\")` or `read(<1-based index>)`.\n\nAccepts a YAML **map** (explicit string keys) or a **list**\n(auto-numbered `\"1\"`, `\"2\"`, …).\n\nYAML alias: `sources`.",
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/$defs/ScriptSourceCfg"
+            "$ref": "#/$defs/ValuePort2"
           }
         },
         "aux_dsts": {
           "description": "Auxiliary data **destinations** writable from the script via\n`write(\"<key>\", value)` or `write(<1-based index>, value)`.\n\nAccepts a YAML **map** or a **list**, same as [`aux_srcs`](Self::aux_srcs).\n\nYAML alias: `destinations`.",
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/$defs/ScriptDestinationCfg"
+            "$ref": "#/$defs/ValuePort"
           }
         },
         "aux_transformations": {
@@ -2022,49 +2022,36 @@
         "Abs"
       ]
     },
-    "ScriptSourceCfg": {
-      "description": "A single auxiliary data source entry within [`ScriptCfg::aux_srcs`].\n\nBinds an external value (variable, device control, or static number)\nto a key that the script references via `read()`.",
-      "type": "object",
-      "properties": {
-        "remap_to_interval": {
-          "description": "When set, the raw value read from [`source`](Self::source) is\n**remapped** from the source's native interval to this interval\nbefore the script sees it.\n\nExample: a force-feedback axis with native range \\[-32768, 32767\\]\nand `remap_to_interval: [-1.0, 1.0]` yields a normalized value\nin \\[-1, +1\\].\n\nWhen `None`, the raw value is passed through as-is.",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/NumInterval"
+    "ValuePort2": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "remap": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NumInterval"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
-            {
-              "type": "null"
+            "triggers_mapping": {
+              "type": "boolean"
+            },
+            "value": {
+              "$ref": "#/$defs/ValueSrcs"
             }
+          },
+          "required": [
+            "value"
           ]
         },
-        "source": {
-          "description": "The data source to read from.\n\nAccepts any valid `ValueSrc`:\n- Device control: `{ dev: <device>, ctl: <control> }`\n- Variable: `{ var: <name> }`\n- Static value: `{ value: <number>, range: [from, to] }`",
-          "$ref": "#/$defs/ValueSrcs",
-          "default": 0.0
+        {
+          "$ref": "#/$defs/ValueSrcs"
         }
-      }
-    },
-    "ScriptDestinationCfg": {
-      "description": "A single auxiliary data destination entry within [`ScriptCfg::aux_dsts`].\n\nBinds an external target (variable or device control) to a key that\nthe script references via `write()`.",
-      "type": "object",
-      "properties": {
-        "remap_from_interval": {
-          "description": "When set, the value written by the script is **remapped** from\nthis interval to the destination's native interval before being\nstored.\n\nExample: script output in \\[-100, 100\\] with\n`remap_from_interval: [-100.0, 100.0]` and a destination\nvariable range of \\[-14000, 14000\\] scales automatically.\n\nWhen `None`, the value is written as-is.",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/NumInterval"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "destination": {
-          "description": "The target to write to.\n\nAccepts any valid `ValueDst`:\n- Device control: `{ dev: <device>, ctl: <control> }`\n- Variable: `{ var: <name> }`\n- `null` — void destination (writes silently discarded).",
-          "$ref": "#/$defs/ValueDsts",
-          "default": null
-        }
-      }
+      ]
     },
     "TfmSeqFull": {
       "type": "object",

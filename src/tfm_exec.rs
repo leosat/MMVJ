@@ -21,8 +21,6 @@ use crate::schemas_transform::{
 };
 
 use crate::schemas_value::DeviceControlMatcherRef;
-use crate::schemas_value::WithDeviceControlMatcherRef;
-use crate::schemas_value::WithNumericValueSettable;
 use crate::schemas_value::{DynValueRefs, ValueDsts, WithNumInterval, WithRelativity};
 use crate::schemas_value::{TfmValue, WithNumericValue};
 
@@ -681,16 +679,7 @@ impl WithTfmExec for ScriptCfg {
                                 SrcOrDstKey::Num(0) => Ok(input.value),
                                 SrcOrDstKey::Str(s) => {
                                     if let Some(src) = self.aux_srcs.get(&s) {
-                                        let raw = src.source.get_numeric_value();
-                                        Ok(if let Some(remap_interval) = src.remap_to_interval {
-                                            remap_interval.map_from(
-                                                raw,
-                                                &src.source.get_interval(),
-                                                OutOfRangePolicy::Clamp,
-                                            )
-                                        } else {
-                                            raw
-                                        })
+                                        Ok(src.get_numeric_value())
                                     } else {
                                         Err(mlua::Error::RuntimeError(format!("Can't find source with key {s}")))
                                     }
@@ -699,18 +688,7 @@ impl WithTfmExec for ScriptCfg {
                                     .aux_srcs
                                     .iter()
                                     .nth(n as usize - 1)
-                                    .map(|v| {
-                                        let raw = v.1.source.get_numeric_value();
-                                        if let Some(remap_interval) = v.1.remap_to_interval {
-                                            remap_interval.map_from(
-                                                raw,
-                                                &v.1.source.get_interval(),
-                                                OutOfRangePolicy::Clamp,
-                                            )
-                                        } else {
-                                            raw
-                                        }
-                                    })
+                                    .map(|v| v.1.get_numeric_value())
                                     .ok_or_else(|| {
                                         mlua::Error::RuntimeError(format!("Can't find source with key {n}"))
                                     }),
@@ -721,7 +699,7 @@ impl WithTfmExec for ScriptCfg {
                     let write_dst_closure = {
                         let input_ref = &mut input.value;
                         move |_lua: &mlua::Lua,
-                              (key, mut value): (SrcOrDstKey, BaseNumT)|
+                              (key, value): (SrcOrDstKey, BaseNumT)|
                               -> std::result::Result<(), mlua::Error> {
                             match key {
                                 SrcOrDstKey::Num(0) => {
@@ -730,10 +708,7 @@ impl WithTfmExec for ScriptCfg {
                                 }
                                 SrcOrDstKey::Str(key) => {
                                     if let Some(dst) = self.aux_dsts.get(&key) {
-                                        dst.destination.set_numeric_value(value);
-                                        if let Some(d) = dst.destination.get_device_control_matcher_ref() {
-                                            ctx.device_control_matcher_ref_write(d, value);
-                                        }
+                                        dst.port_set_numeric_value_and_flush_to_devices(value, ctx);
                                         Ok(())
                                     } else {
                                         Err(mlua::Error::RuntimeError(format!(
@@ -745,22 +720,7 @@ impl WithTfmExec for ScriptCfg {
                                     .aux_dsts
                                     .iter()
                                     .nth(n as usize - 1)
-                                    .map(|v| match v.1.destination {
-                                        ValueDsts::Dynamic(ref d) => {
-                                            if let Some(remap_interval) = v.1.remap_from_interval {
-                                                value = v.1.destination.get_interval().map_from(
-                                                    value,
-                                                    &remap_interval,
-                                                    OutOfRangePolicy::Clamp,
-                                                )
-                                            }
-                                            d.set_numeric_value(value);
-                                            if let Some(dcm) = d.get_device_control_matcher_ref() {
-                                                ctx.device_control_matcher_ref_write(dcm, value);
-                                            }
-                                        }
-                                        ValueDsts::Void(..) => {}
-                                    })
+                                    .map(|v| v.1.port_set_numeric_value_and_flush_to_devices(value, ctx))
                                     .ok_or_else(|| {
                                         mlua::Error::RuntimeError(format!("Can't find destination with key {n}"))
                                     }),
