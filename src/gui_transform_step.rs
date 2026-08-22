@@ -18,12 +18,9 @@ use crate::schemas_cfg::{DevicesCfgNew, VariablesCfg};
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_transform::*;
 use crate::schemas_value::AutoOrManual;
-use crate::schemas_value::DynValueRefs;
 use crate::schemas_value::ValueDsts;
-use crate::schemas_value::ValueTargets;
 use crate::schemas_value::{DescriptionCfg, StaticValueCfg, TfmValue, ValueSrcs, WithDescriptionMut, WithNumericValue};
 use crate::tracing::GraphDisplayStyle;
-// use documented::{Documented, DocumentedFields};
 use egui::text::LayoutJob;
 use egui::{Button, CollapsingHeader, FontId, Sense, TextFormat, WidgetText};
 use std::collections::HashMap;
@@ -1537,64 +1534,56 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                                         }
                                     })
                                     .body(|ui| {
-                                        ui.horizontal(|ui| match aux_kind {
-                                            ScriptAuxKind::Source => {
-                                                if let Some(src) = self.aux_srcs.get_mut(name) {
-                                                    let window_title = format!("Choose script input {} ", name);
-                                                    *gui_out_mut = gui_out_mut.clone().or_else(|| {
-                                                        draw_egui_script_src_or_dest(
-                                                            &mut ScriptSourceOrDestinationMut::Src(src),
-                                                            ScriptCfgSourceOrDestinationGuiIn {
-                                                                item_idx: idx,
-                                                                a_value_gui_in: GuiInValue::Edit(
-                                                                    GuiInValueEditParams {
-                                                                        name: &window_title,
-                                                                        choice_case: ValueUsageContext::TfmStepAuxSrc,
-                                                                        allow_interval_edit: true,
-                                                                        slider_log_scale: false,
-                                                                        cfg_variables: gui_in.2,
-                                                                        cfg_devices: gui_in.3,
-                                                                    },
-                                                                ),
-                                                            },
+                                        ui.group(|ui| {
+                                            ui.horizontal(|ui| match aux_kind {
+                                                ScriptAuxKind::Source => {
+                                                    if let Some(src) = self.aux_srcs.get_mut(name) {
+                                                        let window_title = format!("Choose script input {} ", name);
+                                                        if src.egui(
+                                                            GuiInValue::Edit(GuiInValueEditParams {
+                                                                name: &window_title,
+                                                                choice_case: ValueUsageContext::TfmStepAuxSrc,
+                                                                allow_interval_edit: true,
+                                                                slider_log_scale: false,
+                                                                cfg_variables: gui_in.2,
+                                                                cfg_devices: gui_in.3,
+                                                            }),
                                                             ui,
-                                                        )
-                                                    });
+                                                        ) {
+                                                            changed_settings_general = true;
+                                                        }
+                                                    }
                                                 }
-                                            }
-                                            ScriptAuxKind::Destination => {
-                                                if let Some(dst) = self.aux_dsts.get_mut(name) {
-                                                    let window_title = format!("Choose script output {} ", name);
-                                                    *gui_out_mut =
-                                                        gui_out_mut.clone().or(draw_egui_script_src_or_dest(
-                                                            &mut ScriptSourceOrDestinationMut::Dst(dst),
-                                                            ScriptCfgSourceOrDestinationGuiIn {
-                                                                item_idx: idx,
-                                                                a_value_gui_in: GuiInValue::Edit(
-                                                                    GuiInValueEditParams {
-                                                                        name: &window_title,
-                                                                        choice_case: ValueUsageContext::TfmStepAuxDst,
-                                                                        allow_interval_edit: true,
-                                                                        slider_log_scale: false,
-                                                                        cfg_variables: gui_in.2,
-                                                                        cfg_devices: gui_in.3,
-                                                                    },
-                                                                ),
-                                                            },
+                                                ScriptAuxKind::Destination => {
+                                                    if let Some(dst) = self.aux_dsts.get_mut(name) {
+                                                        let window_title = format!("Choose script output {} ", name);
+                                                        if dst.egui(
+                                                            GuiInValue::Edit(GuiInValueEditParams {
+                                                                name: &window_title,
+                                                                choice_case: ValueUsageContext::TfmStepAuxDst,
+                                                                allow_interval_edit: true,
+                                                                slider_log_scale: false,
+                                                                cfg_variables: gui_in.2,
+                                                                cfg_devices: gui_in.3,
+                                                            }),
                                                             ui,
-                                                        ));
+                                                        ) {
+                                                            changed_settings_general = true;
+                                                        }
+                                                    }
                                                 }
-                                            }
-                                            ScriptAuxKind::Transformation => {
-                                                if let Some(tfm) = self.aux_transformations.get_mut(name) {
-                                                    ui.push_id(idx, |ui| {
-                                                        ui.vertical(|ui| {
-                                                            *gui_out_mut =
-                                                                gui_out_mut.clone().or(tfm.egui(gui_in.1.clone(), ui));
+                                                ScriptAuxKind::Transformation => {
+                                                    if let Some(tfm) = self.aux_transformations.get_mut(name) {
+                                                        ui.push_id(idx, |ui| {
+                                                            ui.vertical(|ui| {
+                                                                *gui_out_mut = gui_out_mut
+                                                                    .clone()
+                                                                    .or(tfm.egui(gui_in.1.clone(), ui));
+                                                            });
                                                         });
-                                                    });
+                                                    }
                                                 }
-                                            }
+                                            });
                                         });
                                     });
                                 }
@@ -1703,107 +1692,6 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
 
         gui_out
     }
-}
-
-pub(super) struct ScriptCfgSourceOrDestinationGuiIn<'s> {
-    item_idx: usize,
-    a_value_gui_in: GuiInValue<'s>,
-}
-
-enum ScriptSourceOrDestinationMut<'s> {
-    Src(&'s mut ScriptSourceCfg),
-    Dst(&'s mut ScriptDestinationCfg),
-}
-
-fn draw_egui_script_src_or_dest<'s>(
-    this: &mut ScriptSourceOrDestinationMut,
-    gui_in: ScriptCfgSourceOrDestinationGuiIn<'s>,
-    ui: &mut egui::Ui,
-) -> Option<GuiCmd> {
-    let mut gui_out = None;
-    match gui_in.a_value_gui_in {
-        GuiInValue::Edit(_) => {
-            ui.push_id(gui_in.item_idx, |ui| {
-                ui.group(|ui| {
-                    ui.group(|ui| {
-                        ui.horizontal(|ui| {
-                            let mut remove_remap_interval = false;
-                            let remap_to_or_from_interval: &mut Option<NumInterval<BaseNumT>> = match this {
-                                ScriptSourceOrDestinationMut::Src(script_source_cfg) => {
-                                    &mut script_source_cfg.remap_to_interval
-                                }
-                                ScriptSourceOrDestinationMut::Dst(script_destination_cfg) => {
-                                    &mut script_destination_cfg.remap_from_interval
-                                }
-                            };
-                            {
-                                let remove_remap_interval = &mut remove_remap_interval;
-
-                                if let Some(interval) = remap_to_or_from_interval {
-                                    ui.horizontal(|ui| {
-                                        ui.label("Remapping range:");
-                                        if (interval).egui(
-                                            GuiInInterval::Edit {
-                                                max_range: HID_AXIS_MAX_RANGE,
-                                                from_label: "From: ",
-                                                to_label: "To: ",
-                                                sanitize_and_sort: true,
-                                                truncate: false,
-                                            },
-                                            ui,
-                                        ) {
-                                            gui_out = Some(GuiCmd::ConfigChangeSimple)
-                                        };
-                                        if ui
-                                            .button(egui_phosphor::bold::TRASH.to_string())
-                                            .on_hover_text("Remove remapping range")
-                                            .clicked()
-                                        {
-                                            *remove_remap_interval = true;
-                                            gui_out = Some(GuiCmd::ConfigChangeSimple)
-                                        }
-                                    });
-                                } else {
-                                    if ui
-                                        .button(egui_phosphor::bold::ALIGN_LEFT)
-                                        .on_hover_text("Define a range to remap...")
-                                        .clicked()
-                                    {
-                                        *remap_to_or_from_interval = Some(SYMM_UNIT_INTERVAL);
-                                        gui_out = Some(GuiCmd::ConfigChangeSimple)
-                                    }
-                                }
-                            }
-                            if remove_remap_interval {
-                                *remap_to_or_from_interval = None;
-                            }
-                        })
-                    });
-                    ui.group(|ui| match this {
-                        ScriptSourceOrDestinationMut::Src(script_source_cfg) => {
-                            let id = script_source_cfg.source.get_id();
-                            if script_source_cfg.source.egui(gui_in.a_value_gui_in, ui) {
-                                if script_source_cfg.source.get_id() == id {
-                                    gui_out = Some(GuiCmd::ConfigChangeSimple);
-                                } else {
-                                    gui_out = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
-                                }
-                            }
-                        }
-                        ScriptSourceOrDestinationMut::Dst(script_destination_cfg) => {
-                            if script_destination_cfg.destination.egui(gui_in.a_value_gui_in, ui) {
-                                gui_out = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
-                            }
-                        }
-                    });
-                })
-                .inner
-            })
-            .inner
-        }
-        GuiInValue::Display { .. } => {}
-    }
-    gui_out
 }
 
 impl<'s> DrawEgui<'s> for Vec<TfmSeqCfg> {

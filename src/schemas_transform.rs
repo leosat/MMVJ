@@ -11,7 +11,7 @@ use crate::schemas_value::{
     DeviceControlMatcherRef, DynValueRefs, ValueDsts, VariableRef, WithNumInterval, WithRelativityRef,
     serialize_value_src_rt_ignore_interval,
 };
-use crate::schemas_value_port::{PortRemapPolicy, PortSanPolicy, RemapPolicyDefault, SanPolicyNone, ValuePort};
+use crate::schemas_value_port::{PortRemapPolicy, SanPolicyNone, ValuePort};
 use crate::tfm_exec::{IntegrateExeState, RaiseFallExeState, ScriptExeState, SteeringExeState, TfmExeState};
 use crate::{
     num_interval::NumInterval,
@@ -2036,7 +2036,7 @@ pub(crate) struct ScriptCfg {
     #[serde(alias = "sources")]
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     #[serde(deserialize_with = "deserialize_btree_or_vec")]
-    pub(crate) aux_srcs: BTreeMap<String, ScriptSourceCfg>,
+    pub(crate) aux_srcs: BTreeMap<String, ScriptAuxSourceCfg>,
 
     /// Auxiliary data **destinations** writable from the script via
     /// `write("<key>", value)` or `write(<1-based index>, value)`.
@@ -2048,7 +2048,7 @@ pub(crate) struct ScriptCfg {
     #[serde(alias = "destinations")]
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     #[serde(deserialize_with = "deserialize_btree_or_vec")]
-    pub(crate) aux_dsts: BTreeMap<String, ScriptDestinationCfg>,
+    pub(crate) aux_dsts: BTreeMap<String, ScriptAuxDestinationCfg>,
 
     /// Named transformation **sub-pipelines** invocable from the script
     /// via `transform("<name>", value)`.
@@ -2148,65 +2148,8 @@ where
     }
 }
 
-/// A single auxiliary data source entry within [`ScriptCfg::aux_srcs`].
-///
-/// Binds an external value (variable, device control, or static number)
-/// to a key that the script references via `read()`.
-#[derive(Clone, Serialize, Deserialize, JsonSchema, Debug, TraversableMut, Traversable, Default, PartialEq)]
-#[with_doc_str]
-pub(crate) struct ScriptSourceCfg {
-    /// When set, the raw value read from [`source`](Self::source) is
-    /// **remapped** from the source's native interval to this interval
-    /// before the script sees it.
-    ///
-    /// Example: a force-feedback axis with native range \[-32768, 32767\]
-    /// and `remap_to_interval: [-1.0, 1.0]` yields a normalized value
-    /// in \[-1, +1\].
-    ///
-    /// When `None`, the raw value is passed through as-is.
-    #[traverse(skip)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) remap_to_interval: Option<NumInterval<BaseNumT>>,
-
-    /// The data source to read from.
-    ///
-    /// Accepts any valid `ValueSrc`:
-    /// - Device control: `{ dev: <device>, ctl: <control> }`
-    /// - Variable: `{ var: <name> }`
-    /// - Static value: `{ value: <number>, range: [from, to] }`
-    #[serde(default)]
-    pub(crate) source: ValueSrcs,
-}
-
-/// A single auxiliary data destination entry within [`ScriptCfg::aux_dsts`].
-///
-/// Binds an external target (variable or device control) to a key that
-/// the script references via `write()`.
-#[derive(Clone, Serialize, Deserialize, JsonSchema, Debug, TraversableMut, Traversable, Default, PartialEq)]
-#[with_doc_str]
-pub(crate) struct ScriptDestinationCfg {
-    /// When set, the value written by the script is **remapped** from
-    /// this interval to the destination's native interval before being
-    /// stored.
-    ///
-    /// Example: script output in \[-100, 100\] with
-    /// `remap_from_interval: [-100.0, 100.0]` and a destination
-    /// variable range of \[-14000, 14000\] scales automatically.
-    ///
-    /// When `None`, the value is written as-is.
-    #[traverse(skip)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) remap_from_interval: Option<NumInterval<BaseNumT>>,
-
-    /// The target to write to.
-    ///
-    /// Accepts any valid `ValueDst`:
-    /// - Device control: `{ dev: <device>, ctl: <control> }`
-    /// - Variable: `{ var: <name> }`
-    /// - `null` — void destination (writes silently discarded).
-    #[serde(default)]
-    pub(crate) destination: ValueDsts,
-}
+pub(crate) type ScriptAuxSourceCfg = ValuePort<ValueSrcs>;
+pub(crate) type ScriptAuxDestinationCfg = ValuePort<ValueDsts>;
 
 impl WithRuntimeId for TfmStepCfg {
     fn get_id(&self) -> ObjId {

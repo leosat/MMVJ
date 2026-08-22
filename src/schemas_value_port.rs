@@ -58,7 +58,7 @@ where
     RemapT: PortRemapPolicy<InnerT>,
 {
     fn get_device_control_matcher_ref(&self) -> Option<&crate::schemas_value::DeviceControlMatcherRef> {
-        self.target.get_device_control_matcher_ref()
+        self.value.get_device_control_matcher_ref()
     }
 }
 
@@ -96,12 +96,14 @@ pub(crate) trait PortInnerIface:
 enum ValuePortSerdeHelper<InnerT: PortInnerIface> {
     AsPort {
         #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(alias = "remap_from_interval", alias = "remap_to_interval")]
         remap: Option<NumInterval<InnerT::ValueT>>,
         #[serde(skip_serializing_if = "crate::schemas_common::is_false")]
         #[serde(default)]
         triggers_mapping: bool,
         //#[serde(flatten)] // Fails when inner is serialized to a single number.
-        target: InnerT,
+        #[serde(alias = "source", alias = "destination", alias = "target")]
+        value: InnerT,
     },
     AsInner(InnerT),
 }
@@ -119,11 +121,11 @@ where
             ValuePortSerdeHelper::AsPort {
                 remap,
                 triggers_mapping,
-                target,
+                value,
             } => Self {
                 remap,
                 triggers_mapping,
-                target,
+                value,
                 _san_pol: PhantomData,
                 _remap_pol: Default::default(),
             },
@@ -137,15 +139,15 @@ where
     SanT: PortSanPolicy<InnerT>,
     RemapT: PortRemapPolicy<InnerT>,
 {
-    fn from(value: ValuePort<InnerT, SanT, RemapT>) -> Self {
-        if !value.target.port_inner_is_static() {
+    fn from(port: ValuePort<InnerT, SanT, RemapT>) -> Self {
+        if !port.value.port_inner_is_static() {
             ValuePortSerdeHelper::AsPort {
-                remap: value.remap,
-                triggers_mapping: value.triggers_mapping,
-                target: value.target,
+                remap: port.remap,
+                triggers_mapping: port.triggers_mapping,
+                value: port.value,
             }
         } else {
-            ValuePortSerdeHelper::AsInner(value.target)
+            ValuePortSerdeHelper::AsInner(port.value)
         }
     }
 }
@@ -268,7 +270,7 @@ where
     #[serde(skip)]
     _remap_pol: RemapT,
     pub(super) triggers_mapping: bool,
-    pub(super) target: InnerT,
+    pub(super) value: InnerT,
     #[serde(skip)]
     pub(super) _san_pol: PhantomData<SanT>,
 }
@@ -282,7 +284,7 @@ where
     RemapT: PortRemapPolicy<InnerT>,
 {
     fn traverse<V: traversable::Visitor>(&self, visitor: &mut V) -> std::ops::ControlFlow<V::Break> {
-        self.target.traverse(visitor)
+        self.value.traverse(visitor)
     }
 }
 
@@ -293,7 +295,7 @@ where
     RemapT: PortRemapPolicy<InnerT>,
 {
     fn traverse_mut<V: traversable::VisitorMut>(&mut self, visitor: &mut V) -> std::ops::ControlFlow<V::Break> {
-        self.target.traverse_mut(visitor)
+        self.value.traverse_mut(visitor)
     }
 }
 
@@ -308,7 +310,7 @@ where
         Self {
             remap: Default::default(),
             triggers_mapping: Default::default(),
-            target: Default::default(),
+            value: Default::default(),
             _san_pol: PhantomData,
             _remap_pol: Default::default(),
         }
@@ -333,7 +335,7 @@ where
             //     None
             // },
             triggers_mapping: false,
-            target: value,
+            value,
             _san_pol: PhantomData,
             _remap_pol: Default::default(),
         }
@@ -352,11 +354,11 @@ where
         value = SanT::san_policy_sanitize_numeric_value(value);
         if let Some(remap) = RemapT::get_remap_range().or(self.remap) {
             value = self
-                .target
+                .value
                 .get_interval()
                 .map_from(value, &remap, OutOfRangePolicy::Clamp);
         }
-        self.target.set_numeric_value(value);
+        self.value.set_numeric_value(value);
     }
 }
 
@@ -368,9 +370,9 @@ where
 {
     type ValueT = <InnerT as WithNumericValue>::ValueT;
     fn get_numeric_value(&self) -> Self::ValueT {
-        let mut value = self.target.get_numeric_value();
+        let mut value = self.value.get_numeric_value();
         if let Some(remap) = RemapT::get_remap_range().or(self.remap) {
-            value = remap.map_from(value, &self.target.get_interval(), OutOfRangePolicy::Clamp);
+            value = remap.map_from(value, &self.value.get_interval(), OutOfRangePolicy::Clamp);
         }
         SanT::san_policy_sanitize_numeric_value(value)
     }
@@ -421,7 +423,7 @@ where
     }
 
     fn port_get_identity_str(&self) -> String {
-        self.target.port_inner_identity()
+        self.value.port_inner_identity()
     }
 
     fn port_set_numeric_value_and_flush_to_devices(&self, value: Self::ValueT, ctx: &impl TfmExecCtx)
@@ -459,11 +461,11 @@ where
     }
 
     fn port_inner_ref(&self) -> &Self::InnerT {
-        &self.target
+        &self.value
     }
 
     fn port_inner_mut(&mut self) -> &mut Self::InnerT {
-        &mut self.target
+        &mut self.value
     }
 }
 
@@ -675,8 +677,8 @@ macro_rules! make_port_inner_nutype {
         }
 
         impl<SanT: crate::schemas_value_port::PortSanPolicy<$name>> ::core::convert::From<ValuePort<$name, SanT>> for $name {
-            fn from(value: ValuePort<$name, SanT>) -> Self {
-                value.target
+            fn from(port: ValuePort<$name, SanT>) -> Self {
+                port.value
             }
         }
 
