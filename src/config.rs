@@ -172,21 +172,6 @@ impl Config {
         impl<'s> traversable::VisitorMut for CfgDstsAndSrcsVisitor<'s> {
             type Break = anyhow::Result<()>;
             fn enter_mut(&mut self, this: &mut dyn core::any::Any) -> std::ops::ControlFlow<Self::Break> {
-                // TODO: override static value interval using on-struct attribute!
-
-                // TODO: override static value interval using on-struct attribute!
-                if let Some(oe) = this.downcast_mut::<OneEuroFilterCfg>() {
-                    if let ValueSrcs::Static(ref mut s) = oe.min_cutoff_hz {
-                        s.interval = AutoOrManual::Auto(default_1euro_min_cutoff_hz().get_interval());
-                    }
-                    // if let ValueSrcs::Static(ref mut s) = oe.d_cutoff_hz {
-                    //     s.interval = AutoOrManual::Auto(default_1euro_d_cutoff_hz().get_interval());
-                    // }
-                    if let ValueSrcs::Static(ref mut s) = oe.beta {
-                        s.interval = AutoOrManual::Auto(default_1euro_beta().get_interval());
-                    }
-                }
-
                 if let Some(m) = this.downcast_mut::<Mapping>() {
                     self.mapping_name = Some(m.name.clone());
                 }
