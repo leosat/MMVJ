@@ -1937,21 +1937,144 @@
         },
         "beta": {
           "description": "Speed coefficient (β). Controls how much the cutoff frequency\nincreases in response to fast input movement.\n\nAdaptive cutoff formula: `cutoff = min_cutoff_hz + β · |dx̂|`\n\n- `0.0` — fixed-cutoff filter (no speed adaptation).\n- `0.001 – 0.01` — gentle adaptation (recommended starting range).\n- `0.1 – 10.0` — aggressive adaptation; near-passthrough during\n  fast sweeps, may re-introduce jitter.\n\n**Tuning heuristic:** start at `0.0`, increase until fast\nmovements feel responsive, then back off slightly.",
-          "$ref": "#/$defs/ValueSrcs",
+          "$ref": "#/$defs/ValuePort2",
           "default": 0.007000000216066837
         },
         "min_cutoff_hz": {
           "description": "Minimum cutoff frequency in Hz. The cutoff used when the input\nis stationary or moving very slowly.\n\n- `0.1 – 0.5` — very heavy smoothing at rest (strong jitter\n  suppression, noticeable lag onset).\n- `1.0` *(default)* — moderate smoothing; good starting point.\n- `5.0 – 50.0` — light smoothing; use when input is already\n  clean or minimal latency is critical.\n\nThink of this as the **noise floor** of the filter.",
-          "$ref": "#/$defs/ValueSrcs",
+          "$ref": "#/$defs/ValuePort3",
           "default": 1.0
         },
         "d_cutoff_hz": {
           "description": "Cutoff frequency in Hz for the derivative (speed) low-pass\nfilter.\n\nThe raw derivative `(x - x̂_prev) / dt` amplifies sensor jitter.\nThis secondary filter smooths the derivative so the adaptive\ncutoff does not oscillate.\n\n- `0.01 – 0.1` — very smooth derivative; stable but slow to\n  react to speed changes.\n- `1.0` *(default)* — balanced; works well for most devices.\n- `10.0 – 100.0` — barely filtered derivative; fast tracking\n  but may oscillate on noisy inputs.\n\nRarely needs adjustment from the default.",
-          "$ref": "#/$defs/ValueSrcs",
+          "$ref": "#/$defs/ValuePort4",
           "default": 1.0
         }
       },
       "additionalProperties": false
+    },
+    "ValuePort2": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "remap": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NumInterval"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "triggers_mapping": {
+              "type": "boolean"
+            },
+            "value": {
+              "$ref": "#/$defs/OneEuroBeta"
+            }
+          },
+          "required": [
+            "value"
+          ]
+        },
+        {
+          "$ref": "#/$defs/OneEuroBeta"
+        }
+      ]
+    },
+    "OneEuroBeta": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StaticValueCfg"
+        },
+        {
+          "$ref": "#/$defs/DynValueRefs"
+        }
+      ]
+    },
+    "ValuePort3": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "remap": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NumInterval"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "triggers_mapping": {
+              "type": "boolean"
+            },
+            "value": {
+              "$ref": "#/$defs/OneEuroMinCutOffHz"
+            }
+          },
+          "required": [
+            "value"
+          ]
+        },
+        {
+          "$ref": "#/$defs/OneEuroMinCutOffHz"
+        }
+      ]
+    },
+    "OneEuroMinCutOffHz": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StaticValueCfg"
+        },
+        {
+          "$ref": "#/$defs/DynValueRefs"
+        }
+      ]
+    },
+    "ValuePort4": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "remap": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NumInterval"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "triggers_mapping": {
+              "type": "boolean"
+            },
+            "value": {
+              "$ref": "#/$defs/OneEuroDCutOffHz"
+            }
+          },
+          "required": [
+            "value"
+          ]
+        },
+        {
+          "$ref": "#/$defs/OneEuroDCutOffHz"
+        }
+      ]
+    },
+    "OneEuroDCutOffHz": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StaticValueCfg"
+        },
+        {
+          "$ref": "#/$defs/DynValueRefs"
+        }
+      ]
     },
     "ScriptCfg": {
       "description": "User-script transform step.\n\nEmbeds a Luau script that runs on **every tick** of the mapping\npipeline, giving full programmatic control over the signal. The script\ncan read the main pipeline input and any number of auxiliary data\nsources, execute arbitrary logic (with persistent global state across\nticks), and write results back to the main pipeline output and/or\nauxiliary destinations.\n\nFive global API functions are injected into the Luau environment for\nthe duration of each tick:\n\n| Function | Purpose |\n|----------|---------|\n| `read(key)` | Read the main input (`0`) or an auxiliary source (string / 1-based index). |\n| `write(key, value)` | Write the main output (`0`) or an auxiliary destination. |\n| `transform(name, value)` | Invoke a named sub-pipeline from `aux_transformations`. |\n| `is_idle()` | `true` when the tick is an idle-clock tick (no user input). |\n| `base_rate()` | The configured idle tick rate in Hz. |\n\nSee `doc/script.md` for a full guide, signal-flow diagram, API\nreference, and configuration examples.",
@@ -2002,14 +2125,14 @@
           "description": "Auxiliary data **sources** readable from the script via\n`read(\"<key>\")` or `read(<1-based index>)`.\n\nAccepts a YAML **map** (explicit string keys) or a **list**\n(auto-numbered `\"1\"`, `\"2\"`, …).\n\nYAML alias: `sources`.",
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/$defs/ValuePort2"
+            "$ref": "#/$defs/ValuePort5"
           }
         },
         "aux_dsts": {
           "description": "Auxiliary data **destinations** writable from the script via\n`write(\"<key>\", value)` or `write(<1-based index>, value)`.\n\nAccepts a YAML **map** or a **list**, same as [`aux_srcs`](Self::aux_srcs).\n\nYAML alias: `destinations`.",
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/$defs/ValuePort3"
+            "$ref": "#/$defs/ValuePort6"
           }
         },
         "aux_transformations": {
@@ -2038,7 +2161,7 @@
         "Abs"
       ]
     },
-    "ValuePort2": {
+    "ValuePort5": {
       "anyOf": [
         {
           "type": "object",
@@ -2069,7 +2192,7 @@
         }
       ]
     },
-    "ValuePort3": {
+    "ValuePort6": {
       "anyOf": [
         {
           "type": "object",

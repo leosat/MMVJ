@@ -8,7 +8,6 @@ use crate::{
     schemas_value::{WithNumInterval, WithNumIntervalSettable, WithNumericValueSettable, WithRelativity},
 };
 use crate::{relativity::Relativity, schemas_value::WithNumericValue};
-use enum_dispatch::enum_dispatch;
 use garde::rules::range::Bounds;
 use num_traits::ToPrimitive;
 use schemars::JsonSchema;
@@ -163,12 +162,7 @@ pub(crate) trait PortSanPolicy<SanProviderT>:
     where
         SanProviderT: WithNumericValueSanitizerStatic;
 
-    fn _san_policy_sanitize_interval(interval: NumInterval<SanProviderT::ValueT>) -> NumInterval<SanProviderT::ValueT>
-    where
-        SanProviderT: WithNumIntervalSanitizerStatic;
-
     fn san_policy_sanitize_this_inplace<SelfSanitizedT: WithSelfSanitize>(this: &mut SelfSanitizedT);
-    fn _san_policy_sanitize_this<SelfSanitizedT: WithSelfSanitize>(this: SelfSanitizedT) -> SelfSanitizedT;
 }
 
 #[derive(Copy, Clone, PartialEq, PartialOrd, Debug)]
@@ -187,19 +181,8 @@ impl<SanProviderT> PortSanPolicy<SanProviderT> for SanPolicyUseFromPortInner {
         SanProviderT::sanitize_numeric_value_static(value)
     }
 
-    fn _san_policy_sanitize_interval(interval: NumInterval<SanProviderT::ValueT>) -> NumInterval<SanProviderT::ValueT>
-    where
-        SanProviderT: WithNumIntervalSanitizerStatic,
-    {
-        SanProviderT::sanitize_interval_static(interval)
-    }
-
     fn san_policy_sanitize_this_inplace<SelfSanitizedT: WithSelfSanitize>(this: &mut SelfSanitizedT) {
         this.sanitize_inplace()
-    }
-
-    fn _san_policy_sanitize_this<SelfSanitizedT: WithSelfSanitize>(this: SelfSanitizedT) -> SelfSanitizedT {
-        this.sanitize_self()
     }
 }
 
@@ -214,17 +197,7 @@ impl<SanProviderT> PortSanPolicy<SanProviderT> for SanPolicyNone {
         value
     }
 
-    fn _san_policy_sanitize_interval(interval: NumInterval<SanProviderT::ValueT>) -> NumInterval<SanProviderT::ValueT>
-    where
-        SanProviderT: WithNumericValue,
-    {
-        interval
-    }
-
     fn san_policy_sanitize_this_inplace<SelfSanitizedT: WithSelfSanitize>(_this: &mut SelfSanitizedT) {}
-    fn _san_policy_sanitize_this<SelfSanitizedT: WithSelfSanitize>(this: SelfSanitizedT) -> SelfSanitizedT {
-        this
-    }
 }
 
 // -------------------------------------------
@@ -493,8 +466,9 @@ where
         if self.port_inner_ref().port_inner_is_static() {
             self.remap = None;
         } else {
-            self.port_get_remap_interval()
-                .map(|ri| self.port_set_remap_interval(InnerT::sanitize_interval_static(ri)));
+            if let Some(ri) = self.port_get_remap_interval() {
+                self.port_set_remap_interval(InnerT::sanitize_interval_static(ri))
+            }
         }
     }
 }
@@ -509,8 +483,9 @@ where
         if self.port_inner_ref().port_inner_is_static() {
             self.remap = None;
         } else {
-            self.port_get_remap_interval()
-                .map(|ri| self.port_set_remap_interval(ri));
+            if let Some(ri) = self.port_get_remap_interval() {
+                self.port_set_remap_interval(ri)
+            }
         }
     }
 }
@@ -527,12 +502,10 @@ where
 }
 
 // --------------------------------------------
-
 pub(crate) trait _WithRelativitySanitizerStatic: WithRelativity {
     fn sanitize_relativity_static(rel: Relativity) -> Relativity;
 }
 
-#[enum_dispatch]
 pub(crate) trait WithNumericValueSanitizerStatic: WithNumericValue {
     fn sanitize_numeric_value_static(value: Self::ValueT) -> Self::ValueT;
     fn get_value_sanitizer_policy_doc_str() -> &'static str {
@@ -545,14 +518,12 @@ pub(crate) trait WithNumIntervalSanitizerStatic: WithNumericValueSanitizerStatic
 }
 
 // --------------------------------------------
-
 trait _WithNumericValueSanitized: WithNumericValue {
     fn get_numeric_value_sanitized(&self) -> <Self as WithNumericValue>::ValueT;
 }
 
 // --------------------------------------------
 #[macro_export]
-
 macro_rules! make_port_inner_nutype {
     (
         name:           $name:ident,
@@ -570,7 +541,7 @@ macro_rules! make_port_inner_nutype {
                                 )]
         pub(crate) struct $name($inner);
 
-        impl crate::schemas_value_port::WithNumericValueSanitizerStatic for $name {
+        impl $crate::schemas_value_port::WithNumericValueSanitizerStatic for $name {
             fn sanitize_numeric_value_static(value: Self::ValueT) -> Self::ValueT {
                 $value_sanitize(value)
             }
@@ -580,9 +551,9 @@ macro_rules! make_port_inner_nutype {
             }
         }
 
-        impl crate::schemas_value_port::WithNumIntervalSanitizerStatic for $name {
+        impl $crate::schemas_value_port::WithNumIntervalSanitizerStatic for $name {
             fn sanitize_interval_static(mut interval: NumInterval<Self::ValueT>) -> NumInterval<Self::ValueT> {
-                use crate::schemas_value_port::WithNumericValueSanitizerStatic;
+                use $crate::schemas_value_port::WithNumericValueSanitizerStatic;
                 interval.from = Self::sanitize_numeric_value_static(interval.from);
                 interval.to = Self::sanitize_numeric_value_static(interval.to);
                 interval
@@ -637,8 +608,8 @@ macro_rules! make_port_inner_nutype {
         //     }
         // }
 
-        impl crate::schemas_value::WithDeviceControlMatcherRef for $name {
-            fn get_device_control_matcher_ref(&self) -> Option<&crate::schemas_value::DeviceControlMatcherRef> {
+        impl $crate::schemas_value::WithDeviceControlMatcherRef for $name {
+            fn get_device_control_matcher_ref(&self) -> Option<&$crate::schemas_value::DeviceControlMatcherRef> {
                 self.as_ref().get_device_control_matcher_ref()
             }
         }
@@ -651,13 +622,13 @@ macro_rules! make_port_inner_nutype {
         //     }
         // }
 
-        impl ::core::convert::From<crate::schemas_value::ValueTargets> for $name  {
-            fn from(value: crate::schemas_value::ValueTargets) -> Self {
+        impl ::core::convert::From<$crate::schemas_value::ValueTargets> for $name  {
+            fn from(value: $crate::schemas_value::ValueTargets) -> Self {
                 $name::new($inner::from(value))
             }
         }
 
-        impl crate::schemas_value_port::PortInnerIface for $name {
+        impl $crate::schemas_value_port::PortInnerIface for $name {
             fn port_inner_identity(&self) -> String {
                 self.as_ref().port_inner_identity()
             }
@@ -676,13 +647,13 @@ macro_rules! make_port_inner_nutype {
             }
         }
 
-        impl<SanT: crate::schemas_value_port::PortSanPolicy<$name>> ::core::convert::From<ValuePort<$name, SanT>> for $name {
+        impl<SanT: $crate::schemas_value_port::PortSanPolicy<$name>> ::core::convert::From<ValuePort<$name, SanT>> for $name {
             fn from(port: ValuePort<$name, SanT>) -> Self {
                 port.value
             }
         }
 
-        impl crate::schemas_value::WithNumericValue for $name {
+        impl $crate::schemas_value::WithNumericValue for $name {
             type ValueT = BaseNumT;
 
             fn get_numeric_value(&self) -> Self::ValueT {
@@ -690,19 +661,19 @@ macro_rules! make_port_inner_nutype {
             }
         }
 
-        impl crate::schemas_value::WithNumInterval for $name {
+        impl $crate::schemas_value::WithNumInterval for $name {
             fn get_interval(&self) -> NumInterval<Self::ValueT> {
                 self.as_ref().get_interval()
             }
         }
 
-        impl crate::schemas_value::WithNumericValueSettable for $name {
+        impl $crate::schemas_value::WithNumericValueSettable for $name {
             fn set_numeric_value(&self, value: Self::ValueT) {
                 self.as_ref().set_numeric_value(value);
             }
         }
 
-        impl crate::schemas_value::WithNumIntervalSettable for $name {
+        impl $crate::schemas_value::WithNumIntervalSettable for $name {
             fn set_interval(&mut self, interval: NumInterval<Self::ValueT>) {
                 let mut tmp = self.clone().into_inner();
                 tmp.set_interval(interval);
@@ -720,7 +691,7 @@ macro_rules! make_output_port_inner_nutype {
         san-doc:  $sandoc:literal,
         san-exe:  $value_sanitize:expr
     ) => {
-        crate::make_port_inner_nutype!(
+        $crate::make_port_inner_nutype!(
             name:     $name,
             inner:    ValueDsts,
             inner_default:  $inner_default,
@@ -738,12 +709,12 @@ macro_rules! make_input_port_inner_nutype {
         san-doc:  $sandoc:literal,
         san-exe:  $value_sanitize:expr
     ) => {
-        crate::make_port_inner_nutype!(
+        $crate::make_port_inner_nutype!(
             name:     $name,
             inner:    ValueSrcs,
             inner_default:  $inner_default,
             nutype_san: |mut s| {
-                use crate::schemas_value_port::WithNumIntervalSanitizerStatic;
+                use $crate::schemas_value_port::WithNumIntervalSanitizerStatic;
                 if let ValueSrcs::Static(ref mut s) = s {
                     // s.interval = AutoOrManual::Auto($inner_default.get_interval());
                     if s.get_interval() == $inner_default.get_interval() {
@@ -757,12 +728,12 @@ macro_rules! make_input_port_inner_nutype {
             sandoc:         $sandoc
         );
 
-        impl<'s> crate::gui_common::DrawEgui<'s> for $name {
-            type In = crate::gui_value::GuiInValue<'s>;
-            type Out = Option<crate::gui_common::GuiCmd>;
+        impl<'s> $crate::gui_common::DrawEgui<'s> for $name {
+            type In = $crate::gui_value::GuiInValue<'s>;
+            type Out = Option<$crate::gui_common::GuiCmd>;
 
             fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
-                crate::gui_value::draw_egui_for_a_value(self, gui_in, ui)
+                $crate::gui_value::draw_egui_for_a_value(self, gui_in, ui)
             }
         }
     };

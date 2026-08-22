@@ -7,7 +7,7 @@ use crate::gui_common::{GuiCmd, bool_to_simple_change_gui_cmd, draw_collapsing_u
 use crate::mapping::MappingEngineCmd;
 use crate::relativity::Relativity;
 
-use crate::schemas_value::{AutoOrManual, ValueXrcs};
+use crate::schemas_value::{AutoOrManual, ValueXrcs, WithNumIntervalSettable};
 
 use crate::schemas_value_port::{
     PortInnerIface, PortRemapPolicy, PortSanPolicy, SanPolicyNone, SanPolicyUseFromPortInner, ValuePort,
@@ -188,25 +188,25 @@ fn get_new_value_target<'s>(gui_in: GuiInValue<'s>, ui: &mut egui::Ui) -> Option
             params.cfg_variables,
         )
     {
-        target.try_into().ok()
+        target.into()
     } else {
         None
     }
 }
 
 trait GuiSanInfo<T: WithNumericValueSanitizerStatic> {
-    fn draw_san_info(ui: &mut egui::Ui);
+    fn draw_san_info<PortInnerT: WithNumericValueSanitizerStatic>(ui: &mut egui::Ui);
 }
 
 impl<T: WithNumericValueSanitizerStatic> GuiSanInfo<T> for SanPolicyUseFromPortInner {
-    fn draw_san_info(ui: &mut egui::Ui) {
+    fn draw_san_info<PortInnerT: WithNumericValueSanitizerStatic>(ui: &mut egui::Ui) {
         ui.label(egui::RichText::new(egui_phosphor::bold::BROOM).size(14.0))
-            .on_hover_text(<Self as PortSanPolicy<T>>::san_policy_get_value_san_doc_str());
+            .on_hover_text(PortInnerT::get_value_sanitizer_policy_doc_str());
     }
 }
 
 impl<T: WithNumericValueSanitizerStatic> GuiSanInfo<T> for SanPolicyNone {
-    fn draw_san_info(ui: &mut egui::Ui) {
+    fn draw_san_info<PortInnerT: WithNumericValueSanitizerStatic>(ui: &mut egui::Ui) {
         ui.label(egui::RichText::new(egui_phosphor::bold::FUNNEL_X).size(14.0))
             .on_hover_text(<Self as PortSanPolicy<T>>::san_policy_get_value_san_doc_str());
     }
@@ -236,7 +236,23 @@ where
     }
 
     if port.port_inner_ref().port_inner_is_static() {
-        return ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
+        let mut gui_out = ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
+
+        let default_interval = port.port_get_default_interval_from_inner().cast().unwrap();
+
+        if default_interval != port.port_inner_ref().get_interval()
+            && ui
+                .button(format!(
+                    "reset interval to default parameter interval {}",
+                    default_interval
+                ))
+                .clicked()
+        {
+            port.port_inner_mut().set_interval(default_interval);
+            gui_out = bool_to_simple_change_gui_cmd(true);
+        }
+
+        gui_out
     } else {
         let mut gui_out = None;
         let mut changed_simple = false;
@@ -247,14 +263,15 @@ where
         );
 
         ui.separator();
-        SanPolicyT::draw_san_info(ui);
+        SanPolicyT::draw_san_info::<PortInnerT>(ui);
         ui.separator();
 
         ui.vertical(|ui| {
-            draw_collapsing_ui(ui, port.port_get_identity_str().into(), None, |ui| {
+            draw_collapsing_ui(ui, Some(port as *mut PortT), None, |ui| {
                 ui.label(egui::RichText::new(egui_phosphor::bold::PLUGS).size(14.0))
                     .on_hover_text("Value port: allows sanitization and optional range remapping");
-                ui.label(format!("PORT({})", port.port_get_identity_str()));
+                // ui.label(format!("PORT({})", port.port_get_identity_str()));
+                ui.label("...");
             })
             .body(|ui| {
                 ui.separator();
@@ -269,8 +286,8 @@ where
                         if remap_to.egui(
                             GuiInInterval::Edit {
                                 max_range: BaseNumT::MIN..=BaseNumT::MAX, // port.get_max_interval().cast().unwrap().make_range_inclusive(),
-                                from_label: &"From",
-                                to_label: &"To",
+                                from_label: "From",
+                                to_label: "To",
                                 sanitize_and_sort: true,
                                 truncate: false,
                             },
@@ -343,7 +360,7 @@ where
             let value_slider = ui.add(
                 egui::Slider::new(&mut value, this.get_interval().make_range_inclusive())
                     .logarithmic(params.slider_log_scale)
-                    .fixed_decimals(4)
+                    .custom_formatter(|value, _| format!("{value:+011.4}",))
                     .step_by(0.0001),
             );
 

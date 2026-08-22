@@ -709,15 +709,6 @@ pub(crate) struct EmaCfg {
     /// Defines the duration required for the filter's step response
     /// to reach about 63.2% (1 - 1/e) of its final steady-state value.
     pub(crate) tau: ValuePort<TauCfg>,
-    // #[serde(skip)]
-    // #[garde(skip)]
-    // pub(crate) tau: ValueSrcs,
-    // #[serde(skip)]
-    // #[garde(skip)]
-    // pub(crate) tau: EmaCfgTau,
-    // #[serde(skip)]
-    // #[garde(skip)]
-    // pub(crate) tau: ValuePort<ValueSrcs>,
 }
 
 make_input_port_inner_nutype!(

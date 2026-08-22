@@ -756,7 +756,7 @@ impl<'s> DrawEgui<'s> for RaiseFallCfg {
         let rize_and_fall_rates_interval = 0.01..=input_interval.to() * 10.0; // TODO: make multiplier configurable.
         let mut changed_simple = false;
         let mut gui_out = None;
-        let mut gui_out_mut = &mut gui_out;
+        let gui_out_mut = &mut gui_out;
         ui.label(format!("Input interval: {}", input_interval));
         changed_simple |= ui
             .add(
@@ -943,7 +943,7 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
         let cfg_devices = gui_in.1;
         let in_is_relative = gui_in.2;
         let mut gui_out = None;
-        let mut gui_out_mut = &mut gui_out;
+        let gui_out_mut = &mut gui_out;
         ui.horizontal(|ui| {
             let param_name = "Lowpass base cutoff";
             ui.label(param_name).on_hover_text(self.min_cutoff_hz_doc_str());
@@ -968,7 +968,7 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
             ui.separator();
             *gui_out_mut = gui_out_mut.clone().or(self.beta.egui(
                 GuiInValue::Edit(GuiInValueEditParams {
-                    allow_interval_edit: false,
+                    allow_interval_edit: true,
                     slider_log_scale: true,
                     cfg_variables,
                     cfg_devices,
@@ -986,7 +986,7 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
             ui.separator();
             *gui_out_mut = gui_out_mut.clone().or(self.d_cutoff_hz.egui(
                 GuiInValue::Edit(GuiInValueEditParams {
-                    allow_interval_edit: false,
+                    allow_interval_edit: true,
                     slider_log_scale: true,
                     cfg_variables,
                     cfg_devices,

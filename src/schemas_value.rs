@@ -7,6 +7,7 @@
 
 use std::{
     cell::Cell,
+    fmt::Display,
     ops::{Deref, DerefMut},
     sync::{
         Arc,
@@ -14,11 +15,11 @@ use std::{
     },
 };
 
-use crate::{num_interval::ZERO_INTERVAL, schemas_value_port::WithTriggersMapping};
 use crate::{
-    num_interval::{MAX_SPAN_INTERVAL, UNIT_INTERVAL},
+    num_interval::UNIT_INTERVAL,
     schemas_value_port::{WithNumIntervalSanitizerStatic, WithNumericValueSanitizerStatic},
 };
+use crate::{num_interval::ZERO_INTERVAL, schemas_value_port::WithTriggersMapping};
 use crate::{relativity::Relativity, schemas_value_port::PortInnerIface};
 use crossbeam_utils::CachePadded;
 use deserialize_untagged_verbose_error::DeserializeUntaggedVerboseError;
@@ -956,7 +957,7 @@ impl ValueSrcs {
         }
     }
 
-    pub(crate) fn get_id(&self) -> Option<ObjId> {
+    pub(crate) fn _get_id(&self) -> Option<ObjId> {
         match self {
             Self::Static { .. } => None,
             Self::Dynamic(dynamic_value_ref_rt) => match dynamic_value_ref_rt {
@@ -1054,7 +1055,6 @@ impl Default for XrcSink {
 
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd, TraversableMut, Traversable)]
 #[serde(untagged)]
-
 pub(crate) enum ValueXrcs {
     #[traverse(skip)]
     Sink(#[serde(skip)] XrcSink),
@@ -1088,7 +1088,7 @@ impl WithNumInterval for ValueXrcs {
     }
 }
 impl WithNumIntervalSettable for ValueXrcs {
-    fn set_interval(&mut self, interval: NumInterval<Self::ValueT>) {
+    fn set_interval(&mut self, _: NumInterval<Self::ValueT>) {
         match self {
             Self::Dynamic(_) => log::error!("Can't set interval on a sink dynamic value ref."),
             Self::Sink(s) => log::error!(
@@ -1122,7 +1122,7 @@ impl WithDeviceControlMatcherRef for ValueXrcs {
     fn get_device_control_matcher_ref(&self) -> Option<&DeviceControlMatcherRef> {
         match self {
             Self::Dynamic(d) => d.get_device_control_matcher_ref(),
-            Self::Sink(xrc_sink) => None,
+            Self::Sink(_) => None,
         }
     }
 }
@@ -1256,7 +1256,7 @@ impl ValueDsts {
         }
     }
 
-    pub(crate) fn get_id(&self) -> Option<ObjId> {
+    pub(crate) fn _get_id(&self) -> Option<ObjId> {
         match self {
             ValueDsts::Void(..) => None,
             ValueDsts::Dynamic(d) => match d {
@@ -1290,7 +1290,7 @@ impl ValueDsts {
         matches!(*self, Self::Void(..))
     }
 
-    pub(crate) fn is_dynamic(&self) -> bool {
+    pub(crate) fn _is_dynamic(&self) -> bool {
         matches!(*self, Self::Dynamic(..))
     }
 
@@ -1387,12 +1387,12 @@ fn auto_or_manual_check_serialization() {
     );
 }
 
-impl<T: Default + ToString> ToString for AutoOrManual<T> {
-    fn to_string(&self) -> String {
-        match self {
-            AutoOrManual::Manual(m) => format!("Manual({})", m.to_string()),
-            AutoOrManual::Auto(a) => format!("Auto({})", a.to_string()),
-        }
+impl<T: Default + Display> Display for AutoOrManual<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&match self {
+            AutoOrManual::Manual(m) => format!("Manual({})", m),
+            AutoOrManual::Auto(a) => format!("Auto({})", a),
+        })
     }
 }
 
@@ -1546,7 +1546,7 @@ impl From<ValueTargets> for ValueDsts {
     fn from(value: ValueTargets) -> Self {
         match value {
             ValueTargets::Src(s) => match s {
-                ValueSrcs::Static(s) => Self::Void(None),
+                ValueSrcs::Static(_) => Self::Void(None),
                 ValueSrcs::Dynamic(d) => Self::Dynamic(d),
             },
             ValueTargets::Dst(d) => d,
