@@ -843,9 +843,9 @@ pub(crate) struct OneEuroFilterCfg {
     ///
     /// **Tuning heuristic:** start at `0.0`, increase until fast
     /// movements feel responsive, then back off slightly.
-    #[serde(default = "default_1euro_beta")]
+    #[serde(default)]
     #[garde(range(min = 0.0))]
-    pub(crate) beta: ValueSrcs,
+    pub(crate) beta: ValuePort<OneEuroBeta>,
 
     /// Minimum cutoff frequency in Hz. The cutoff used when the input
     /// is stationary or moving very slowly.
@@ -857,9 +857,9 @@ pub(crate) struct OneEuroFilterCfg {
     ///   clean or minimal latency is critical.
     ///
     /// Think of this as the **noise floor** of the filter.
-    #[serde(default = "default_1euro_min_cutoff_hz")]
+    #[serde(default)]
     #[garde(range(min = 0.0))]
-    pub(crate) min_cutoff_hz: ValueSrcs,
+    pub(crate) min_cutoff_hz: ValuePort<OneEuroMinCutOffHz>,
 
     /// Cutoff frequency in Hz for the derivative (speed) low-pass
     /// filter.
@@ -875,16 +875,31 @@ pub(crate) struct OneEuroFilterCfg {
     ///   but may oscillate on noisy inputs.
     ///
     /// Rarely needs adjustment from the default.
-    #[serde(default = "default_1euro_d_cutoff_hz")]
+    #[serde(default)]
     #[garde(range(min = 0.0))]
-    pub(crate) d_cutoff_hz: ValueSrcs, //SanitizedParamPort<OneEuroCfgDCutOffHz>, //
+    pub(crate) d_cutoff_hz: ValuePort<OneEuroDCutOffHz>,
 }
 
-// make_input_port_inner_nutype!(
-//     name: OneEuroCfgDCutOffHz,
-//     inner: ValueSrcs,
-//     default: default_1euro_d_cutoff_hz()
-// );
+make_input_port_inner_nutype!(
+    OneEuroMinCutOffHz,
+    default: default_1euro_min_cutoff_hz(),
+    san-doc: "Low pass cut off is ensured to be > 0.0",
+    san-exe: |v: BaseNumT| {v.clamp(default_1euro_min_cutoff_hz().get_interval().from(), BaseNumT::INFINITY)}
+);
+
+make_input_port_inner_nutype!(
+    OneEuroBeta,
+    default: default_1euro_beta(),
+    san-doc: "Beta is ensured to be > 0.0",
+    san-exe: |v: BaseNumT| {v.clamp(default_1euro_beta().get_interval().from(), BaseNumT::INFINITY)}
+);
+
+make_input_port_inner_nutype!(
+    OneEuroDCutOffHz,
+    default: default_1euro_d_cutoff_hz(),
+    san-doc: "Speed cut off is ensured to be > 0.0",
+    san-exe: |v: BaseNumT| {v.clamp(default_1euro_d_cutoff_hz().get_interval().from(), BaseNumT::INFINITY)}
+);
 
 impl TfmCfgDuplicateWithNewState for OneEuroFilterCfg {
     fn duplicate_with_new_state(&self) -> Self {
@@ -912,8 +927,8 @@ impl Default for OneEuroFilterCfg {
         Self {
             enabled: default_step_enabled(),
             on_relative_input_feed_on_idle: default_false(),
-            beta: default_1euro_beta(),
-            min_cutoff_hz: default_1euro_min_cutoff_hz(),
+            beta: Default::default(),
+            min_cutoff_hz: Default::default(),
             d_cutoff_hz: Default::default(),
             on_relative_input_reset_on_idle: default_false(),
             desc: Default::default(),
@@ -2165,18 +2180,18 @@ impl WithDescriptionMut for TfmStepCfg {
         match self {
             TfmStepCfg::Nop(_) => None,
             TfmStepCfg::Invert(_) => None,
-            TfmStepCfg::Integrate(integrate) => Some(&mut integrate.desc),
-            TfmStepCfg::Steering(steering) => Some(&mut steering.desc),
-            TfmStepCfg::Clamp(clamp) => Some(&mut clamp.desc),
-            TfmStepCfg::RaiseFall(raise_fall) => Some(&mut raise_fall.desc),
-            TfmStepCfg::Ema(ema) => Some(&mut ema.desc),
-            TfmStepCfg::Linear(linear) => Some(&mut linear.desc),
-            TfmStepCfg::Smoothstep(smoothstep) => Some(&mut smoothstep.desc),
-            TfmStepCfg::SCurve(s_curve) => Some(&mut s_curve.desc),
-            TfmStepCfg::Exp(exp) => Some(&mut exp.desc),
-            TfmStepCfg::SignedPower(signed_power) => Some(&mut signed_power.desc),
-            TfmStepCfg::OneEuro(one_euro) => Some(&mut one_euro.desc),
-            TfmStepCfg::Script(script) => Some(&mut script.desc),
+            TfmStepCfg::Integrate(s) => Some(&mut s.desc),
+            TfmStepCfg::Steering(s) => Some(&mut s.desc),
+            TfmStepCfg::Clamp(s) => Some(&mut s.desc),
+            TfmStepCfg::RaiseFall(s) => Some(&mut s.desc),
+            TfmStepCfg::Ema(s) => Some(&mut s.desc),
+            TfmStepCfg::Linear(s) => Some(&mut s.desc),
+            TfmStepCfg::Smoothstep(s) => Some(&mut s.desc),
+            TfmStepCfg::SCurve(s) => Some(&mut s.desc),
+            TfmStepCfg::Exp(s) => Some(&mut s.desc),
+            TfmStepCfg::SignedPower(s) => Some(&mut s.desc),
+            TfmStepCfg::OneEuro(s) => Some(&mut s.desc),
+            TfmStepCfg::Script(s) => Some(&mut s.desc),
             // TfmStepCfg::_HighPass(highpass) => Some(&mut highpass.desc),
             // TfmStepCfg::_ForceFeedback(force_feedback) => Some(&mut force_feedback.desc),
         }
