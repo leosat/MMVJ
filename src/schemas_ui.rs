@@ -5,9 +5,9 @@ use serde::Serialize;
 use traversable::Traversable;
 use traversable::TraversableMut;
 
+use crate::schemas_cfg::DescriptionCfg;
 use crate::schemas_common::ObjId;
 use crate::schemas_common::default_true;
-use crate::schemas_value::DescriptionCfg;
 use crate::schemas_value::DynValueRefs;
 
 #[derive(Debug, Clone, Serialize, Deserialize, TraversableMut, Traversable, JsonSchema, Default, PartialEq)]

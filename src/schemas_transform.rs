@@ -3,9 +3,9 @@ use crate::config::WithSelfSanitize;
 use crate::filters::OneEuroFilter;
 use crate::make_input_port_inner_nutype;
 use crate::relativity::Relativity;
+use crate::schemas_cfg::{DescriptionCfg, WithDescriptionMut};
 use crate::schemas_value::{
-    AutoOrManual, DescriptionCfg, InputValueMetadata, WithDescriptionMut, WithLastKnownIO, WithNumericValue,
-    make_static_value_src,
+    AutoOrManual, InputValueMetadata, ValueXrcs, WithLastKnownIO, WithNumericValue, make_static_value_src,
 };
 use crate::schemas_value::{
     DeviceControlMatcherRef, DynValueRefs, ValueDsts, VariableRef, WithNumInterval, WithRelativityRef,
@@ -1745,13 +1745,13 @@ pub(crate) struct SteeringCfg {
     pub(crate) integrated_user_input_transform: TfmSeqCfg,
 }
 
-type SteeringAccPort = ValuePort<ValueDsts, SanPolicyNone, SteeringAccPortRemapPol>;
+type SteeringAccPort = ValuePort<ValueXrcs, SanPolicyNone, SteeringAccPortRemapPol>;
 
 #[derive(
     PartialEq, PartialOrd, Clone, Copy, std::fmt::Debug, Default, Serialize, Deserialize, TraversableMut, Traversable,
 )]
 pub(crate) struct SteeringAccPortRemapPol {}
-impl PortRemapPolicy<ValueDsts> for SteeringAccPortRemapPol {
+impl PortRemapPolicy<ValueXrcs> for SteeringAccPortRemapPol {
     fn get_remap_range() -> Option<NumInterval<BaseNumT>> {
         SYMM_UNIT_INTERVAL.into()
     }

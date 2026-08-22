@@ -9,17 +9,18 @@ use crate::gui_common::{
 };
 use crate::gui_mapping::ValueUsageContext;
 use crate::gui_telemetry_graph::{GuiTelemetryGraphStates, make_trace_graph_2d};
-use crate::gui_value::{GuiInInterval, GuiInValue, GuiInValueEditParams, draw_value_choice_iface};
+use crate::gui_value::{GuiInInterval, GuiInValue, GuiInValueEditParams};
 use crate::hid_device::HID_AXIS_MAX_RANGE;
 use crate::mapping::MappingEngineCmd;
 use crate::num_interval::NumInterval;
 use crate::num_interval::SYMM_UNIT_INTERVAL;
+use crate::schemas_cfg::DescriptionCfg;
+use crate::schemas_cfg::WithDescriptionMut;
 use crate::schemas_cfg::{DevicesCfgNew, VariablesCfg};
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_transform::*;
 use crate::schemas_value::AutoOrManual;
-use crate::schemas_value::ValueDsts;
-use crate::schemas_value::{DescriptionCfg, StaticValueCfg, TfmValue, ValueSrcs, WithDescriptionMut, WithNumericValue};
+use crate::schemas_value::{StaticValueCfg, TfmValue, ValueSrcs, WithNumericValue};
 use crate::tracing::GraphDisplayStyle;
 use egui::text::LayoutJob;
 use egui::{Button, CollapsingHeader, FontId, Sense, TextFormat, WidgetText};
@@ -753,20 +754,22 @@ impl<'s> DrawEgui<'s> for RaiseFallCfg {
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let (cfg_variables, cfg_devices, input_interval) = gui_in;
         let rize_and_fall_rates_interval = 0.01..=input_interval.to() * 10.0; // TODO: make multiplier configurable.
-        let mut changed = false;
+        let mut changed_simple = false;
+        let mut gui_out = None;
+        let mut gui_out_mut = &mut gui_out;
         ui.label(format!("Input interval: {}", input_interval));
-        changed |= ui
+        changed_simple |= ui
             .add(
                 egui::Slider::new(&mut self.fall_delay, 0.0..=10.0).text("Fall delay"), // .drag_value_speed(0.001),
             )
             .changed();
-        changed |= ui
+        changed_simple |= ui
             .add(egui::Slider::new(&mut self.raise_rate, rize_and_fall_rates_interval.clone()).text("Raise rate"))
             .changed();
-        changed |= ui
+        changed_simple |= ui
             .add(egui::Slider::new(&mut self.fall_rate, rize_and_fall_rates_interval).text("Fall rate"))
             .changed();
-        changed |= ui
+        changed_simple |= ui
             .add(
                 egui::Slider::new(&mut self.smoothing_alpha, 0.01..=1.0)
                     .text("Smoothing alpha")
@@ -776,23 +779,23 @@ impl<'s> DrawEgui<'s> for RaiseFallCfg {
         ui.separator();
         ui.collapsing("Fall hold factor:", |ui| {
             ui.separator();
-            changed |= self.fall_hold_factor.egui(
+            *gui_out_mut = gui_out_mut.clone().or(self.fall_hold_factor.egui(
                 GuiInValue::Edit(GuiInValueEditParams {
                     allow_interval_edit: false,
                     slider_log_scale: false,
                     cfg_variables,
                     cfg_devices,
                     name: "Choose hold factor source",
-                    choice_case: ValueUsageContext::TfmStepAuxSrc,
+                    choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
                 }),
                 ui,
-            );
+            ));
             ui.separator();
-            changed |= ui
+            changed_simple |= ui
                 .checkbox(&mut self.invert_fall_hold_factor, "Invert fall hold factor")
                 .changed();
         });
-        bool_to_simple_change_gui_cmd(changed)
+        gui_out.or(bool_to_simple_change_gui_cmd(changed_simple))
     }
 }
 
@@ -804,27 +807,27 @@ impl<'s> DrawEgui<'s> for EmaCfg {
         let cfg_variables = gui_in.0;
         let cfg_devices = gui_in.1;
         let in_is_relative = gui_in.2;
-        let mut changed = false;
+        let mut gui_out = None;
         ui.horizontal(|ui| {
             let param_name = "Time constant";
             ui.label(param_name).on_hover_text(self.tau_doc_str());
-            changed |= self.tau.egui(
+            gui_out = self.tau.egui(
                 GuiInValue::Edit(GuiInValueEditParams {
                     allow_interval_edit: true,
                     slider_log_scale: true,
                     cfg_variables,
                     cfg_devices,
                     name: param_name,
-                    choice_case: ValueUsageContext::TfmStepAuxSrc,
+                    choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
                 }),
                 ui,
             );
         });
         if in_is_relative {
             ui.separator();
-            changed |= draw_gui_idle_tick_params(ui, self);
+            gui_out = gui_out.or(bool_to_simple_change_gui_cmd(draw_gui_idle_tick_params(ui, self)));
         }
-        bool_to_simple_change_gui_cmd(changed)
+        gui_out
     }
 }
 
@@ -939,20 +942,20 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
         let cfg_variables = gui_in.0;
         let cfg_devices = gui_in.1;
         let in_is_relative = gui_in.2;
-        let mut changed: bool = false;
-
+        let mut gui_out = None;
+        let mut gui_out_mut = &mut gui_out;
         ui.horizontal(|ui| {
             let param_name = "Lowpass base cutoff";
             ui.label(param_name).on_hover_text(self.min_cutoff_hz_doc_str());
             ui.separator();
-            changed |= self.min_cutoff_hz.egui(
+            *gui_out_mut = self.min_cutoff_hz.egui(
                 GuiInValue::Edit(GuiInValueEditParams {
                     allow_interval_edit: true,
                     slider_log_scale: true,
                     cfg_variables,
                     cfg_devices,
                     name: param_name,
-                    choice_case: ValueUsageContext::TfmStepAuxSrc,
+                    choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
                 }),
                 ui,
             );
@@ -963,17 +966,17 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
             let param_name = "Beta (speed coefficient)";
             ui.label(param_name).on_hover_text(self.beta_doc_str());
             ui.separator();
-            changed |= self.beta.egui(
+            *gui_out_mut = gui_out_mut.clone().or(self.beta.egui(
                 GuiInValue::Edit(GuiInValueEditParams {
                     allow_interval_edit: false,
                     slider_log_scale: true,
                     cfg_variables,
                     cfg_devices,
                     name: param_name,
-                    choice_case: ValueUsageContext::TfmStepAuxSrc,
+                    choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
                 }),
                 ui,
-            );
+            ));
         });
         ui.separator();
 
@@ -981,25 +984,27 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
             let param_name = "Derivative cutoff";
             ui.label(param_name).on_hover_text(self.d_cutoff_hz_doc_str());
             ui.separator();
-            changed |= self.d_cutoff_hz.egui(
+            *gui_out_mut = gui_out_mut.clone().or(self.d_cutoff_hz.egui(
                 GuiInValue::Edit(GuiInValueEditParams {
                     allow_interval_edit: false,
                     slider_log_scale: true,
                     cfg_variables,
                     cfg_devices,
                     name: param_name,
-                    choice_case: ValueUsageContext::TfmStepAuxSrc,
+                    choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
                 }),
                 ui,
-            );
+            ));
         });
 
         if in_is_relative {
             ui.separator();
-            changed |= draw_gui_idle_tick_params(ui, self);
+            *gui_out_mut = gui_out_mut
+                .clone()
+                .or(bool_to_simple_change_gui_cmd(draw_gui_idle_tick_params(ui, self)));
         }
 
-        bool_to_simple_change_gui_cmd(changed)
+        gui_out
     }
 }
 
@@ -1055,25 +1060,18 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
                     }
 
                     if let Some(ref mut custom_src) = self.custom_source {
-                        let old_id = custom_src.get_id();
                         ui.horizontal(|ui| {
-                            if custom_src.egui(
+                            gui_out = custom_src.egui(
                                 GuiInValue::Edit(GuiInValueEditParams {
                                     allow_interval_edit: false,
                                     slider_log_scale: false,
                                     cfg_variables,
                                     cfg_devices,
                                     name: "FFB custom source",
-                                    choice_case: ValueUsageContext::TfmStepAuxSrc,
+                                    choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
                                 }),
                                 ui,
-                            ) {
-                                gui_out = if old_id != custom_src.get_id() {
-                                    Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter))
-                                } else {
-                                    Some(GuiCmd::ConfigChangeSimple)
-                                }
-                            };
+                            );
                         })
                         .response
                         .on_hover_text(self.custom_source_doc_str());
@@ -1136,17 +1134,17 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                 ui.horizontal(|ui| {
                     let param_name = "Input gain";
                     ui.label(param_name).on_hover_text(self.input_gain_doc_str());
-                    changed_simple |= self.input_gain.egui(
+                    *gui_out_mut = gui_out_mut.clone().or(self.input_gain.egui(
                         GuiInValue::Edit(GuiInValueEditParams {
                             allow_interval_edit: false,
                             slider_log_scale: false,
                             cfg_variables,
                             cfg_devices,
                             name: param_name,
-                            choice_case: ValueUsageContext::TfmStepAuxSrc,
+                            choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
                         }),
                         ui,
-                    );
+                    ));
                 })
                 .response
                 .on_hover_text(self.input_gain_doc_str());
@@ -1155,7 +1153,7 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                     let param_name = "Autocentering halflife";
                     ui.label("Autocenter halflife (0 == off): ")
                         .on_hover_text(self.auto_center_halflife_doc_str());
-                    changed_simple |= ui
+                    *gui_out_mut = gui_out_mut.clone().or(ui
                         .horizontal(|ui| {
                             self.auto_center_halflife.egui(
                                 GuiInValue::Edit(GuiInValueEditParams {
@@ -1164,12 +1162,12 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                                     cfg_variables,
                                     cfg_devices,
                                     name: param_name,
-                                    choice_case: ValueUsageContext::TfmStepAuxSrc,
+                                    choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
                                 }),
                                 ui,
                             )
                         })
-                        .inner;
+                        .inner);
                 });
 
                 ui.separator();
@@ -1179,17 +1177,17 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                             let param_name = "Apply autocentering along with force feedback.";
                             ui.label(param_name)
                                 .on_hover_text(Self::auto_center_along_force_feedback_doc_str_static());
-                            changed_simple |= self.auto_center_along_force_feedback.egui(
+                            *gui_out_mut = gui_out_mut.clone().or(self.auto_center_along_force_feedback.egui(
                                 GuiInValue::Edit(GuiInValueEditParams {
                                     allow_interval_edit: false,
                                     slider_log_scale: false,
                                     cfg_variables,
                                     cfg_devices,
                                     name: param_name,
-                                    choice_case: ValueUsageContext::TfmStepAuxSrc,
+                                    choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
                                 }),
                                 ui,
-                            );
+                            ));
                         });
                     }
                     ui.separator();
@@ -1214,68 +1212,51 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                 ui.collapsing("Hold factor", |ui| {
                     ui.separator();
                     ui.horizontal(|ui| {
-                        let id = self.hold_factor.get_id();
-                        if self.hold_factor.egui(
+                        *gui_out_mut = gui_out_mut.clone().or(self.hold_factor.egui(
                             GuiInValue::Edit(GuiInValueEditParams {
                                 allow_interval_edit: false,
                                 slider_log_scale: false,
                                 cfg_devices,
                                 cfg_variables,
                                 name: "Choose hold factor source",
-                                choice_case: ValueUsageContext::TfmStepAuxSrc,
+                                choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
                             }),
                             ui,
-                        ) {
-                            if id == self.hold_factor.get_id() {
-                                *gui_out_mut = Some(GuiCmd::ConfigChangeSimple);
-                            } else {
-                                *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
-                            }
-                        };
+                        ));
                     });
                 })
                 .header_response
                 .on_hover_text(self.hold_factor_doc_str());
 
-                gui_out = gui_out.or(bool_to_simple_change_gui_cmd(changed_simple));
+                *gui_out_mut = gui_out_mut.clone().or(bool_to_simple_change_gui_cmd(changed_simple));
 
                 ui.separator();
                 ui.horizontal(|ui| {
-                    let param_name = "External accumulator";
+                    let param_name = "Custom accumulator";
                     ui.label(param_name);
                     if let Some(acc) = &mut self.accumulator {
                         if ui.button("Use built-in accumulator").clicked() {
                             self.accumulator = None;
                         } else {
                             ui.separator();
-                            changed_simple |= acc.egui(
+                            *gui_out_mut = gui_out_mut.clone().or(acc.egui(
                                 GuiInValue::Edit(GuiInValueEditParams {
                                     allow_interval_edit: false,
                                     slider_log_scale: false,
                                     cfg_variables,
                                     cfg_devices,
                                     name: param_name,
-                                    choice_case: ValueUsageContext::TfmStepAuxSrc,
+                                    choice_case: ValueUsageContext::TfmStepAuxXrc.into(),
                                 }),
                                 ui,
-                            );
+                            ));
                             ui.separator();
                         }
+                    } else {
+                        if ui.button("Use custom accumulator").clicked() {
+                            self.accumulator = Some(Default::default());
+                        }
                     }
-
-                    if let Some(choice) = draw_value_choice_iface(
-                        ValueUsageContext::TfmStepAuxDst,
-                        ui,
-                        "Custom accumulator",
-                        "Custom accumulator",
-                        cfg_devices,
-                        cfg_variables,
-                    ) && let Ok(acc_inner) = std::convert::TryInto::<ValueDsts>::try_into(choice)
-                        && acc_inner.is_dynamic()
-                    {
-                        self.accumulator = Some(acc_inner.into());
-                        changed_simple = true;
-                    };
                 })
                 .response
                 .on_hover_text(self.accumulator_doc_str());
@@ -1539,37 +1520,33 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                                                 ScriptAuxKind::Source => {
                                                     if let Some(src) = self.aux_srcs.get_mut(name) {
                                                         let window_title = format!("Choose script input {} ", name);
-                                                        if src.egui(
+                                                        *gui_out_mut = gui_out_mut.clone().or(src.egui(
                                                             GuiInValue::Edit(GuiInValueEditParams {
                                                                 name: &window_title,
-                                                                choice_case: ValueUsageContext::TfmStepAuxSrc,
+                                                                choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
                                                                 allow_interval_edit: true,
                                                                 slider_log_scale: false,
                                                                 cfg_variables: gui_in.2,
                                                                 cfg_devices: gui_in.3,
                                                             }),
                                                             ui,
-                                                        ) {
-                                                            changed_settings_general = true;
-                                                        }
+                                                        ))
                                                     }
                                                 }
                                                 ScriptAuxKind::Destination => {
                                                     if let Some(dst) = self.aux_dsts.get_mut(name) {
                                                         let window_title = format!("Choose script output {} ", name);
-                                                        if dst.egui(
+                                                        *gui_out_mut = gui_out_mut.clone().or(dst.egui(
                                                             GuiInValue::Edit(GuiInValueEditParams {
                                                                 name: &window_title,
-                                                                choice_case: ValueUsageContext::TfmStepAuxDst,
+                                                                choice_case: ValueUsageContext::TfmStepAuxDst.into(),
                                                                 allow_interval_edit: true,
                                                                 slider_log_scale: false,
                                                                 cfg_variables: gui_in.2,
                                                                 cfg_devices: gui_in.3,
                                                             }),
                                                             ui,
-                                                        ) {
-                                                            changed_settings_general = true;
-                                                        }
+                                                        ));
                                                     }
                                                 }
                                                 ScriptAuxKind::Transformation => {

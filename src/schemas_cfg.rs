@@ -12,9 +12,32 @@ use garde::Validate;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::ops::Deref;
+use std::ops::DerefMut;
 use std::path::PathBuf;
 use traversable::{Traversable, TraversableMut};
 use with_doc_str::with_doc_str;
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
+pub(crate) struct DescriptionCfg(pub(crate) String);
+
+pub(crate) trait WithDescriptionMut {
+    fn description_mut(&mut self) -> Option<&mut DescriptionCfg>;
+}
+
+impl Deref for DescriptionCfg {
+    type Target = String;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for DescriptionCfg {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 #[derive(
     Debug, Clone, Default, Serialize, Deserialize, TraversableMut, Traversable, JsonSchema, Validate, PartialEq,

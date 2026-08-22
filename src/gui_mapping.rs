@@ -43,15 +43,26 @@ pub(crate) enum ValueUsageContext {
     MappingDst,
     TfmStepAuxSrc,
     TfmStepAuxDst,
+    TfmStepAuxXrc,
 }
 
 impl ValueUsageContext {
     pub(crate) fn is_dst(&self) -> bool {
         match self {
-            ValueUsageContext::MappingDst => true,
-            ValueUsageContext::TfmStepAuxDst => true,
-            ValueUsageContext::MappingSrc => false,
-            ValueUsageContext::TfmStepAuxSrc => false,
+            Self::MappingDst => true,
+            Self::TfmStepAuxDst => true,
+            Self::MappingSrc => false,
+            Self::TfmStepAuxSrc => false,
+            Self::TfmStepAuxXrc => true,
+        }
+    }
+    pub(crate) fn is_src(&self) -> bool {
+        match self {
+            Self::MappingDst => false,
+            Self::TfmStepAuxDst => false,
+            Self::MappingSrc => true,
+            Self::TfmStepAuxSrc => true,
+            Self::TfmStepAuxXrc => true,
         }
     }
 }
@@ -134,24 +145,17 @@ impl<'s> DrawEgui<'s> for Mapping {
                                         egui::RichText::new("Main src").strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
                                     );
                                     ui.separator();
-                                    let old_id = self.src.get_id();
-                                    if self.src.egui(
+                                    gui_out = self.src.egui(
                                         GuiInValue::Edit(GuiInValueEditParams {
                                             allow_interval_edit: true,
                                             slider_log_scale: false,
                                             cfg_variables,
                                             cfg_devices,
                                             name: "Choose main mapping source",
-                                            choice_case: ValueUsageContext::MappingSrc,
+                                            choice_case: ValueUsageContext::MappingSrc.into(),
                                         }),
                                         ui,
-                                    ) {
-                                        gui_out = if old_id == self.src.get_id() {
-                                            Some(GuiCmd::ConfigChangeSimple)
-                                        } else {
-                                            Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter))
-                                        };
-                                    };
+                                    );
                                     ui.separator();
                                     ui.label(
                                         egui::RichText::new(format!("<= {:+08.2}", last_in)).size(16.0).strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
@@ -188,24 +192,17 @@ impl<'s> DrawEgui<'s> for Mapping {
                                         egui::RichText::new("Main dst").strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
                                     );
                                     ui.separator();
-                                    let old_id = self.dst.get_id();
-                                    if self.dst.egui(
+                                    gui_out = self.dst.egui(
                                         GuiInValue::Edit(GuiInValueEditParams {
                                             allow_interval_edit: true,
                                             slider_log_scale: false,
                                             cfg_variables,
                                             cfg_devices,
                                             name: "Choose main mapping destination",
-                                            choice_case: ValueUsageContext::MappingDst,
+                                            choice_case: ValueUsageContext::MappingDst.into(),
                                         }),
                                         ui,
-                                    ) {
-                                        gui_out = if old_id == self.dst.get_id() {
-                                            Some(GuiCmd::ConfigChangeSimple)
-                                        } else {
-                                            Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter))
-                                        };
-                                    };
+                                    );
                                     ui.separator();
                                     ui.label(
                                         egui::RichText::new(format!("=> {:+08.2}", last_out))
