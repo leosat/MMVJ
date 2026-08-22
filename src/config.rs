@@ -9,9 +9,7 @@ use crate::schemas_midi::{MidiControlMatcherCfg, MidiMatcherCfg};
 use crate::schemas_predefined::ControlsPredefinedCfg;
 use crate::schemas_transform::*;
 
-use crate::schemas_value::{
-    AutoOrManual, DeviceControlMatcherRef, DynValueRefs, ValueSrcs, WithNumInterval, WithRelativity,
-};
+use crate::schemas_value::{AutoOrManual, DeviceControlMatcherRef, DynValueRefs, WithNumInterval, WithRelativity};
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
 

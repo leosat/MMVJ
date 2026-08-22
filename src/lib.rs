@@ -1,6 +1,6 @@
 // #![cfg_attr(all(not(feature = "default"), not(debug_assertions)), allow(warnings))]
 #![cfg_attr(all(not(debug_assertions)), allow(warnings))]
-#[macro_use]
+// #![macro_use]
 
 pub mod config;
 pub mod debug;

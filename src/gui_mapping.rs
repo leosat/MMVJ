@@ -140,12 +140,11 @@ impl<'s> DrawEgui<'s> for Mapping {
                             let last_in = self.last_in.load(Relaxed);
                             gui_out = gui_out.or(ui
                                 .horizontal(|ui| {
-                                    let mut gui_out = None;
                                     ui.label(
                                         egui::RichText::new("Main src").strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
                                     );
                                     ui.separator();
-                                    gui_out = self.src.egui(
+                                    let gui_out = self.src.egui(
                                         GuiInValue::Edit(GuiInValueEditParams {
                                             allow_interval_edit: true,
                                             slider_log_scale: false,
@@ -187,12 +186,11 @@ impl<'s> DrawEgui<'s> for Mapping {
                             let last_out = self.last_out.load(Relaxed);
                             gui_out = gui_out.or(ui
                                 .horizontal(|ui| {
-                                    let mut gui_out = None;
                                     ui.label(
                                         egui::RichText::new("Main dst").strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
                                     );
                                     ui.separator();
-                                    gui_out = self.dst.egui(
+                                    let gui_out = self.dst.egui(
                                         GuiInValue::Edit(GuiInValueEditParams {
                                             allow_interval_edit: true,
                                             slider_log_scale: false,

@@ -1081,9 +1081,9 @@ impl WithTfmExec for SteeringCfg {
 
         state.last_time = now;
 
-        self.accumulator.as_ref().map(|acc| {
+        if let Some(acc) = self.accumulator.as_ref() {
             acc.port_set_numeric_value_and_flush_to_devices(state.pre_filter, ctx);
-        });
+        }
 
         out
     }

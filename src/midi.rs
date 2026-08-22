@@ -326,7 +326,7 @@ impl MidiManager {
                     move |_stamp, message, _| {
                         if let Some(msg) = MidiMessage::from_raw_data(message, debug) {
                             if debug.is_on() {
-                                debug!("MIDI {}: {:?}", &device_name, msg);
+                                debug!("MIDI {}: {:?}", device_name, msg);
                             }
                             let _ = sender.send(MidiDeviceEvent { device_id, data: msg });
                         }
