@@ -197,9 +197,9 @@ Can be specified as either:
 
 Each entry supports the following sub-fields:
 
-#### `aux_srcs.<key>.source` (ValueSrc, required)
+#### `aux_srcs.<key>.source` (a static value or an arbitrary source, required)
 
-The data source to read from. Accepts any valid `ValueSrc`:
+The data source to read from. Accepts any valid `static value or an arbitrary source`:
 
 * A **device control** reference: `{ dev: <device>, ctl: <control> }`
 * A **variable** reference: `{ var: <name> }`
@@ -231,9 +231,9 @@ Can be specified as a **map** or a **list**, exactly like `aux_srcs`.
 
 Each entry supports the following sub-fields:
 
-#### `aux_dsts.<key>.destination` (ValueDst, required)
+#### `aux_dsts.<key>.destination` (a dynamic value destination, required)
 
-The target to write to. Accepts any valid `ValueDst`:
+The target to write to. Accepts any valid `dynamic value destination`:
 
 * A **device control** reference: `{ dev: <device>, ctl: <control> }`
 * A **variable** reference: `{ var: <name> }`

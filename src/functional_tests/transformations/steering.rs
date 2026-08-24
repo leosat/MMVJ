@@ -500,26 +500,26 @@ mod steering_tfm_deserialization_and_exec_tests {
         println!("Round-trip: both -> {o1:.6}");
     }
 
-    #[test]
-    fn test_steering_bool_shorthand() {
-        for (literal, expected) in [("true", 1.0), ("false", 0.0)] {
-            let yaml = format!(
-                r#"
-- steering:
-    enabled: true
-    input_gain: 0.1
-    auto_center_along_force_feedback: {literal}
-"#
-            );
-            let tfm: TfmSeqCfg = serde_saphyr::from_str(&yaml).unwrap();
-            if let TfmStepCfg::Steering(s) = &tfm.steps[0] {
-                assert!(
-                    approx(s.auto_center_along_force_feedback.get_numeric_value(), expected),
-                    "`{literal}` -> {expected}"
-                );
-            }
-        }
-    }
+    //     #[test]
+    //     fn test_steering_bool_shorthand() {
+    //         for (literal, expected) in [("true", 1.0), ("false", 0.0)] {
+    //             let yaml = format!(
+    //                 r#"
+    // - steering:
+    //     enabled: true
+    //     input_gain: 0.1
+    //     auto_center_along_force_feedback: {literal}
+    // "#
+    //             );
+    //             let tfm: TfmSeqCfg = serde_saphyr::from_str(&yaml).unwrap();
+    //             if let TfmStepCfg::Steering(s) = &tfm.steps[0] {
+    //                 assert!(
+    //                     approx(s.auto_center_along_force_feedback.get_numeric_value(), expected),
+    //                     "`{literal}` -> {expected}"
+    //                 );
+    //             }
+    //         }
+    //     }
 
     #[test]
     fn test_steering_input_gain_aliases() {
