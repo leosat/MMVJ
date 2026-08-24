@@ -2152,7 +2152,7 @@ impl Default for ScriptCfg {
     }
 }
 
-fn deserialize_bool_or_value_src<'de, D>(deserializer: D) -> Result<ValueSrcs, D::Error>
+fn _deserialize_bool_or_value_src<'de, D>(deserializer: D) -> Result<ValueSrcs, D::Error>
 where
     D: Deserializer<'de>,
 {
