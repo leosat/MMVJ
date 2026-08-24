@@ -11,7 +11,7 @@ use crate::schemas_value::{
     DeviceControlMatcherRef, DynValueRefs, ValueDsts, VariableRef, WithNumInterval, WithRelativityRef,
     serialize_value_src_rt_ignore_interval,
 };
-use crate::schemas_value_port::{PortRemapPolicy, SanPolicyNone, ValuePort};
+use crate::schemas_value_port::{PortRemapPolicy, SanPolicyNone, SanPolicyUseFromPortInner, ValuePort};
 use crate::tfm_exec::{IntegrateExeState, RaiseFallExeState, ScriptExeState, SteeringExeState, TfmExeState};
 use crate::{
     num_interval::NumInterval,
@@ -50,27 +50,27 @@ const fn default_ff_gain() -> BaseNumT {
 }
 
 pub(crate) const fn default_1euro_beta() -> ValueSrcs {
-    make_static_value_src(0.007, UNIT_INTERVAL)
+    make_static_value_src(0.007, NumInterval { from: 1e-4, to: 2.0 })
 }
 
 pub(crate) const fn default_1euro_d_cutoff_hz() -> ValueSrcs {
-    make_static_value_src(1.0, NumInterval { from: 1e-6, to: 30.0 })
+    make_static_value_src(1.0, NumInterval { from: 1e-4, to: 30.0 })
 }
 
 pub(crate) const fn default_1euro_min_cutoff_hz() -> ValueSrcs {
-    make_static_value_src(1.0, NumInterval { from: 1e-6, to: 30.0 })
+    make_static_value_src(1.0, NumInterval { from: 1e-4, to: 30.0 })
 }
 
 const fn default_clamp_transform_override_interval() -> bool {
     true
 }
 
-const fn default_steering_smoothing_alpha() -> BaseNumT {
-    0.33
+const fn default_steering_gain() -> ValueSrcs {
+    make_static_value_src(0.33, UNIT_INTERVAL)
 }
 
-const fn default_steering_transform_auto_center_halflife() -> BaseNumT {
-    0.3
+const fn default_steering_auto_center_halflife() -> ValueSrcs {
+    make_static_value_src(0.3, UNIT_INTERVAL)
 }
 
 const fn default_smoothing_alpha() -> BaseNumT {
@@ -90,10 +90,7 @@ pub(crate) const fn default_norm_exp_base() -> BaseNumT {
 }
 
 pub(crate) fn default_filter_tau() -> ValueSrcs {
-    ValueSrcs::Static(StaticValueCfg {
-        value: 0.04.into(),
-        interval: AutoOrManual::Auto(NumInterval { from: 1e-4, to: 2.0 }),
-    })
+    make_static_value_src(0.04, NumInterval { from: 1e-4, to: 2.0 })
 }
 
 /// This trait ensures that we do not forget to
@@ -702,8 +699,7 @@ pub(crate) struct EmaCfg {
     #[serde(skip_serializing_if = "is_false")]
     #[garde(skip)]
     pub(crate) on_relative_input_reset_on_idle: bool,
-    //#[serde(default = "default_ema_tau")]
-    #[schemars(skip)]
+    #[serde(default)]
     #[garde(skip)]
     /// The time constant
     /// Defines the duration required for the filter's step response
@@ -715,7 +711,7 @@ make_input_port_inner_nutype!(
     TauCfg,
     default: default_filter_tau(),
     san-doc: "Tau is ensured to be > 0.0",
-    san-exe: |v: BaseNumT| {v.clamp(default_filter_tau().get_interval().from(), BaseNumT::INFINITY)}
+    san-exe: |v: BaseNumT| {v.max(BaseNumT::EPSILON)}
 );
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -835,7 +831,7 @@ pub(crate) struct OneEuroFilterCfg {
     /// **Tuning heuristic:** start at `0.0`, increase until fast
     /// movements feel responsive, then back off slightly.
     #[serde(default)]
-    #[garde(range(min = 0.0))]
+    #[garde(range(min = BaseNumT::EPSILON))]
     pub(crate) beta: ValuePort<OneEuroBeta>,
 
     /// Minimum cutoff frequency in Hz. The cutoff used when the input
@@ -849,7 +845,7 @@ pub(crate) struct OneEuroFilterCfg {
     ///
     /// Think of this as the **noise floor** of the filter.
     #[serde(default)]
-    #[garde(range(min = 0.0))]
+    #[garde(range(min = BaseNumT::EPSILON))]
     pub(crate) min_cutoff_hz: ValuePort<OneEuroMinCutOffHz>,
 
     /// Cutoff frequency in Hz for the derivative (speed) low-pass
@@ -867,7 +863,7 @@ pub(crate) struct OneEuroFilterCfg {
     ///
     /// Rarely needs adjustment from the default.
     #[serde(default)]
-    #[garde(range(min = 0.0))]
+    #[garde(range(min = BaseNumT::EPSILON))]
     pub(crate) d_cutoff_hz: ValuePort<OneEuroDCutOffHz>,
 }
 
@@ -875,21 +871,21 @@ make_input_port_inner_nutype!(
     OneEuroMinCutOffHz,
     default: default_1euro_min_cutoff_hz(),
     san-doc: "Low pass cut off is ensured to be > 0.0",
-    san-exe: |v: BaseNumT| {v.clamp(default_1euro_min_cutoff_hz().get_interval().from(), BaseNumT::INFINITY)}
+    san-exe: |v: BaseNumT| {v.max(BaseNumT::EPSILON)}
 );
 
 make_input_port_inner_nutype!(
     OneEuroBeta,
     default: default_1euro_beta(),
     san-doc: "Beta is ensured to be > 0.0",
-    san-exe: |v: BaseNumT| {v.clamp(default_1euro_beta().get_interval().from(), BaseNumT::INFINITY)}
+    san-exe: |v: BaseNumT| {v.max(BaseNumT::EPSILON)}
 );
 
 make_input_port_inner_nutype!(
     OneEuroDCutOffHz,
     default: default_1euro_d_cutoff_hz(),
     san-doc: "Speed cut off is ensured to be > 0.0",
-    san-exe: |v: BaseNumT| {v.clamp(default_1euro_d_cutoff_hz().get_interval().from(), BaseNumT::INFINITY)}
+    san-exe: |v: BaseNumT| {v.max(BaseNumT::EPSILON)}
 );
 
 impl TfmCfgDuplicateWithNewState for OneEuroFilterCfg {
@@ -1666,7 +1662,7 @@ pub(crate) struct SteeringCfg {
     #[garde(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) accumulator: Option<SteeringAccPort>, // SteeringAccRemapPol
+    pub(crate) accumulator: Option<ValuePort<ValueXrcs, SanPolicyNone, RemapPolicySymmUnit>>,
 
     /// *(Reserved — currently unused.)*
     ///
@@ -1689,7 +1685,7 @@ pub(crate) struct SteeringCfg {
     #[garde(skip)]
     #[serde(alias = "smoothing_alpha")]
     #[serde(alias = "input_sensitivity")]
-    pub(crate) input_gain: ValueSrcs,
+    pub(crate) input_gain: ValuePort<SteeringInputGainCfg, SanPolicyUseFromPortInner, RemapPolicyUnit>,
 
     /// Half-life (in seconds) of the exponential autocentering decay.
     ///
@@ -1703,7 +1699,8 @@ pub(crate) struct SteeringCfg {
     /// `auto_center_along_force_feedback > 0`).
     #[serde(default)]
     #[garde(skip)]
-    pub(crate) auto_center_halflife: ValueSrcs,
+    pub(crate) auto_center_halflife:
+        ValuePort<SteeringAutocenterAlongFfbCfg, SanPolicyUseFromPortInner, RemapPolicyUnit>,
 
     /// Allows autocentering to operate **alongside** active force feedback,
     /// scaled by this factor in [0, 1].
@@ -1714,8 +1711,8 @@ pub(crate) struct SteeringCfg {
     /// Accepts a bare `true`/`false` in YAML (converted to 1.0/0.0).
     #[serde(default)]
     #[garde(skip)]
-    #[serde(deserialize_with = "deserialize_bool_or_value_src")]
-    pub(crate) auto_center_along_force_feedback: ValueSrcs,
+    pub(crate) auto_center_along_force_feedback:
+        ValuePort<SteeringAutocenterAlongFfbCfg, SanPolicyNone, RemapPolicyUnit>,
 
     /// Simulated grip strength in [0, 1]. Scales both FFB displacement
     /// and autocentering by `(1 - hold_factor)`.
@@ -1727,9 +1724,8 @@ pub(crate) struct SteeringCfg {
     /// Commonly mapped to mouse Y via a separate `integrate` + `clamp`
     /// mapping for dynamic grip control.
     #[serde(default)]
-    #[serde(serialize_with = "serialize_value_src_rt_ignore_interval")]
     #[garde(skip)]
-    pub(crate) hold_factor: ValueSrcs,
+    pub(crate) hold_factor: ValuePort<SteeringHoldFactorCfg, SanPolicyNone, RemapPolicyUnit>,
 
     /// Force-feedback sub-configuration.
     ///
@@ -1760,15 +1756,60 @@ pub(crate) struct SteeringCfg {
     pub(crate) integrated_user_input_transform: TfmSeqCfg,
 }
 
-type SteeringAccPort = ValuePort<ValueXrcs, SanPolicyNone, SteeringAccPortRemapPol>;
+pub(crate) fn default_zero_range_zero_to_one() -> ValueSrcs {
+    ValueSrcs::Static(StaticValueCfg {
+        value: 0.00.into(),
+        interval: AutoOrManual::Auto(NumInterval { from: 0.0, to: 1.0 }),
+    })
+}
+
+make_input_port_inner_nutype!(
+    SteeringAutocenteringHalflife,
+    default: default_steering_auto_center_halflife(),
+    san-doc: "Autocentering halflife is >= 0",
+    san-exe: |v: BaseNumT| {v.max(BaseNumT::ZERO)}
+);
+
+make_input_port_inner_nutype!(
+    SteeringInputGainCfg,
+    default: default_steering_gain(),
+    san-doc: "Input gain is >= 0",
+    san-exe: |v: BaseNumT| {v.max(BaseNumT::ZERO)}
+);
+
+use num_traits::ConstZero;
+
+make_input_port_inner_nutype!(
+    SteeringHoldFactorCfg,
+    default: default_zero_range_zero_to_one(),
+    san-doc: "Hold factor is >= 0",
+    san-exe: |v: BaseNumT| {v.max(BaseNumT::ZERO)}
+);
+
+make_input_port_inner_nutype!(
+    SteeringAutocenterAlongFfbCfg,
+    default: default_zero_range_zero_to_one(),
+    san-doc: "Autocenter along force feedback is in range [0,1]",
+    san-exe: |v: BaseNumT| {UNIT_INTERVAL.clamp(v)}
+);
 
 #[derive(
     PartialEq, PartialOrd, Clone, Copy, std::fmt::Debug, Default, Serialize, Deserialize, TraversableMut, Traversable,
 )]
-pub(crate) struct SteeringAccPortRemapPol {}
-impl PortRemapPolicy<ValueXrcs> for SteeringAccPortRemapPol {
+pub(crate) struct RemapPolicySymmUnit {}
+impl PortRemapPolicy<BaseNumT> for RemapPolicySymmUnit {
     fn get_remap_range() -> Option<NumInterval<BaseNumT>> {
         SYMM_UNIT_INTERVAL.into()
+    }
+}
+
+#[derive(
+    PartialEq, PartialOrd, Clone, Copy, std::fmt::Debug, Default, Serialize, Deserialize, TraversableMut, Traversable,
+)]
+pub(crate) struct RemapPolicyUnit {}
+impl PortRemapPolicy<BaseNumT> for RemapPolicyUnit {
+    fn get_remap_range() -> Option<NumInterval<BaseNumT>> {
+        UNIT_INTERVAL.into()
     }
 }
 
@@ -1803,22 +1844,10 @@ impl Default for SteeringCfg {
         Self {
             enabled: default_step_enabled(),
             deadzone_counts: 0.0,
-            input_gain: ValueSrcs::Static(StaticValueCfg {
-                value: default_steering_smoothing_alpha().into(),
-                interval: UNIT_INTERVAL.into(),
-            }),
-            auto_center_halflife: ValueSrcs::Static(StaticValueCfg {
-                value: default_steering_transform_auto_center_halflife().into(),
-                interval: UNIT_INTERVAL.into(),
-            }),
-            auto_center_along_force_feedback: ValueSrcs::Static(StaticValueCfg {
-                value: 0.0.into(),
-                interval: UNIT_INTERVAL.into(),
-            }),
-            hold_factor: ValueSrcs::Static(StaticValueCfg {
-                value: 0.0.into(),
-                interval: UNIT_INTERVAL.into(),
-            }),
+            input_gain: Default::default(),
+            auto_center_halflife: Default::default(),
+            auto_center_along_force_feedback: Default::default(),
+            hold_factor: Default::default(),
             force_feedback: None,
             integrated_user_input_transform: TfmSeqCfg::default(),
             desc: Default::default(),
@@ -2163,8 +2192,8 @@ where
     }
 }
 
-pub(crate) type ScriptAuxSourceCfg = ValuePort<ValueSrcs>;
-pub(crate) type ScriptAuxDestinationCfg = ValuePort<ValueDsts>;
+pub(crate) type ScriptAuxSourceCfg = ValuePort<ValueSrcs, SanPolicyNone>;
+pub(crate) type ScriptAuxDestinationCfg = ValuePort<ValueDsts, SanPolicyNone>;
 
 impl WithRuntimeId for TfmStepCfg {
     fn get_id(&self) -> ObjId {

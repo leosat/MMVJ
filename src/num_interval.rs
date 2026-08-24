@@ -642,6 +642,16 @@ impl<T: NumIntervalValue> NumInterval<T> {
     }
 }
 
+#[macro_export]
+macro_rules! interval_grow_to_fit {
+    ( $interval:ident, $value:ident) => {{
+        let mut tmp = $interval.clone();
+        tmp.from = tmp.from.min($value);
+        tmp.to = tmp.to.max($value);
+        tmp
+    }};
+}
+
 #[cfg(test)]
 mod tests {
     use crate::test_utils::fp_approx_eq;

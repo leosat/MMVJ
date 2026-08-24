@@ -860,18 +860,9 @@ impl WithTfmExec for SteeringCfg {
         }
         let now = Instant::now();
         let state = &mut self.exe_state_mut();
-        let value = input.value
-            * UNIT_INTERVAL.map_from(
-                self.input_gain.get_numeric_value(),
-                &self.input_gain.get_interval(),
-                OutOfRangePolicy::WarnIfDebugAndClamp,
-            );
+        let value = input.value * self.input_gain.get_numeric_value();
 
-        let auto_center_along_force_feedback = UNIT_INTERVAL.map_from(
-            self.auto_center_along_force_feedback.get_numeric_value(),
-            &self.auto_center_along_force_feedback.get_interval(),
-            OutOfRangePolicy::WarnIfDebugAndClamp,
-        );
+        let auto_center_along_force_feedback = self.auto_center_along_force_feedback.get_numeric_value();
 
         let dt = clamp_dt_by_min_and_max_period((now - state.last_time).as_secs_f32() as BaseNumT);
 
@@ -947,11 +938,7 @@ impl WithTfmExec for SteeringCfg {
             now,
         );
 
-        let hold_factor_unit = UNIT_INTERVAL.map_from(
-            self.hold_factor.get_numeric_value(),
-            &self.hold_factor.get_interval(),
-            OutOfRangePolicy::WarnIfDebugAndClamp,
-        );
+        let hold_factor_unit = self.hold_factor.get_numeric_value();
 
         '_FFB_and_autocentering: {
             let ff_force_symm_norm = if let Some(ff_config) = &self.force_feedback {

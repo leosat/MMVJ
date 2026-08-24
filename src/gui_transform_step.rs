@@ -1255,6 +1255,7 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                     } else {
                         if ui.button("Use custom accumulator").clicked() {
                             self.accumulator = Some(Default::default());
+                            *gui_out_mut = bool_to_simple_change_gui_cmd(true);
                         }
                     }
                 })
