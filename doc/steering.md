@@ -63,7 +63,7 @@ FFB effect types (Constant, Spring, Friction, Ramp) that this step relies on.
 ## Per-Parameter Reference
 
 All parameters below are fields of the `steering:` mapping step in the YAML  
-configuration. Parameters typed as **ValueSrc** accept either a static number  
+configuration. Parameters typed as **a static value or an arbitrary source** accept either a static number  
 or a dynamic reference (`var: ...` / `dev: ... / ctl: ...`), allowing runtime  
 tweaking from the GUI or from another mapping.
 
@@ -74,7 +74,7 @@ value passes through unchanged.
 
 ---
 
-### `input_gain` (ValueSrc \[0, 1\], default: `0.33`)
+### `input_gain` (a static value or an arbitrary source, in expected range of \[0, 1\], default: `0.33`)
 
 _(YAML aliases:_ `_smoothing_alpha_`_,_ `_input_sensitivity_`_)_
 
@@ -88,13 +88,13 @@ into the wheel angle.
 *   **High values (0.3 - 0.5):** quick, responsive steering. Good for  
     low-DPI mice or arcade-style response.
 
-Because this is a **ValueSrc**, you can bind it to a variable or a device  
+Because this is a **static value or an arbitrary source**, you can bind it to a variable or a device  
 control and adjust sensitivity on the fly (e.g. map it to a slider or a  
 secondary mouse axis for a live "steering speed" knob).
 
 ---
 
-### `auto_center_halflife` (ValueSrc >= 0, default: `0.3`)
+### `auto_center_halflife` (a static value or an arbitrary source >= 0, default: `0.3`)
 
 The **half-life** (in seconds) of the exponential decay that pulls the wheel  
 toward center when the user is not providing input.
@@ -118,9 +118,7 @@ Autocentering only engages when **all** of the following hold:
 
 ---
 
-### `auto_center_along_force_feedback` (ValueSrc \[0, 1\] or bool, default: `0.0`)
-
-_(A bare_ `_true_`_/_`_false_` _in YAML is accepted and converted to_ `_1.0_`_/_`_0.0_`_.)_
+### `auto_center_along_force_feedback` (a static value or an arbitrary source, in expected range of \[0, 1\], default: `0.0`)
 
 By default, autocentering is **suppressed** while a significant FFB force is  
 present, because the game's force feedback is already providing the  
@@ -136,7 +134,7 @@ to self-center.
 
 ---
 
-### `hold_factor` (ValueSrc \[0, 1\], default: `0.0`)
+### `hold_factor` (a static value or an arbitrary source, in expected range of \[0, 1\], default: `0.0`)
 
 Simulates how firmly the driver grips the wheel. It scales **both** the FFB  
 displacement and the autocentering decay by `(1 - hold_factor)`:
@@ -220,11 +218,11 @@ Typical uses:
 *   A `clamp` to limit peak forces.
 *   A curve (`exp`, `signed_power`) to reshape the force response.
 
-#### `force_feedback.custom_source` (ValueSrc, optional)
+#### `force_feedback.custom_source` (a static value or an arbitrary source, optional)
 
 Overrides the default FFB reading mechanism. Instead of reading the force from  
 the destination virtual device's internal FFB state, the step reads from an  
-arbitrary **ValueSrc** (a variable, a device control, etc.). The value is  
+arbitrary source (a variable, a device control, etc.). The value is  
 mapped from the source's interval to **\[-1, +1\]**.
 
 ---
