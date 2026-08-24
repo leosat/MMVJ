@@ -1530,21 +1530,21 @@
         },
         "input_gain": {
           "description": "Multiplier applied to the raw input **before**\naccumulation. Mapped from its own interval to [0, 1].\n\n- Low (0.05–0.15): heavy, slow steering.\n- High (0.3–0.5): quick, responsive steering.\n\nAccepts a static value or a dynamic reference (`var:` / `dev:`)\nfor runtime adjustment.\n\nYAML aliases: `smoothing_alpha`, `input_sensitivity`.",
-          "$ref": "#/$defs/ValueSrcs"
+          "$ref": "#/$defs/ValuePort2"
         },
         "auto_center_halflife": {
           "description": "Half-life (in seconds) of the exponential autocentering decay.\n\n- `0`: autocentering disabled.\n- `0.1`: snappy return.\n- `0.3` (default): moderate, natural return.\n- `1.0+`: slow drift to center.\n\nDecay per tick: `(1 - 2^(-dt / halflife)) * (1 - hold_factor)`.\nOnly active when the user is idle and (FFB is negligible or\n`auto_center_along_force_feedback > 0`).",
-          "$ref": "#/$defs/ValueSrcs",
+          "$ref": "#/$defs/ValuePort3",
           "default": 0.0
         },
         "auto_center_along_force_feedback": {
           "description": "Allows autocentering to operate **alongside** active force feedback,\nscaled by this factor in [0, 1].\n\n- `0.0` (default): autocentering suppressed while FFB is present.\n- `1.0`: autocentering at full strength regardless of FFB.\n\nAccepts a bare `true`/`false` in YAML (converted to 1.0/0.0).",
-          "$ref": "#/$defs/ValueSrcs",
+          "$ref": "#/$defs/ValuePort3",
           "default": 0.0
         },
         "hold_factor": {
           "description": "Simulated grip strength in [0, 1]. Scales both FFB displacement\nand autocentering by `(1 - hold_factor)`.\n\n- `0.0` (default): hands off — FFB and autocentering act freely.\n- `0.5`: moderate grip — half effect.\n- `1.0`: locked grip — wheel immovable except by direct input.\n\nCommonly mapped to mouse Y via a separate `integrate` + `clamp`\nmapping for dynamic grip control.",
-          "$ref": "#/$defs/ValueSrcs",
+          "$ref": "#/$defs/ValuePort4",
           "default": 0.0
         },
         "force_feedback": {
@@ -1591,6 +1591,7 @@
               "$ref": "#/$defs/ValueXrcs"
             }
           },
+          "additionalProperties": false,
           "required": [
             "value"
           ]
@@ -1615,6 +1616,132 @@
     "XrcSink": {
       "type": "number",
       "format": "float"
+    },
+    "ValuePort2": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "remap": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NumInterval"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "triggers_mapping": {
+              "type": "boolean"
+            },
+            "value": {
+              "$ref": "#/$defs/SteeringInputGainCfg"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "value"
+          ]
+        },
+        {
+          "$ref": "#/$defs/SteeringInputGainCfg"
+        }
+      ]
+    },
+    "SteeringInputGainCfg": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StaticValueCfg"
+        },
+        {
+          "$ref": "#/$defs/DynValueRefs"
+        }
+      ]
+    },
+    "ValuePort3": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "remap": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NumInterval"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "triggers_mapping": {
+              "type": "boolean"
+            },
+            "value": {
+              "$ref": "#/$defs/SteeringAutocenterAlongFfbCfg"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "value"
+          ]
+        },
+        {
+          "$ref": "#/$defs/SteeringAutocenterAlongFfbCfg"
+        }
+      ]
+    },
+    "SteeringAutocenterAlongFfbCfg": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StaticValueCfg"
+        },
+        {
+          "$ref": "#/$defs/DynValueRefs"
+        }
+      ]
+    },
+    "ValuePort4": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "remap": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NumInterval"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "triggers_mapping": {
+              "type": "boolean"
+            },
+            "value": {
+              "$ref": "#/$defs/SteeringHoldFactorCfg"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "value"
+          ]
+        },
+        {
+          "$ref": "#/$defs/SteeringHoldFactorCfg"
+        }
+      ]
+    },
+    "SteeringHoldFactorCfg": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StaticValueCfg"
+        },
+        {
+          "$ref": "#/$defs/DynValueRefs"
+        }
+      ]
     },
     "ForceFeedbackCfg": {
       "description": "Force-feedback configuration for the steering transform.\n\nControls how FFB forces from the game (read via the virtual HID device)\nare filtered, scaled, and applied as positional offsets to the emulated\nsteering wheel.",
@@ -1783,9 +1910,56 @@
         },
         "on_relative_input_reset_on_idle": {
           "type": "boolean"
+        },
+        "tau": {
+          "description": "The time constant\nDefines the duration required for the filter's step response\nto reach about 63.2% (1 - 1/e) of its final steady-state value.",
+          "$ref": "#/$defs/ValuePort5",
+          "default": 0.03999999910593033
         }
       },
       "additionalProperties": false
+    },
+    "ValuePort5": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "remap": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NumInterval"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "triggers_mapping": {
+              "type": "boolean"
+            },
+            "value": {
+              "$ref": "#/$defs/TauCfg"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "value"
+          ]
+        },
+        {
+          "$ref": "#/$defs/TauCfg"
+        }
+      ]
+    },
+    "TauCfg": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StaticValueCfg"
+        },
+        {
+          "$ref": "#/$defs/DynValueRefs"
+        }
+      ]
     },
     "LinearCfg": {
       "type": "object",
@@ -1937,23 +2111,23 @@
         },
         "beta": {
           "description": "Speed coefficient (β). Controls how much the cutoff frequency\nincreases in response to fast input movement.\n\nAdaptive cutoff formula: `cutoff = min_cutoff_hz + β · |dx̂|`\n\n- `0.0` — fixed-cutoff filter (no speed adaptation).\n- `0.001 – 0.01` — gentle adaptation (recommended starting range).\n- `0.1 – 10.0` — aggressive adaptation; near-passthrough during\n  fast sweeps, may re-introduce jitter.\n\n**Tuning heuristic:** start at `0.0`, increase until fast\nmovements feel responsive, then back off slightly.",
-          "$ref": "#/$defs/ValuePort2",
+          "$ref": "#/$defs/ValuePort6",
           "default": 0.007000000216066837
         },
         "min_cutoff_hz": {
           "description": "Minimum cutoff frequency in Hz. The cutoff used when the input\nis stationary or moving very slowly.\n\n- `0.1 – 0.5` — very heavy smoothing at rest (strong jitter\n  suppression, noticeable lag onset).\n- `1.0` *(default)* — moderate smoothing; good starting point.\n- `5.0 – 50.0` — light smoothing; use when input is already\n  clean or minimal latency is critical.\n\nThink of this as the **noise floor** of the filter.",
-          "$ref": "#/$defs/ValuePort3",
+          "$ref": "#/$defs/ValuePort7",
           "default": 1.0
         },
         "d_cutoff_hz": {
           "description": "Cutoff frequency in Hz for the derivative (speed) low-pass\nfilter.\n\nThe raw derivative `(x - x̂_prev) / dt` amplifies sensor jitter.\nThis secondary filter smooths the derivative so the adaptive\ncutoff does not oscillate.\n\n- `0.01 – 0.1` — very smooth derivative; stable but slow to\n  react to speed changes.\n- `1.0` *(default)* — balanced; works well for most devices.\n- `10.0 – 100.0` — barely filtered derivative; fast tracking\n  but may oscillate on noisy inputs.\n\nRarely needs adjustment from the default.",
-          "$ref": "#/$defs/ValuePort4",
+          "$ref": "#/$defs/ValuePort8",
           "default": 1.0
         }
       },
       "additionalProperties": false
     },
-    "ValuePort2": {
+    "ValuePort6": {
       "anyOf": [
         {
           "type": "object",
@@ -1975,6 +2149,7 @@
               "$ref": "#/$defs/OneEuroBeta"
             }
           },
+          "additionalProperties": false,
           "required": [
             "value"
           ]
@@ -1994,7 +2169,7 @@
         }
       ]
     },
-    "ValuePort3": {
+    "ValuePort7": {
       "anyOf": [
         {
           "type": "object",
@@ -2016,6 +2191,7 @@
               "$ref": "#/$defs/OneEuroMinCutOffHz"
             }
           },
+          "additionalProperties": false,
           "required": [
             "value"
           ]
@@ -2035,7 +2211,7 @@
         }
       ]
     },
-    "ValuePort4": {
+    "ValuePort8": {
       "anyOf": [
         {
           "type": "object",
@@ -2057,6 +2233,7 @@
               "$ref": "#/$defs/OneEuroDCutOffHz"
             }
           },
+          "additionalProperties": false,
           "required": [
             "value"
           ]
@@ -2125,14 +2302,14 @@
           "description": "Auxiliary data **sources** readable from the script via\n`read(\"<key>\")` or `read(<1-based index>)`.\n\nAccepts a YAML **map** (explicit string keys) or a **list**\n(auto-numbered `\"1\"`, `\"2\"`, …).\n\nYAML alias: `sources`.",
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/$defs/ValuePort5"
+            "$ref": "#/$defs/ValuePort9"
           }
         },
         "aux_dsts": {
           "description": "Auxiliary data **destinations** writable from the script via\n`write(\"<key>\", value)` or `write(<1-based index>, value)`.\n\nAccepts a YAML **map** or a **list**, same as [`aux_srcs`](Self::aux_srcs).\n\nYAML alias: `destinations`.",
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/$defs/ValuePort6"
+            "$ref": "#/$defs/ValuePort10"
           }
         },
         "aux_transformations": {
@@ -2161,7 +2338,7 @@
         "Abs"
       ]
     },
-    "ValuePort5": {
+    "ValuePort9": {
       "anyOf": [
         {
           "type": "object",
@@ -2183,6 +2360,7 @@
               "$ref": "#/$defs/ValueSrcs"
             }
           },
+          "additionalProperties": false,
           "required": [
             "value"
           ]
@@ -2192,7 +2370,7 @@
         }
       ]
     },
-    "ValuePort6": {
+    "ValuePort10": {
       "anyOf": [
         {
           "type": "object",
@@ -2214,6 +2392,7 @@
               "$ref": "#/$defs/ValueDsts"
             }
           },
+          "additionalProperties": false,
           "required": [
             "value"
           ]
@@ -2237,11 +2416,6 @@
         }
       },
       "anyOf": [
-        {
-          "$ref": "#/$defs/InputValueMetadata",
-          "readOnly": true,
-          "writeOnly": true
-        },
         {
           "$ref": "#/$defs/InputValueMetadata"
         }

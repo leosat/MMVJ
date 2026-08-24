@@ -140,10 +140,10 @@ impl<'s> DrawEgui<'s> for Mapping {
                             let last_in = self.last_in.load(Relaxed);
                             gui_out = gui_out.or(ui
                                 .horizontal(|ui| {
-                                    ui.label(
-                                        egui::RichText::new("Main src").strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
-                                    );
-                                    ui.separator();
+                                    // ui.label(
+                                    //     egui::RichText::new("Main src").strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
+                                    // );
+                                    // ui.separator();
                                     let gui_out = self.src.egui(
                                         GuiInValue::Edit(GuiInValueEditParams {
                                             allow_interval_edit: true,
@@ -157,7 +157,7 @@ impl<'s> DrawEgui<'s> for Mapping {
                                     );
                                     ui.separator();
                                     ui.label(
-                                        egui::RichText::new(format!("<= {:+08.2}", last_in)).size(16.0).strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
+                                        egui::RichText::new(format!("<= {:+08.2}", last_in)).size(12.0).strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
                                     );
                                     ui.separator();
                                     gui_out
@@ -170,6 +170,7 @@ impl<'s> DrawEgui<'s> for Mapping {
                             ui.separator();
                             ui.collapsing("In-pipeline referenced dynamic sources ...", |ui| {
                                 for mut dcm in all_dynamic_sources {
+                                    ui.separator();
                                     dcm.egui(
                                         GuiInValue::Display {
                                             usage_context: ValueUsageContext::MappingSrc,
@@ -186,10 +187,10 @@ impl<'s> DrawEgui<'s> for Mapping {
                             let last_out = self.last_out.load(Relaxed);
                             gui_out = gui_out.or(ui
                                 .horizontal(|ui| {
-                                    ui.label(
-                                        egui::RichText::new("Main dst").strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
-                                    );
-                                    ui.separator();
+                                    // ui.label(
+                                    //     egui::RichText::new("Main dst").strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
+                                    // );
+                                    // ui.separator();
                                     let gui_out = self.dst.egui(
                                         GuiInValue::Edit(GuiInValueEditParams {
                                             allow_interval_edit: true,
@@ -204,7 +205,7 @@ impl<'s> DrawEgui<'s> for Mapping {
                                     ui.separator();
                                     ui.label(
                                         egui::RichText::new(format!("=> {:+08.2}", last_out))
-                                            .size(16.0)
+                                            .size(12.0)
                                             .strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
                                     );
                                     ui.separator();
@@ -218,6 +219,7 @@ impl<'s> DrawEgui<'s> for Mapping {
                         if !all_dynamic_destinations.is_empty() {
                             ui.separator();
                             ui.collapsing("In-pipeline referenced dynamic destinations ...", |ui| {
+                                ui.separator();
                                 for mut dcm in all_dynamic_destinations {
                                     dcm.egui(
                                         GuiInValue::Display {

@@ -15,12 +15,12 @@ use std::{
     },
 };
 
+use crate::num_interval::ZERO_INTERVAL;
+use crate::relativity::Relativity;
 use crate::{
     num_interval::UNIT_INTERVAL,
     schemas_value_port::{WithNumIntervalSanitizerStatic, WithNumericValueSanitizerStatic},
 };
-use crate::{num_interval::ZERO_INTERVAL, schemas_value_port::WithTriggersMapping};
-use crate::{relativity::Relativity, schemas_value_port::PortInnerIface};
 use crossbeam_utils::CachePadded;
 use deserialize_untagged_verbose_error::DeserializeUntaggedVerboseError;
 use enum_dispatch::enum_dispatch;
@@ -40,6 +40,29 @@ const XRC_SINK_VALUE_INTERVAL: NumInterval<BaseNumT> = NumInterval {
     from: -8675309.0,
     to: 8675309.0,
 };
+
+// --------------------------------------------------------
+
+pub(crate) trait ValueIface:
+    Clone
+    + From<ValueTargets>
+    + std::fmt::Debug
+    + Default
+    + PartialEq
+    + PartialOrd
+    + WithDeviceControlMatcherRef
+    + WithNumInterval
+    + WithNumIntervalSettable
+    + WithNumericValue
+    + WithNumericValueSettable
+    + WithNumericValueSanitizerStatic
+    + Serialize
+    + for<'de> Deserialize<'de>
+    + JsonSchema
+{
+    fn value_identity(&self) -> String;
+    fn value_is_static(&self) -> bool;
+}
 
 pub(crate) trait _WithDstRefCount {
     fn _get_dst_refs_count(&self) -> usize;
@@ -596,23 +619,6 @@ impl std::fmt::Display for StaticValueCfg {
 }
 
 // -------------------------------------------------
-impl WithTriggersMapping for ValueSrcs {
-    fn _get_triggers_mapping(&self) -> bool {
-        true
-    }
-
-    fn _set_triggers_mapping(&mut self, _flag: bool) {}
-}
-
-impl WithTriggersMapping for ValueDsts {
-    fn _get_triggers_mapping(&self) -> bool {
-        false
-    }
-
-    fn _set_triggers_mapping(&mut self, _flag: bool) {}
-}
-
-// -------------------------------------------------
 #[derive(
     JsonSchema,
     Debug,
@@ -642,8 +648,8 @@ pub(crate) enum ValueSrcs {
 //     }
 // }
 
-impl PortInnerIface for ValueSrcs {
-    fn port_inner_identity(&self) -> String {
+impl ValueIface for ValueSrcs {
+    fn value_identity(&self) -> String {
         match self {
             ValueSrcs::Static(_) => egui_phosphor::bold::PENCIL.into(),
             ValueSrcs::Dynamic(d) => format!(
@@ -654,7 +660,7 @@ impl PortInnerIface for ValueSrcs {
         }
     }
 
-    fn port_inner_is_static(&self) -> bool {
+    fn value_is_static(&self) -> bool {
         self.is_static()
     }
 }
@@ -1105,15 +1111,15 @@ impl Default for ValueXrcs {
     }
 }
 
-impl PortInnerIface for ValueXrcs {
-    fn port_inner_identity(&self) -> String {
+impl ValueIface for ValueXrcs {
+    fn value_identity(&self) -> String {
         match self {
             Self::Dynamic(d) => d.to_string(),
             Self::Sink(_) => "XRC(sink value)".into(),
         }
     }
 
-    fn port_inner_is_static(&self) -> bool {
+    fn value_is_static(&self) -> bool {
         false
     }
 }
@@ -1188,8 +1194,8 @@ impl From<ValueXrcs> for ValueSrcs {
 //     }
 // }
 
-impl PortInnerIface for ValueDsts {
-    fn port_inner_identity(&self) -> String {
+impl ValueIface for ValueDsts {
+    fn value_identity(&self) -> String {
         match self {
             Self::Void(_) => egui_phosphor::bold::EMPTY.into(),
             Self::Dynamic(d) => format!(
@@ -1200,7 +1206,7 @@ impl PortInnerIface for ValueDsts {
         }
     }
 
-    fn port_inner_is_static(&self) -> bool {
+    fn value_is_static(&self) -> bool {
         matches!(self, Self::Void(..))
     }
 }
@@ -1363,7 +1369,8 @@ impl _WithDstRefCount for VariableState {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 #[serde(untagged)]
 pub(crate) enum AutoOrManual<T: Default> {
-    Auto(#[serde(skip)] T),
+    #[serde(skip)]
+    Auto(T),
     Manual(T),
 }
 

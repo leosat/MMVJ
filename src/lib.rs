@@ -19,6 +19,8 @@ pub(crate) mod test_utils;
 //--------------------------------
 pub(crate) mod base_num;
 pub(crate) mod interner;
+
+#[macro_use]
 pub(crate) mod num_interval;
 pub(crate) mod relativity;
 //--------------------------------

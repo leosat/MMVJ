@@ -7,11 +7,12 @@ use crate::gui_common::{GuiCmd, bool_to_simple_change_gui_cmd, draw_collapsing_u
 use crate::mapping::MappingEngineCmd;
 use crate::relativity::Relativity;
 
+use crate::schemas_value::ValueIface;
 use crate::schemas_value::{AutoOrManual, ValueXrcs, WithNumIntervalSettable};
 
 use crate::schemas_value_port::{
-    PortInnerIface, PortRemapPolicy, PortSanPolicy, SanPolicyNone, SanPolicyUseFromPortInner, ValuePort,
-    ValuePortIface, WithNumIntervalSanitizerStatic, WithNumericValueSanitizerStatic,
+    PortRemapPolicy, PortSanPolicy, SanPolicyNone, SanPolicyUseFromPortInner, ValuePort, ValuePortIface,
+    WithNumericValueSanitizerStatic,
 };
 
 use crate::{
@@ -67,7 +68,7 @@ impl<'s> DrawEgui<'s> for DynValueRefs {
                         d.control_matcher.get_relativity(),
                         d.control_matcher.get_last_known_io(),
                     ))
-                    .size(14.0)
+                    .size(12.0)
                     .monospace()
                     .strong(),
                 );
@@ -82,7 +83,7 @@ impl<'s> DrawEgui<'s> for DynValueRefs {
                         v.variable.get_relativity(),
                         v.variable.get_numeric_value()
                     ))
-                    .size(14.0)
+                    .size(12.0)
                     .monospace()
                     .strong(),
                 );
@@ -155,23 +156,18 @@ impl<'s> DrawEgui<'s> for NumInterval<BaseNumT> {
 
 impl<'s, PortInnerT, SanPolicyT, RemapT> DrawEgui<'s> for ValuePort<PortInnerT, SanPolicyT, RemapT>
 where
-    RemapT: PortRemapPolicy<PortInnerT>,
-    SanPolicyT: PortSanPolicy<PortInnerT> + GuiSanInfo<PortInnerT>,
-    PortInnerT: From<ValueTargets>,
-    PortInnerT: PortInnerIface
-        + WithNumIntervalSanitizerStatic
-        + TryFrom<ValueTargets>
-        + DrawEgui<'s, In = GuiInValue<'s>, Out = Option<GuiCmd>>,
-    NumInterval<<Self as WithNumericValue>::ValueT>: DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
     <Self as WithNumericValue>::ValueT: eframe::emath::Numeric,
-    Self: WithSelfSanitize,
+    RemapT: PortRemapPolicy<PortInnerT::ValueT>,
+    SanPolicyT: PortSanPolicy<PortInnerT> + GuiSanInfo<PortInnerT>,
+    PortInnerT: ValueIface + DrawEgui<'s, In = GuiInValue<'s>, Out = Option<GuiCmd>>,
+    NumInterval<<Self as WithNumericValue>::ValueT>: DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
 {
     type In = GuiInValue<'s>;
     type Out = Option<GuiCmd>;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let gui_out = draw_egui_for_port::<SanPolicyT, Self, PortInnerT>(self, gui_in, ui);
-        SanPolicyT::san_policy_sanitize_this_inplace(self);
+        self.sanitize_inplace();
         gui_out
     }
 }
@@ -208,7 +204,7 @@ impl<T: WithNumericValueSanitizerStatic> GuiSanInfo<T> for SanPolicyUseFromPortI
 impl<T: WithNumericValueSanitizerStatic> GuiSanInfo<T> for SanPolicyNone {
     fn draw_san_info<PortInnerT: WithNumericValueSanitizerStatic>(ui: &mut egui::Ui) {
         ui.label(egui::RichText::new(egui_phosphor::bold::FUNNEL_X).size(14.0))
-            .on_hover_text(<Self as PortSanPolicy<T>>::san_policy_get_value_san_doc_str());
+            .on_hover_text(<Self as PortSanPolicy<T>>::san_policy_doc_str());
     }
 }
 
@@ -218,13 +214,12 @@ fn draw_egui_for_port<'s, SanPolicyT, PortT, PortInnerT>(
     ui: &mut egui::Ui,
 ) -> Option<GuiCmd>
 where
-    PortInnerT: WithNumericValueSanitizerStatic,
-    SanPolicyT: GuiSanInfo<PortInnerT>,
     PortT: ValuePortIface,
-    <PortT as ValuePortIface>::InnerT: std::convert::From<ValueTargets>,
-    <PortT as ValuePortIface>::InnerT: PortInnerIface + DrawEgui<'s, In = GuiInValue<'s>, Out = Option<GuiCmd>>,
+    PortInnerT: ValueIface,
+    SanPolicyT: GuiSanInfo<PortInnerT>,
+    <PortT as ValuePortIface>::InnerT: ValueIface + DrawEgui<'s, In = GuiInValue<'s>, Out = Option<GuiCmd>>,
     NumInterval<<PortT as WithNumericValue>::ValueT>: DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
-    <PortT as WithNumericValue>::ValueT: eframe::emath::Numeric,
+    PortT::ValueT: eframe::emath::Numeric,
 {
     if let Some(new_target) = get_new_value_target(gui_in, ui) {
         *port.port_inner_mut() = new_target.into();
@@ -235,7 +230,7 @@ where
         params.choice_case = None
     }
 
-    if port.port_inner_ref().port_inner_is_static() {
+    if port.port_inner_ref().value_is_static() {
         let mut gui_out = ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
 
         let default_interval = port.port_get_default_interval_from_inner().cast().unwrap();
@@ -339,7 +334,7 @@ pub(crate) fn draw_egui_for_a_value<'s, ValueT>(
     ui: &mut egui::Ui,
 ) -> Option<GuiCmd>
 where
-    ValueT: PortInnerIface + From<ValueTargets>,
+    ValueT: ValueIface + From<ValueTargets>,
     NumInterval<<ValueT as WithNumericValue>::ValueT>: DrawEgui<'s, Out = bool, In = GuiInInterval<'s>>,
     <ValueT as WithNumericValue>::ValueT: eframe::emath::Numeric,
 {
@@ -352,7 +347,7 @@ where
                 return Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
             }
 
-            ui.label(this.port_inner_identity());
+            ui.label(this.value_identity());
 
             ui.label("Value:");
             let mut value = this.get_numeric_value();
@@ -368,7 +363,7 @@ where
                 if !this.get_device_control_matcher_ref().is_some() {
                     this.set_numeric_value(value);
                 }
-                if this.port_inner_is_static() {
+                if this.value_is_static() {
                     changed = true;
                 }
             }
@@ -377,7 +372,7 @@ where
             ui.separator();
 
             ui.label("Range: ");
-            if params.allow_interval_edit && this.port_inner_is_static() {
+            if params.allow_interval_edit && this.value_is_static() {
                 let mut interval = this.get_interval();
                 if interval.egui(
                     GuiInInterval::Edit {
@@ -733,7 +728,7 @@ pub(crate) fn draw_value_choice_iface(
                     if choice_context.is_dst() {
                         if choice_context.is_src() {
                             ui.separator();
-                            ui.collapsing("Sink", |ui| {
+                            ui.collapsing("Sink (a local variable)", |ui| {
                                 ui.separator();
                                 if ui.button("Sink").clicked() {
                                     static_value = Some(ValueTargets::Xrc(ValueXrcs::Sink(Default::default())));
