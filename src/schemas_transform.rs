@@ -1240,9 +1240,18 @@ impl Default for IntegrateCfg {
 impl TfmSeqCfg {
     #[cfg(feature = "gui")]
     pub(crate) fn disable_gui_tracing(&self) {
-        for step in &self.steps {
-            step.common_state_ref().disable_gui_tracing();
+        use traversable::Visitor;
+        struct DisableGuiTracingVisitor;
+        impl Visitor for DisableGuiTracingVisitor {
+            type Break = ();
+            fn enter(&mut self, this: &dyn core::any::Any) -> std::ops::ControlFlow<Self::Break> {
+                if let Some(step) = this.downcast_ref::<TfmStepCfg>() {
+                    step.common_state_ref().disable_gui_tracing();
+                }
+                std::ops::ControlFlow::Continue(())
+            }
         }
+        let _ = self.steps.traverse(&mut DisableGuiTracingVisitor {});
     }
 
     pub(crate) fn recompute_metadata_with_known_inputs(&mut self) {
