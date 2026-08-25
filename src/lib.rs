@@ -55,7 +55,7 @@ pub(crate) mod schemas_value_port;
 #[macro_use]
 pub(crate) mod schemas_value;
 //--------------------------------
-pub(crate) mod curves;
+pub(crate) mod curves_and_linear;
 pub(crate) mod filters;
 //--------------------------------
 #[cfg(feature = "gui")]
