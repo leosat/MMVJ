@@ -161,7 +161,7 @@ mod steering_tfm_deserialization_and_exec_tests {
 
             let ff = s.force_feedback.as_ref().expect("FFB must be present");
             assert!(ff.enabled);
-            assert!(approx(ff.gain, 1.0));
+            assert!(approx(ff.gain.get_numeric_value(), 1.0));
             assert!(!ff.invert);
             assert_eq!(ff.transformation.steps.len(), 1, "FF sub-pipeline: 1 EMA");
 

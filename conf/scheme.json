@@ -1758,9 +1758,7 @@
         },
         "gain": {
           "description": "Multiplier applied to the (optionally filtered) FFB force.\n\n- `1.0` (default): force applied as-is.\n- `> 1.0`: amplifies FFB effect.\n- `< 1.0`: dampens FFB effect.\n- `0.0`: effectively disables FFB without removing the config block.",
-          "type": "number",
-          "format": "float",
-          "minimum": 0.0,
+          "$ref": "#/$defs/ValuePort5",
           "default": 1.0
         },
         "invert": {
@@ -1791,6 +1789,48 @@
         }
       },
       "additionalProperties": false
+    },
+    "ValuePort5": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "remap": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NumInterval"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "triggers_mapping": {
+              "type": "boolean"
+            },
+            "value": {
+              "$ref": "#/$defs/FfbGainCfg"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "value"
+          ]
+        },
+        {
+          "$ref": "#/$defs/FfbGainCfg"
+        }
+      ]
+    },
+    "FfbGainCfg": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StaticValueCfg"
+        },
+        {
+          "$ref": "#/$defs/DynValueRefs"
+        }
+      ]
     },
     "ForceFeedbackComponent": {
       "type": "string",
@@ -1913,13 +1953,13 @@
         },
         "tau": {
           "description": "The time constant\nDefines the duration required for the filter's step response\nto reach about 63.2% (1 - 1/e) of its final steady-state value.",
-          "$ref": "#/$defs/ValuePort5",
+          "$ref": "#/$defs/ValuePort6",
           "default": 0.03999999910593033
         }
       },
       "additionalProperties": false
     },
-    "ValuePort5": {
+    "ValuePort6": {
       "anyOf": [
         {
           "type": "object",
@@ -2111,23 +2151,23 @@
         },
         "beta": {
           "description": "Speed coefficient (β). Controls how much the cutoff frequency\nincreases in response to fast input movement.\n\nAdaptive cutoff formula: `cutoff = min_cutoff_hz + β · |dx̂|`\n\n- `0.0` — fixed-cutoff filter (no speed adaptation).\n- `0.001 – 0.01` — gentle adaptation (recommended starting range).\n- `0.1 – 10.0` — aggressive adaptation; near-passthrough during\n  fast sweeps, may re-introduce jitter.\n\n**Tuning heuristic:** start at `0.0`, increase until fast\nmovements feel responsive, then back off slightly.",
-          "$ref": "#/$defs/ValuePort6",
+          "$ref": "#/$defs/ValuePort7",
           "default": 0.007000000216066837
         },
         "min_cutoff_hz": {
           "description": "Minimum cutoff frequency in Hz. The cutoff used when the input\nis stationary or moving very slowly.\n\n- `0.1 – 0.5` — very heavy smoothing at rest (strong jitter\n  suppression, noticeable lag onset).\n- `1.0` *(default)* — moderate smoothing; good starting point.\n- `5.0 – 50.0` — light smoothing; use when input is already\n  clean or minimal latency is critical.\n\nThink of this as the **noise floor** of the filter.",
-          "$ref": "#/$defs/ValuePort7",
+          "$ref": "#/$defs/ValuePort8",
           "default": 1.0
         },
         "d_cutoff_hz": {
           "description": "Cutoff frequency in Hz for the derivative (speed) low-pass\nfilter.\n\nThe raw derivative `(x - x̂_prev) / dt` amplifies sensor jitter.\nThis secondary filter smooths the derivative so the adaptive\ncutoff does not oscillate.\n\n- `0.01 – 0.1` — very smooth derivative; stable but slow to\n  react to speed changes.\n- `1.0` *(default)* — balanced; works well for most devices.\n- `10.0 – 100.0` — barely filtered derivative; fast tracking\n  but may oscillate on noisy inputs.\n\nRarely needs adjustment from the default.",
-          "$ref": "#/$defs/ValuePort8",
+          "$ref": "#/$defs/ValuePort9",
           "default": 1.0
         }
       },
       "additionalProperties": false
     },
-    "ValuePort6": {
+    "ValuePort7": {
       "anyOf": [
         {
           "type": "object",
@@ -2169,7 +2209,7 @@
         }
       ]
     },
-    "ValuePort7": {
+    "ValuePort8": {
       "anyOf": [
         {
           "type": "object",
@@ -2211,7 +2251,7 @@
         }
       ]
     },
-    "ValuePort8": {
+    "ValuePort9": {
       "anyOf": [
         {
           "type": "object",
@@ -2302,14 +2342,14 @@
           "description": "Auxiliary data **sources** readable from the script via\n`read(\"<key>\")` or `read(<1-based index>)`.\n\nAccepts a YAML **map** (explicit string keys) or a **list**\n(auto-numbered `\"1\"`, `\"2\"`, …).\n\nYAML alias: `sources`.",
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/$defs/ValuePort9"
+            "$ref": "#/$defs/ValuePort10"
           }
         },
         "aux_dsts": {
           "description": "Auxiliary data **destinations** writable from the script via\n`write(\"<key>\", value)` or `write(<1-based index>, value)`.\n\nAccepts a YAML **map** or a **list**, same as [`aux_srcs`](Self::aux_srcs).\n\nYAML alias: `destinations`.",
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/$defs/ValuePort10"
+            "$ref": "#/$defs/ValuePort11"
           }
         },
         "aux_transformations": {
@@ -2338,7 +2378,7 @@
         "Abs"
       ]
     },
-    "ValuePort9": {
+    "ValuePort10": {
       "anyOf": [
         {
           "type": "object",
@@ -2370,7 +2410,7 @@
         }
       ]
     },
-    "ValuePort10": {
+    "ValuePort11": {
       "anyOf": [
         {
           "type": "object",

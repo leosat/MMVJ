@@ -997,7 +997,8 @@ impl WithTfmExec for SteeringCfg {
                         raw_force
                     };
 
-                    let filtered_and_scaled_force = SYMM_UNIT_INTERVAL.clamp(filtered_force * ff_config.gain);
+                    let filtered_and_scaled_force =
+                        SYMM_UNIT_INTERVAL.clamp(filtered_force * ff_config.gain.get_numeric_value());
 
                     if ff_config.invert {
                         -filtered_and_scaled_force
