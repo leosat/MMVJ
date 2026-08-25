@@ -860,13 +860,17 @@ impl WithTfmExec for SteeringCfg {
         }
         let now = Instant::now();
         let state = &mut self.exe_state_mut();
-        let value = input.value * self.input_gain.get_numeric_value();
+        let value = input.value;
 
         let auto_center_along_force_feedback = self.auto_center_along_force_feedback.get_numeric_value();
 
         let dt = clamp_dt_by_min_and_max_period((now - state.last_time).as_secs_f32() as BaseNumT);
 
-        let delta: BaseNumT = input.interval.map_to_symm_unit(value, OutOfRangePolicy::Clamp);
+        let delta: BaseNumT = input
+            .interval
+            .map_to_symm_unit::<BaseNumT>(value, OutOfRangePolicy::Clamp)
+            * self.input_gain.get_numeric_value();
+
         let mut post_filter: BaseNumT;
 
         if let Some(acc) = &self.accumulator {
@@ -1043,7 +1047,7 @@ impl WithTfmExec for SteeringCfg {
 
             if autocentering_halflife > 0.0
                 && (auto_center_along_force_feedback > 0.0 || ffb_is_small)
-                && delta.abs() < 1e-4
+                && delta.abs() <= BaseNumT::EPSILON
             {
                 let mut centerwize_decay_factor =
                     (1.0 - (-dt / autocentering_halflife).exp2()) * (1.0 - hold_factor_unit);

@@ -11,7 +11,9 @@ use crate::schemas_value::{
     DeviceControlMatcherRef, DynValueRefs, ValueDsts, VariableRef, WithNumInterval, WithRelativityRef,
     serialize_value_src_rt_ignore_interval,
 };
-use crate::schemas_value_port::{PortRemapPolicy, SanPolicyNone, SanPolicyUseFromPortInner, ValuePort};
+use crate::schemas_value_port::{
+    PortRemapPolicy, RemapPolicyUserDefined, SanPolicyNone, SanPolicyUseFromPortInner, ValuePort,
+};
 use crate::tfm_exec::{IntegrateExeState, RaiseFallExeState, ScriptExeState, SteeringExeState, TfmExeState};
 use crate::{
     num_interval::NumInterval,
@@ -1685,7 +1687,7 @@ pub(crate) struct SteeringCfg {
     #[garde(skip)]
     #[serde(alias = "smoothing_alpha")]
     #[serde(alias = "input_sensitivity")]
-    pub(crate) input_gain: ValuePort<SteeringInputGainCfg, SanPolicyUseFromPortInner, RemapPolicyUnit>,
+    pub(crate) input_gain: ValuePort<SteeringInputGainCfg, SanPolicyUseFromPortInner, RemapPolicyUserDefined>,
 
     /// Half-life (in seconds) of the exponential autocentering decay.
     ///
@@ -1700,7 +1702,7 @@ pub(crate) struct SteeringCfg {
     #[serde(default)]
     #[garde(skip)]
     pub(crate) auto_center_halflife:
-        ValuePort<SteeringAutocenterAlongFfbCfg, SanPolicyUseFromPortInner, RemapPolicyUnit>,
+        ValuePort<SteeringAutocenterAlongFfbCfg, SanPolicyUseFromPortInner, RemapPolicyUserDefined>,
 
     /// Allows autocentering to operate **alongside** active force feedback,
     /// scaled by this factor in [0, 1].
