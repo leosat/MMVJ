@@ -629,35 +629,32 @@ pub(crate) fn draw_value_choice_iface_window(
 
         if allow_joysticks_or_gamepads || allow_special_ffb {
             ui.separator();
-            *gui_out_mut =
-                gui_out_mut
-                    .clone()
-                    .or(egui::CollapsingHeader::new("Joysticks or gamepads control matchers")
-                        .show(ui, |ui| {
-                            choose_hid(
-                                ui,
-                                |dm: &(&String, &HidDeviceCfg)| dm.1.is_a_joystick() || dm.1.is_a_gamepad(),
-                                cfg_devices,
-                            )
-                        })
-                        .body_returned
-                        .unwrap_or_default());
+            egui::CollapsingHeader::new("Joysticks or gamepads control matchers")
+                .show(ui, |ui| {
+                    choose_hid(
+                        ui,
+                        |dm: &(&String, &HidDeviceCfg)| dm.1.is_a_joystick() || dm.1.is_a_gamepad(),
+                        cfg_devices,
+                    )
+                })
+                .body_returned
+                .unwrap_or_default()
+                .inspect(|out| *gui_out_mut = Some(out.clone()));
         }
 
         if allow_mice_or_kbd {
             ui.separator();
-            *gui_out_mut = gui_out_mut
-                .clone()
-                .or(egui::CollapsingHeader::new("Mice or keyboard control matchers")
-                    .show(ui, |ui| {
-                        choose_hid(
-                            ui,
-                            |dm: &(&String, &HidDeviceCfg)| dm.1.is_a_mouse() || dm.1.is_a_keyboard(),
-                            cfg_devices,
-                        )
-                    })
-                    .body_returned
-                    .unwrap_or_default());
+            egui::CollapsingHeader::new("Mice or keyboard control matchers")
+                .show(ui, |ui| {
+                    choose_hid(
+                        ui,
+                        |dm: &(&String, &HidDeviceCfg)| dm.1.is_a_mouse() || dm.1.is_a_keyboard(),
+                        cfg_devices,
+                    )
+                })
+                .body_returned
+                .unwrap_or_default()
+                .inspect(|out| *gui_out_mut = Some(out.clone()));
         }
 
         #[cfg(feature = "midi")]
@@ -674,13 +671,11 @@ pub(crate) fn draw_value_choice_iface_window(
                                 .on_hover_text(serde_saphyr::to_string(&c.1).expect("Can't serialize device control"))
                                 .clicked()
                             {
-                                *gui_out_mut = gui_out_mut.clone().or(Some(DynValueRefs::DeviceControlMatcher(
-                                    DeviceControlMatcherRef {
-                                        device_matcher_key: d.0.to_string(),
-                                        control_matcher_key: c.0.to_string(),
-                                        control_matcher: ControlMatchers::Midi(c.1.clone()),
-                                    },
-                                )));
+                                *gui_out_mut = Some(DynValueRefs::DeviceControlMatcher(DeviceControlMatcherRef {
+                                    device_matcher_key: d.0.to_string(),
+                                    control_matcher_key: c.0.to_string(),
+                                    control_matcher: ControlMatchers::Midi(c.1.clone()),
+                                }));
                             };
                         }
                     });
