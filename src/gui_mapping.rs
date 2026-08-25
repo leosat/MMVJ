@@ -383,18 +383,20 @@ impl crate::gui_main::GuiMain {
             let mapping = &mut self.cfg.mappings[self.gui_tab_mappings_current_opened_mapping_idx];
             ui.group(|ui| {
                 ui.push_id("mapping editor", |ui| {
-                    *gui_out_mut = gui_out_mut.clone().or(mapping.egui(
-                        (
-                            self.gui_tab_mappings_current_opened_mapping_idx,
-                            GuiInMapping::Edit {
-                                graph_states: &self.telemetry_graphs,
-                                cfg_devices: &self.cfg.devices,
-                                cfg_variables: &self.cfg.variables,
-                                transient_script_aux_edits: &self.transient_states_script_aux_edit,
-                            },
-                        ),
-                        ui,
-                    ));
+                    mapping
+                        .egui(
+                            (
+                                self.gui_tab_mappings_current_opened_mapping_idx,
+                                GuiInMapping::Edit {
+                                    graph_states: &self.telemetry_graphs,
+                                    cfg_devices: &self.cfg.devices,
+                                    cfg_variables: &self.cfg.variables,
+                                    transient_script_aux_edits: &self.transient_states_script_aux_edit,
+                                },
+                            ),
+                            ui,
+                        )
+                        .inspect(|out| *gui_out_mut = Some(out.clone()));
                 })
             });
         }
