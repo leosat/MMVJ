@@ -4,7 +4,7 @@ use crate::num_interval::SYMM_UNIT_INTERVAL;
 use crate::num_interval::UNIT_INTERVAL;
 
 use crate::base_num::BaseNumT;
-use crate::curves::Curves;
+use crate::curves_and_linear::*;
 use crate::debug::get_debug_level;
 #[cfg(feature = "gui")]
 use crate::gui_transform_step::TfmStepTraceStage;
@@ -346,15 +346,15 @@ impl WithTfmExec for SignedPowerCfg {
             return input;
         }
         input.value = if self.center_symmetric {
-            Curves::apply_center_symmetric_with_abs_value(
+            apply_center_symmetric_with_abs_value(
                 input.value,
                 input.interval,
-                |v_abs| Curves::signed_power(v_abs, self.power),
+                |v_abs| signed_power(v_abs, self.power),
                 OutOfRangePolicy::WarnIfDebugAndClamp,
             )
         } else {
             input.interval.map_from_unit(
-                Curves::signed_power(
+                signed_power(
                     input
                         .interval
                         .map_to_unit(input.value, OutOfRangePolicy::WarnIfDebugAndClamp),
@@ -373,15 +373,15 @@ impl WithTfmExec for NormExpCfg {
             return input;
         }
         input.value = if self.center_symmetric {
-            Curves::apply_center_symmetric_with_abs_value(
+            apply_center_symmetric_with_abs_value(
                 input.value,
                 input.interval,
-                |v_abs| Curves::exp_curve(v_abs, self.base),
+                |v_abs| exp_curve(v_abs, self.base),
                 OutOfRangePolicy::WarnIfDebugAndClamp,
             )
         } else {
             input.interval.map_from_unit(
-                Curves::exp_curve(
+                exp_curve(
                     input
                         .interval
                         .map_to_unit(input.value, OutOfRangePolicy::WarnIfDebugAndClamp),
@@ -400,7 +400,7 @@ impl WithTfmExec for SCurveCfg {
             return input;
         }
         input.value = input.interval.map_from_unit(
-            Curves::s_curve(
+            s_curve(
                 input
                     .interval
                     .map_to_unit(input.value, OutOfRangePolicy::WarnIfDebugAndClamp),
@@ -418,7 +418,7 @@ impl WithTfmExec for SmoothstepCfg {
             return input;
         }
         input.value = input.interval.map_from_unit(
-            Curves::smoothstep(
+            smoothstep(
                 input
                     .interval
                     .map_to_unit(input.value, OutOfRangePolicy::WarnIfDebugAndClamp),
@@ -435,11 +435,11 @@ impl WithTfmExec for LinearCfg {
             return input;
         }
         input.value = if self.center_symmetric {
-            Curves::apply_center_symmetric_with_abs_value(
+            apply_center_symmetric_with_abs_value(
                 input.value,
                 input.interval,
                 |abs_v| {
-                    Curves::linear(
+                    linear(
                         abs_v,
                         self.slope,
                         input.interval.map_to_symm_unit(self.shift_x, OutOfRangePolicy::Clamp),
@@ -451,7 +451,7 @@ impl WithTfmExec for LinearCfg {
         } else {
             input
                 .interval
-                .clamp(Curves::linear(input.value, self.slope, self.shift_x, self.shift_y))
+                .clamp(linear(input.value, self.slope, self.shift_x, self.shift_y))
         };
         input
     }
