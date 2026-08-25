@@ -47,8 +47,8 @@ const fn default_on_idle() -> bool {
     true
 }
 
-const fn default_ff_gain() -> BaseNumT {
-    1.0
+const fn default_ff_gain() -> ValueSrcs {
+    make_static_value_src(1.0, NumInterval { from: 0.0, to: 3.0 })
 }
 
 pub(crate) const fn default_1euro_beta() -> ValueSrcs {
@@ -445,9 +445,9 @@ pub(crate) struct ForceFeedbackCfg {
     /// - `> 1.0`: amplifies FFB effect.
     /// - `< 1.0`: dampens FFB effect.
     /// - `0.0`: effectively disables FFB without removing the config block.
-    #[serde(default = "default_ff_gain")]
+    #[serde(default)]
     #[garde(range(min = 0.0))]
-    pub(crate) gain: BaseNumT,
+    pub(crate) gain: ValuePort<FfbGainCfg, SanPolicyUseFromPortInner, RemapPolicyUserDefined>,
 
     /// Flips the sign of the FFB force.
     ///
@@ -486,6 +486,13 @@ pub(crate) struct ForceFeedbackCfg {
     #[garde(skip)]
     pub(crate) custom_source: Option<ValueSrcs>,
 }
+
+make_input_port_inner_nutype!(
+    FfbGainCfg,
+    default: default_ff_gain(),
+    san-doc: "Gain is ensured to be >= 0.0",
+    san-exe: |v: BaseNumT| {v.max(0.0)}
+);
 
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]

@@ -1016,6 +1016,7 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut gui_out = None;
+        let gui_out_mut = &mut gui_out;
         match gui_in {
             GuiInTfmStepsSeq::Edit {
                 cfg_devices,
@@ -1063,17 +1064,19 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
 
                     if let Some(ref mut custom_src) = self.custom_source {
                         ui.horizontal(|ui| {
-                            gui_out = custom_src.egui(
-                                GuiInValue::Edit(GuiInValueEditParams {
-                                    allow_interval_edit: false,
-                                    slider_log_scale: false,
-                                    cfg_variables,
-                                    cfg_devices,
-                                    name: "FFB custom source",
-                                    choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
-                                }),
-                                ui,
-                            );
+                            custom_src
+                                .egui(
+                                    GuiInValue::Edit(GuiInValueEditParams {
+                                        allow_interval_edit: false,
+                                        slider_log_scale: false,
+                                        cfg_variables,
+                                        cfg_devices,
+                                        name: "FFB custom source",
+                                        choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                                    }),
+                                    ui,
+                                )
+                                .inspect(|out| *gui_out_mut = Some(out.clone()));
                         })
                         .response
                         .on_hover_text(self.custom_source_doc_str());
@@ -1089,26 +1092,37 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
                 });
 
                 ui.separator();
-                changed |= ui
-                    .add(
-                        egui::Slider::new(&mut self.gain, 0.0..=3.0)
-                            .text("Force feedback gain.")
-                            .logarithmic(false),
-                    )
-                    .on_hover_text(self.gain_doc_str())
-                    .changed();
+                ui.horizontal(|ui| {
+                    ui.label("Force feedback gain");
+                    self.gain
+                        .egui(
+                            GuiInValue::Edit(GuiInValueEditParams {
+                                allow_interval_edit: false,
+                                slider_log_scale: false,
+                                cfg_variables,
+                                cfg_devices,
+                                name: "FFB gain",
+                                choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                            }),
+                            ui,
+                        )
+                        .inspect(|out| *gui_out_mut = Some(out.clone()))
+                })
+                .response
+                .on_hover_text(self.gain_doc_str());
 
-                gui_out = gui_out.or(bool_to_simple_change_gui_cmd(changed));
+                bool_to_simple_change_gui_cmd(changed).inspect(|out| *gui_out_mut = Some(out.clone()));
 
                 ui.separator();
-                gui_out = gui_out.or({
+                {
                     let c = ui.collapsing("Force feedback transformation:", |ui| {
                         self.transformation
                             .egui(gui_in.clone().clone_and_push_hier(self.transformation.id), ui)
                     });
                     c.header_response.on_hover_text(self.transformation_doc_str());
                     c.body_returned.unwrap_or_default()
-                });
+                }
+                .inspect(|out| *gui_out_mut = Some(out.clone()));
             }
             GuiInTfmStepsSeq::Display => {}
         }
