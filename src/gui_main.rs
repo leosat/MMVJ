@@ -1,15 +1,20 @@
 use crate::config::MORE_DEBUG;
+use crate::config::WithSelfSanitize;
 use crate::debug::DebugLevel;
 use crate::device_and_device_manager::DeviceKind;
 use crate::device_and_device_manager::DeviceManagerCommon;
 use crate::device_and_device_manager::WithDeviceClassification;
 use crate::driver::DriverCmd;
+use crate::gui_common::GuiDndJob;
 use crate::gui_common::{
     DrawEgui, GuiCmd, GuiCmdVariableChange, GuiCmdVariableRemove, GuiCmdVirtualDeviceChange, GuiInKinds, ScriptAuxKind,
     draw_collapsing_ui, get_item_name_with_random_suffix,
 };
 use crate::gui_common::{GuiCmdDeviceKeyRename, GuiCmdDeviceMatcherRemove};
 use crate::gui_device::GuiInDeviceCfg;
+use crate::gui_mapping::DndJobMoveTfmStep_Visitor;
+use crate::gui_style::GUI_STYLE_LIGHT;
+use crate::gui_style::GuiStyle;
 use crate::gui_telemetry_graph::GuiTelemetryGraphStates;
 use crate::hid_manager::{AvailableHIDDeviceInfo, HidManager};
 #[cfg(feature = "midi")]
@@ -22,12 +27,12 @@ use crate::schemas_midi::MidiMatcherCfg;
 use crate::schemas_ui::UiMonitorsCfg;
 use crate::schemas_value::VariableState;
 use eframe::egui::{self};
-use egui::Color32;
 use egui_file_dialog::FileDialog;
 use log::warn;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f32;
+use std::ops::ControlFlow;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::CancellationToken;
@@ -35,29 +40,6 @@ use traversable::TraversableMut;
 use unchecked_refcell::UncheckedRefCell;
 use winit::platform::wayland::EventLoopBuilderExtWayland;
 use winit::platform::x11::EventLoopBuilderExtX11;
-
-#[allow(unused)]
-fn get_visuals_high_contrast_light1() -> egui::Visuals {
-    let mut visuals = egui::Visuals::light();
-
-    // Force pure black and white
-    visuals.override_text_color = Some(egui::Color32::BLACK);
-    visuals.widgets.noninteractive.fg_stroke.color = egui::Color32::BLACK;
-    visuals.widgets.inactive.fg_stroke.color = egui::Color32::BLACK;
-    visuals.widgets.hovered.fg_stroke.color = egui::Color32::BLACK;
-    visuals.widgets.active.fg_stroke.color = egui::Color32::BLACK;
-    visuals.widgets.open.fg_stroke.color = egui::Color32::BLACK;
-
-    // Set background and fill contrasts
-    visuals.panel_fill = egui::Color32::WHITE;
-    visuals.widgets.noninteractive.bg_fill = egui::Color32::WHITE;
-    visuals.widgets.inactive.bg_fill = egui::Color32::WHITE;
-    visuals.widgets.hovered.bg_fill = egui::Color32::WHITE;
-    visuals.widgets.active.bg_fill = egui::Color32::WHITE;
-    visuals.widgets.open.bg_fill = egui::Color32::WHITE;
-
-    visuals
-}
 
 //====================================================================================
 #[allow(clippy::too_many_arguments)]
@@ -69,6 +51,8 @@ pub(crate) fn run(
 ) -> anyhow::Result<()> {
     let eframe_result = {
         let mapping_engine_cmd = cmd_tx.clone();
+        let gui_style = &GUI_STYLE_LIGHT;
+
         eframe::run_native(
             crate::config::APP_LONG_NAME,
             eframe::NativeOptions {
@@ -93,15 +77,8 @@ pub(crate) fn run(
             },
             Box::new(move |cc| {
                 // -----------------------------------------------------
-                cc.egui_ctx.set_theme(egui::Theme::from_dark_mode(false));
-                // cc.egui_ctx
-                //     .all_styles_mut(|s| s.visuals = get_visuals_high_contrast_light1());
-                cc.egui_ctx.set_pixels_per_point(1.2);
-                // cc.egui_ctx.all_styles_mut(|s| s.visuals = get_visuals_w95_1());
+                (gui_style.setup_creation_context)(cc);
 
-                let mut fonts = egui::FontDefinitions::default();
-                egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
-                cc.egui_ctx.set_fonts(fonts);
                 // -----------------------------------------------------
 
                 let mut app = GuiMain {
@@ -140,6 +117,7 @@ pub(crate) fn run(
                     available_hid: None,
                     #[cfg(feature = "midi")]
                     available_midi: None,
+                    style: GUI_STYLE_LIGHT,
                 };
                 app.cfg_yaml = app.get_config_string();
                 if let Some(storage) = cc.storage {
@@ -213,6 +191,8 @@ struct PendingCommand {
 pub(crate) struct GuiMain {
     exit_app: bool,
     // ---
+    pub(crate) style: GuiStyle,
+    // ---
     pending_cmds: Vec<PendingCommand>,
     post_draw_cmds: Vec<PendingCommand>,
     // ---
@@ -247,51 +227,6 @@ pub(crate) struct GuiMain {
     available_hid: Option<Vec<AvailableHIDDeviceInfo>>,
     #[cfg(feature = "midi")]
     available_midi: Option<Vec<AvailableMidiDeviceInfo>>,
-}
-
-// ================================================================================
-// ================================================================================
-// ================================================================================
-// ================================================================================
-
-#[allow(unused)]
-pub fn get_visuals_w95_1() -> egui::Visuals {
-    use egui::{Stroke, epaint::Shadow};
-
-    let mut visuals = egui::Visuals::light();
-
-    let w95_gray = Color32::from_rgb(192, 192, 192);
-    let dark_gray = Color32::from_rgb(128, 128, 128);
-    // let white = Color32::from_rgb(255, 255, 255);
-    let black = Color32::from_rgb(0, 0, 0);
-
-    visuals.dark_mode = false;
-    visuals.window_fill = w95_gray;
-    visuals.panel_fill = w95_gray;
-    visuals.window_stroke = Stroke::new(1.0_f32, black);
-    visuals.window_shadow = Shadow::NONE;
-    visuals.window_corner_radius = 0.0.into();
-    visuals.menu_corner_radius = 0.0.into();
-
-    visuals.override_text_color = Some(black);
-
-    visuals.widgets.noninteractive.bg_fill = w95_gray;
-    visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, dark_gray);
-    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, black);
-
-    visuals.widgets.inactive.bg_fill = w95_gray;
-    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, dark_gray);
-    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, black);
-
-    visuals.widgets.hovered.bg_fill = w95_gray;
-    visuals.widgets.hovered.bg_stroke = Stroke::new(1.1_f32, black);
-    visuals.widgets.hovered.fg_stroke = Stroke::new(1.2_f32, black);
-
-    visuals.widgets.active.bg_fill = w95_gray;
-    visuals.widgets.active.bg_stroke = Stroke::new(1.0_f32, black);
-    visuals.widgets.active.fg_stroke = Stroke::new(1.0_f32, black);
-
-    visuals
 }
 
 impl eframe::App for GuiMain {
@@ -744,7 +679,7 @@ impl GuiMain {
                 self.cfg.devices.hid.remove(&cmd.device_key);
                 #[cfg(feature = "midi")]
                 self.cfg.devices.midi.remove(&cmd.device_key);
-                self.cfg.recompute_mappings_metadata();
+                self.cfg.sanitize_inplace(());
                 self.execute_gui_command(GuiCmd::ConfigChangeSimple)?;
                 if cmd.is_virtual {
                     self.execute_gui_command(GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
@@ -754,7 +689,7 @@ impl GuiMain {
             }
             GuiCmd::ControlMatcherChange(cmd) => {
                 let _ = self.cfg.traverse_mut(cmd);
-                self.cfg.recompute_mappings_metadata();
+                self.cfg.sanitize_inplace(());
                 self.send_driver_cmd(DriverCmd::ChangeConfigSimple { cfg: self.cfg.clone() });
             }
             GuiCmd::VariableChange(cmd) => {
@@ -785,7 +720,7 @@ impl GuiMain {
                         dev.controls.remove(&cmd.control_key);
                     }
                 }
-                self.cfg.recompute_mappings_metadata();
+                self.cfg.sanitize_inplace(());
                 self.send_driver_cmd(DriverCmd::ChangeConfigSimple { cfg: self.cfg.clone() });
             }
 
@@ -797,7 +732,7 @@ impl GuiMain {
                     ));
                 }
                 self.cfg.variables.remove(&cmd.variable_key);
-                self.cfg.recompute_mappings_metadata();
+                self.cfg.sanitize_inplace(());
                 self.send_driver_cmd(DriverCmd::ChangeConfigSimple { cfg: self.cfg.clone() });
             }
             GuiCmd::MappingChange(action) => self.send_driver_cmd(DriverCmd::ChangeMappings {
@@ -809,14 +744,29 @@ impl GuiMain {
                 self.execute_gui_command(GuiCmd::ConfigChangeSimple)?;
                 self.send_driver_cmd(DriverCmd::Reload);
             }
-            GuiCmd::DragAndDrop(_) | GuiCmd::LocalItemRemove(_) => {
-                unreachable!(
+            GuiCmd::DragAndDrop(GuiDndJob::MoveTfmStep(dnd_job)) => {
+                let mut dnd_visitor = DndJobMoveTfmStep_Visitor {
+                    dnd_job: dnd_job.clone(),
+                    dropped_tfm_step: None,
+                };
+                for i in 0..=1 {
+                    if self.cfg.mappings.traverse_mut(&mut dnd_visitor) == ControlFlow::Break(()) {
+                        break;
+                    } else if i == 1 {
+                        log::error!("Dnd job failed to complete in 2 traversals. Error in implementation. {dnd_job:?}");
+                    }
+                }
+            }
+            GuiCmd::DragAndDrop(..) | GuiCmd::LocalItemRemove(..) => {
+                log::error!(
                     "Drag and drop and local item removal commands are expected to be \
-                      handled on upper level in Gui. Error in implementation."
+                      handled on upper level in Gui. Error in implementation. 
+                    Command failed:
+                      {gui_cmd:?}"
                 )
             }
             GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange { restart_persistent }) => {
-                self.cfg.recompute_mappings_metadata();
+                self.cfg.sanitize_inplace(());
                 self.reset_available_devices_caches();
                 let (tx, rx) = std::sync::mpsc::channel::<()>();
                 self.send_driver_cmd(DriverCmd::ChangeVirtualHids {

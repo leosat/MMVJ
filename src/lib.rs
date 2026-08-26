@@ -76,6 +76,8 @@ pub(crate) mod gui_midi;
 #[cfg(feature = "gui")]
 pub(crate) mod gui_monitors;
 #[cfg(feature = "gui")]
+pub(crate) mod gui_style;
+#[cfg(feature = "gui")]
 pub(crate) mod gui_telemetry_graph;
 #[cfg(feature = "gui")]
 pub(crate) mod gui_transform_step;

@@ -7,9 +7,8 @@ use crate::schemas_mapping::Mapping;
 #[cfg(feature = "midi")]
 use crate::schemas_midi::{MidiControlMatcherCfg, MidiMatcherCfg};
 use crate::schemas_predefined::ControlsPredefinedCfg;
-use crate::schemas_transform::*;
 
-use crate::schemas_value::{AutoOrManual, DeviceControlMatcherRef, DynValueRefs, WithNumInterval, WithRelativity};
+use crate::schemas_value::{DeviceControlMatcherRef, DynValueRefs};
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
 
@@ -55,16 +54,87 @@ pub const MIDI_ENABLED_CONST: bool = false;
 pub const MIDI_ENABLED_CONST: bool = true;
 
 //-----------------------------------------------------------------
+// #[enum_dispatch(TfmStepCfg)]
 pub(crate) trait WithSelfSanitize {
-    fn sanitize_inplace(&mut self);
+    type SanInputT;
+
+    fn sanitize_inplace(&mut self, input: Self::SanInputT);
+
     #[allow(unused)]
-    fn sanitize_self(mut self) -> Self
+    fn to_sanitized(mut self, input: Self::SanInputT) -> Self
     where
         Self: Sized,
     {
-        self.sanitize_inplace();
+        self.sanitize_inplace(input);
         self
     }
+}
+
+impl<T: WithSelfSanitize> WithSelfSanitize for Box<T>
+where
+    <T as WithSelfSanitize>::SanInputT: Clone + Copy,
+{
+    fn sanitize_inplace(&mut self, input: Self::SanInputT) {
+        self.as_mut().sanitize_inplace(input);
+    }
+
+    type SanInputT = <T as WithSelfSanitize>::SanInputT;
+}
+
+impl<T: WithSelfSanitize> WithSelfSanitize for Option<T>
+where
+    <T as WithSelfSanitize>::SanInputT: Clone + Copy,
+{
+    fn sanitize_inplace(&mut self, input: Self::SanInputT) {
+        if let Some(s) = self.as_mut() {
+            s.sanitize_inplace(input)
+        }
+    }
+
+    type SanInputT = <T as WithSelfSanitize>::SanInputT;
+}
+
+impl<T: WithSelfSanitize> WithSelfSanitize for Vec<T>
+where
+    <T as WithSelfSanitize>::SanInputT: Clone + Copy,
+{
+    fn sanitize_inplace(&mut self, input: Self::SanInputT) {
+        self.iter_mut().for_each(|s| s.sanitize_inplace(input));
+    }
+
+    type SanInputT = <T as WithSelfSanitize>::SanInputT;
+}
+
+impl<T: WithSelfSanitize, K> WithSelfSanitize for std::collections::BTreeMap<K, T>
+where
+    <T as WithSelfSanitize>::SanInputT: Clone + Copy,
+{
+    fn sanitize_inplace(&mut self, input: Self::SanInputT) {
+        self.iter_mut().for_each(|(_, s)| s.sanitize_inplace(input));
+    }
+
+    type SanInputT = <T as WithSelfSanitize>::SanInputT;
+}
+
+impl<T: WithSelfSanitize, K> WithSelfSanitize for std::collections::HashMap<K, T>
+where
+    <T as WithSelfSanitize>::SanInputT: Clone + Copy,
+{
+    fn sanitize_inplace(&mut self, input: Self::SanInputT) {
+        self.iter_mut().for_each(|(_, s)| s.sanitize_inplace(input));
+    }
+    type SanInputT = <T as WithSelfSanitize>::SanInputT;
+}
+
+//-----------------------------------------------------------------
+impl WithSelfSanitize for Config {
+    fn sanitize_inplace(&mut self, _input: Self::SanInputT) {
+        for mapping in self.mappings.iter_mut() {
+            mapping.sanitize_inplace(());
+        }
+    }
+
+    type SanInputT = ();
 }
 
 impl Config {
@@ -86,17 +156,6 @@ impl Config {
             .expect("Failed to serialize config.")
             .as_str();
         yaml
-    }
-
-    pub(crate) fn recompute_mappings_metadata(&mut self) {
-        for mapping in self.mappings.iter_mut() {
-            mapping
-                .transformation
-                .recompute_metadata(AutoOrManual::Auto(crate::schemas_value::InputValueMetadata {
-                    relativity: mapping.src.get_relativity(),
-                    interval: mapping.src.get_interval(),
-                }));
-        }
     }
 
     pub(crate) fn _device_matcher_exists_and_is_enabled(&self, device_matcher_key: &str) -> Option<bool> {
@@ -139,6 +198,7 @@ impl Config {
     pub(crate) fn resolve(&mut self) -> Result<()> {
         self.resolve_devices()?;
         self.resolve_dynamic_value_refs()?;
+        self.sanitize_inplace(());
         Ok(())
     }
 
@@ -164,14 +224,14 @@ impl Config {
         struct CfgDstsAndSrcsVisitor<'s> {
             pub devices: &'s mut DevicesCfgNew,
             pub variables: &'s mut VariablesCfg,
-            pub mapping_name: Option<String>,
+            pub current_mapping_name: Option<String>,
         }
 
         impl<'s> traversable::VisitorMut for CfgDstsAndSrcsVisitor<'s> {
             type Break = anyhow::Result<()>;
             fn enter_mut(&mut self, this: &mut dyn core::any::Any) -> std::ops::ControlFlow<Self::Break> {
                 if let Some(m) = this.downcast_mut::<Mapping>() {
-                    self.mapping_name = Some(m.name.clone());
+                    self.current_mapping_name = Some(m.name.clone());
                 }
 
                 if let Some(v) = this.downcast_mut::<DynValueRefs>() {
@@ -179,7 +239,7 @@ impl Config {
                         self.devices,
                         self.variables,
                         v,
-                        (self.mapping_name.as_ref().unwrap_or(&String::default())).as_str(),
+                        (self.current_mapping_name.as_ref().unwrap_or(&String::default())).as_str(),
                     );
                     match resolved {
                         Ok(r) => *v = r,
@@ -191,27 +251,15 @@ impl Config {
 
             fn leave_mut(&mut self, this: &mut dyn core::any::Any) -> std::ops::ControlFlow<Self::Break> {
                 if this.is::<Mapping>() {
-                    self.mapping_name = None;
+                    self.current_mapping_name = None;
                 }
 
-                if let Some(m) = this.downcast_mut::<Mapping>() {
-                    #[cfg(feature = "gui")]
-                    if m.transformation.steps.is_empty() {
-                        m.transformation.steps.push(TfmStepCfg::default());
-                    }
-
-                    m.recompute_metadata(Some(if m.name.is_empty() {
-                        m.to_string()
-                    } else {
-                        m.name.clone()
-                    }));
-                }
                 std::ops::ControlFlow::Continue(())
             }
         }
 
         let mut visitor = CfgDstsAndSrcsVisitor {
-            mapping_name: None,
+            current_mapping_name: None,
             devices: &mut self.devices,
             variables: &mut self.variables,
         };

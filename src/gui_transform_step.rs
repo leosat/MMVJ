@@ -1,4 +1,6 @@
 use crate::base_num::BaseNumT;
+use crate::gui_style::GuiStyle;
+use crate::num_interval::MAX_SPAN_INTERVAL;
 use crate::relativity::Relativity;
 
 use crate::config::MORE_DEBUG;
@@ -15,15 +17,15 @@ use crate::mapping::MappingEngineCmd;
 use crate::num_interval::NumInterval;
 use crate::num_interval::SYMM_UNIT_INTERVAL;
 use crate::schemas_cfg::DescriptionCfg;
-use crate::schemas_cfg::WithDescriptionMut;
 use crate::schemas_cfg::{DevicesCfgNew, VariablesCfg};
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_transform::*;
 use crate::schemas_value::AutoOrManual;
-use crate::schemas_value::{StaticValueCfg, TfmValue, ValueSrcs, WithNumericValue};
+use crate::schemas_value::TfmValue;
+use crate::schemas_value_port::ValuePortIface;
 use crate::tracing::GraphDisplayStyle;
-use egui::text::LayoutJob;
-use egui::{Button, CollapsingHeader, FontId, Sense, TextFormat, WidgetText};
+use egui::RichText;
+use egui::{Button, CollapsingHeader, Sense};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::Ordering::Relaxed;
@@ -132,7 +134,7 @@ fn draw_graph_docked_or_windowed(
                 let mut header_clicked = false;
                 let mut r = c.show_header(ui, |ui| {
                     header_clicked = ui
-                        .add(egui::Label::new("live monitor graph.").sense(egui::Sense::click()))
+                        .add(egui::Label::new("live monitor").sense(egui::Sense::click()))
                         .clicked();
                     if !was_graph_window_opened
                         && ui
@@ -164,110 +166,106 @@ fn draw_graph_docked_or_windowed(
 
 // ---------------------------------
 
-#[derive(Default)]
-pub(crate) enum GuiInTfmStepsSeq<'g> {
+#[derive(Copy, Clone)]
+pub(crate) enum GuiInCommon<'g> {
     Edit {
+        style: &'g GuiStyle,
         graph_states: &'g UncheckedRefCell<GuiTelemetryGraphStates>,
         cfg_devices: &'g DevicesCfgNew,
         cfg_variables: &'g VariablesCfg,
         #[allow(clippy::all)]
         transient_script_aux_edits: &'g UncheckedRefCell<HashMap<(ObjId, ScriptAuxKind), (String, String)>>,
-        hier: Vec<usize>,
+        hier: &'g UncheckedRefCell<Vec<usize>>,
     },
-    #[allow(unused)]
-    #[default]
-    Display,
+    _Display {
+        style: &'g GuiStyle,
+        graph_states: &'g UncheckedRefCell<GuiTelemetryGraphStates>,
+        cfg_devices: &'g DevicesCfgNew,
+        cfg_variables: &'g VariablesCfg,
+    },
 }
 
-impl<'g> Clone for GuiInTfmStepsSeq<'g> {
-    fn clone(&self) -> Self {
+impl<'g> GuiInCommon<'g> {
+    pub(crate) fn get_style(&self) -> &'g GuiStyle {
         match self {
-            Self::Edit {
-                graph_states,
-                hier,
-                cfg_devices,
-                cfg_variables,
-                transient_script_aux_edits,
-            } => Self::Edit {
-                graph_states,
-                cfg_devices,
-                hier: hier.clone(),
-                cfg_variables,
-                transient_script_aux_edits,
-            },
-            Self::Display => Self::Display,
+            Self::Edit { style, .. } => style,
+            Self::_Display { style, .. } => style,
         }
     }
-}
 
-impl<'g> GuiInTfmStepsSeq<'g> {
-    pub(crate) fn _clone_mut(&mut self) -> Self {
-        self.clone()
+    pub(crate) fn _get_graph_states(&self) -> &'g UncheckedRefCell<GuiTelemetryGraphStates> {
+        match self {
+            Self::Edit { graph_states, .. } => graph_states,
+            Self::_Display { graph_states, .. } => graph_states,
+        }
+    }
+
+    pub(crate) fn cfg_devices(&self) -> &'g DevicesCfgNew {
+        match self {
+            Self::Edit { cfg_devices, .. } => cfg_devices,
+            Self::_Display { cfg_devices, .. } => cfg_devices,
+        }
+    }
+
+    pub(crate) fn cfg_variables(&self) -> &'g VariablesCfg {
+        match self {
+            Self::Edit { cfg_variables, .. } => cfg_variables,
+            Self::_Display { cfg_variables, .. } => cfg_variables,
+        }
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub(crate) fn _transient_script_aux_edits(
+        &self,
+    ) -> Option<&'g UncheckedRefCell<HashMap<(ObjId, ScriptAuxKind), (String, String)>>> {
+        match self {
+            Self::Edit {
+                transient_script_aux_edits,
+                ..
+            } => Some(transient_script_aux_edits),
+            Self::_Display { .. } => None,
+        }
     }
 
     pub(crate) fn clone_and_push_hier(&self, id: ObjId) -> Self {
+        #[allow(clippy::clone_on_copy)]
         let mut tmp = self.clone();
         match &mut tmp {
-            GuiInTfmStepsSeq::Edit { hier, .. } => (*hier).push(*id),
-            GuiInTfmStepsSeq::Display => unreachable!(),
+            GuiInCommon::Edit { hier, .. } => (*hier).borrow_mut().push(*id),
+            GuiInCommon::_Display { .. } => {}
         }
         tmp
     }
 
-    pub(crate) fn get_hier(&self) -> Vec<usize> {
+    pub(crate) fn get_hier(&self) -> Option<Vec<usize>> {
         match self {
-            GuiInTfmStepsSeq::Edit { hier: obj_ids_hier, .. } => obj_ids_hier.to_vec(),
-            GuiInTfmStepsSeq::Display => unreachable!(),
+            GuiInCommon::Edit { hier: obj_ids_hier, .. } => obj_ids_hier.borrow_mut().to_vec().into(),
+            GuiInCommon::_Display { .. } => None,
         }
     }
 
     pub(crate) fn is_editor(&self) -> bool {
         match self {
-            GuiInTfmStepsSeq::Edit { .. } => true,
-            GuiInTfmStepsSeq::Display => false,
-        }
-    }
-
-    pub(crate) fn _get_graphs(&self) -> &'g UncheckedRefCell<GuiTelemetryGraphStates> {
-        match self {
-            GuiInTfmStepsSeq::Edit { graph_states, .. } => graph_states,
-            GuiInTfmStepsSeq::Display => unreachable!(),
+            GuiInCommon::Edit { .. } => true,
+            GuiInCommon::_Display { .. } => false,
         }
     }
 }
 
-fn draw_step_in_out(ui: &mut egui::Ui, state: &TfmStepCommonState, is_enabled: bool) {
+fn get_step_io_text(_ui: &mut egui::Ui, state: &TfmStepCommonState) -> RichText {
     let last_in = state.last_in.load(std::sync::atomic::Ordering::Relaxed);
     let last_out = state.last_out.load(std::sync::atomic::Ordering::Relaxed);
-
-    let mut job = LayoutJob::default();
-
-    let format = TextFormat {
-        font_id: FontId::monospace(12.0),
-        color: ui
-            .style()
-            .visuals
-            .text_color()
-            .gamma_multiply(1.0 - 0.5 * (!is_enabled as u8 as f32)),
-        ..Default::default()
-    };
-
     let in_label = if state.is_in_relative() { "rel" } else { "abs" };
     let out_label = if state.is_out_relative() { "rel" } else { "abs" };
-
-    job.append(
-        &format!(" {} ({:+08.2}) {}", in_label, last_in, state.get_in_interval()),
-        0.0,
-        format.clone(),
-    );
-
-    job.append(
-        &format!(" -> {} ({:+08.2}) {}", out_label, last_out, state.get_out_interval()),
-        0.0,
-        format,
-    );
-
-    ui.label(job);
+    egui::RichText::new(format!(
+        " {} ({:+08.2}) {} -> {} ({:+08.2}) {}",
+        in_label,
+        last_in,
+        state.get_in_interval(),
+        out_label,
+        last_out,
+        state.get_out_interval()
+    ))
 }
 
 fn egui_dnd_drop_job_to_insert_job(
@@ -294,22 +292,22 @@ fn egui_dnd_drop_job_to_insert_job(
 }
 
 impl<'s> DrawEgui<'s> for TfmSeqCfg {
-    type In = GuiInTfmStepsSeq<'s>;
+    type In = GuiInCommon<'s>;
     type Out = Option<GuiCmd>;
 
-    fn egui(&mut self, state: Self::In, ui: &mut egui::Ui) -> Self::Out {
-        if state.is_editor() {
+    fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+        if gui_in.is_editor() {
             let mut gui_out = None;
             let gui_out_mut = &mut gui_out;
 
             ui.separator();
 
-            ui.collapsing("Description", |ui| self.desc.egui(GuiInKinds::Edit, ui))
-                .body_returned
-                .unwrap_or_default()
-                .inspect(|out| *gui_out_mut = Some(out.clone()));
+            // ui.collapsing("Description", |ui| self.desc.egui(GuiInKinds::Edit, ui))
+            //     .body_returned
+            //     .unwrap_or_default()
+            //     .inspect(|out| *gui_out_mut = Some(out.clone()));
 
-            if let AutoOrManual::Manual(in_meta) = &mut self.in_meta {
+            if let AutoOrManual::Manual(in_meta) = self.in_meta_mut() {
                 ui.separator();
                 let mut changed = false;
                 ui.horizontal(|ui| {
@@ -317,8 +315,8 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
                     changed |= in_meta.interval.egui(
                         GuiInInterval::Edit {
                             max_range: HID_AXIS_MAX_RANGE,
-                            from_label: "From: ",
-                            to_label: "To: ",
+                            from_label: "",
+                            to_label: "",
                             sanitize_and_sort: true,
                             truncate: false,
                         },
@@ -331,22 +329,28 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
                 });
 
                 if changed {
-                    self.recompute_metadata_with_known_inputs();
+                    self.recompute_metadata_and_sanitize_recursive(None);
                     *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
                 }
+            } else {
+                ui.horizontal(|ui| {
+                    ui.label(format!(
+                        "{} {} -> {} {}",
+                        self.get_in_relativity(),
+                        self.get_in_interval(),
+                        self.get_out_relativity(),
+                        self.get_out_interval(),
+                    ));
+                });
             }
 
             ui.separator();
-
             ui.horizontal(|ui| {
-                ui.label(WidgetText::from("Steps:"));
-                ui.separator();
-
                 // '_Add_New_Tfm_Step:
                 let is_win_opened_egui_id = ui.make_persistent_id("+ add step").with(*self.id); // gui::Id::new("Create new step window").with(self.id); // ui.make_persistent_id("..");
                 let is_win_opened = &mut ui.data_mut(|d| d.get_temp::<bool>(is_win_opened_egui_id).unwrap_or(false));
                 if !*is_win_opened {
-                    if ui.small_button(format!("add {}", egui_phosphor::bold::STEPS)).clicked() {
+                    if ui.small_button("add step".to_string()).clicked() {
                         *is_win_opened = true;
                     }
                 } else {
@@ -379,20 +383,22 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
                         ui.separator();
                         step_to_add
                     });
+
                 if let Some(step_to_add) = step_to_add_opt
                     && let Some(step) = step_to_add.inner.flatten()
                 {
                     self.steps.push(step);
-                    self.recompute_metadata_with_known_inputs();
+                    self.recompute_metadata_and_sanitize_recursive(None);
                     *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
                 }
+
                 ui.data_mut(|d| d.insert_temp(is_win_opened_egui_id, *is_win_opened));
             });
 
             ui.separator();
 
             let mut matched_dnd_job = None;
-            let hier = state.get_hier();
+            let hier = gui_in.get_hier().unwrap();
             for (step_idx, step) in self.steps.iter_mut().enumerate() {
                 // -- dnd detect drop.
                 if matched_dnd_job.is_none() {
@@ -406,7 +412,7 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
                 }
 
                 ui.push_id(step.get_id(), |ui| {
-                    step.egui((step_idx, *self.id, state.clone()), ui)
+                    step.egui((step_idx, *self.id, gui_in), ui)
                         .inspect(|out| *gui_out_mut = Some(out.clone()))
                 });
             }
@@ -452,7 +458,7 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
                     self.steps.remove(idx);
                     gui_out = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
                 }
-                self.recompute_metadata_with_known_inputs();
+                self.recompute_metadata_and_sanitize_recursive(None);
             }
 
             gui_out
@@ -465,7 +471,7 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
 // ---------------------------------
 
 impl<'s> DrawEgui<'s> for TfmStepCfg {
-    type In = (usize, usize, GuiInTfmStepsSeq<'s>);
+    type In = (usize, usize, GuiInCommon<'s>);
     type Out = Option<GuiCmd>;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
@@ -473,29 +479,26 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
         let container_id = gui_in.1;
         let step_id = self.get_id();
         match gui_in.2 {
-            GuiInTfmStepsSeq::Edit {
+            GuiInCommon::Edit {
                 graph_states,
                 cfg_devices,
                 cfg_variables,
                 ..
             } => {
-                let in_is_relative = self.common_state_ref().is_in_relative();
                 let transform_name = self.to_string();
                 let label = format!("({}) {}", step_idx + 1, transform_name);
                 let is_enabled = *self.get_enabled_ref_mut();
                 let state_id = self.get_id();
-                let heading = {
-                    let mut heading = egui::RichText::new(&label);
-                    if !is_enabled {
-                        heading = heading.color(ui.visuals().weak_text_color()).size(17.0);
-                    } else {
-                        heading = heading
-                            // .background_color(egui::Color32::from_gray(220))
-                            // .color(egui::Color32::BLACK)
-                            .size(17.0)
-                            .strong();
-                    }
-                    heading
+                let heading = if !is_enabled {
+                    gui_in
+                        .2
+                        .get_style()
+                        .tfm_title_decorate_disabled(egui::RichText::new(&label))
+                } else {
+                    gui_in
+                        .2
+                        .get_style()
+                        .tfm_title_decorate_enabled(egui::RichText::new(&label))
                 };
                 ui.scope_builder(
                     egui::UiBuilder::new().id(egui::Id::new(container_id).with(state_id)),
@@ -554,7 +557,11 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                         }
                                     });
 
-                                    draw_step_in_out(ui, self.common_state_ref(), is_enabled);
+                                    let io_text = gui_in.2.get_style().tfm_io_info_decorate(
+                                        get_step_io_text(ui, self.common_state_ref()),
+                                        is_enabled,
+                                    );
+                                    ui.label(io_text);
 
                                     ui.separator();
                                     if ui
@@ -580,16 +587,16 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                     ui.disable();
                                 }
 
-                                if let Some(desc) = self.description_mut() {
-                                    ui.separator();
-                                    if let Some(gui_out) = ui
-                                        .collapsing("Description", |ui| desc.egui(GuiInKinds::Edit, ui))
-                                        .body_returned
-                                        .unwrap_or_default()
-                                    {
-                                        return Some(gui_out);
-                                    }
-                                }
+                                // if let Some(desc) = self.description_mut() {
+                                //     ui.separator();
+                                //     if let Some(gui_out) = ui
+                                //         .collapsing("Description", |ui| desc.egui(GuiInKinds::Edit, ui))
+                                //         .body_returned
+                                //         .unwrap_or_default()
+                                //     {
+                                //         return Some(gui_out);
+                                //     }
+                                // }
 
                                 ui.separator();
 
@@ -601,6 +608,8 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                         let label = self.to_string();
                                         let in_interval = self.common_state_ref().get_in_interval();
                                         match self {
+                                            Self::Sum(s) => s.egui(gui_in.2.clone_and_push_hier(step_id), ui),
+                                            Self::VelocityToDisplacement(s) => s.egui((), ui),
                                             Self::Script(s) => s.egui(
                                                 (
                                                     step_id,
@@ -611,7 +620,7 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                                 ui,
                                             ),
                                             Self::Nop(_) | Self::Invert(_) => None,
-                                            Self::Integrate(s) => s.egui(in_interval, ui),
+                                            Self::Integrate(s) => s.egui(&gui_in.2, ui),
                                             Self::Steering(s) => {
                                                 ui.push_id(state_id, |ui| {
                                                     s.egui(gui_in.2.clone_and_push_hier(step_id), ui)
@@ -619,17 +628,15 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                                 .inner
                                             }
                                             Self::Clamp(s) => s.egui(in_interval, ui),
-                                            Self::RaiseFall(s) => s.egui((cfg_variables, cfg_devices, in_interval), ui),
-                                            Self::Ema(s) => s.egui((cfg_variables, cfg_devices, in_is_relative), ui),
+                                            Self::RaiseFall(s) => s.egui((&gui_in.2, in_interval), ui),
+                                            Self::Ema(s) => s.egui(&gui_in.2, ui),
                                             Self::Linear(s) => s.egui(in_interval, ui),
                                             Self::Smoothstep(_) => None,
                                             Self::SCurve(s) => s.egui((), ui),
                                             Self::Exp(s) => s.egui((), ui),
                                             Self::SignedPower(s) => s.egui((), ui),
-                                            Self::OneEuro(s) => {
-                                                s.egui((cfg_variables, cfg_devices, in_is_relative), ui)
-                                            } // Self::_HighPass(_) => None,
-                                              // Self::_ForceFeedback(_) => None,
+                                            Self::OneEuro(s) => s.egui(&gui_in.2, ui), // Self::_HighPass(_) => None,
+                                                                                       // Self::_ForceFeedback(_) => None,
                                         }
                                     },
                                 )
@@ -641,9 +648,7 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                 )
                 .inner
             }
-            GuiInTfmStepsSeq::Display => {
-                unreachable!()
-            }
+            GuiInCommon::_Display { .. } => None,
         }
     }
 }
@@ -690,8 +695,8 @@ impl<'s> DrawEgui<'s> for ClampCfg {
             changed |= self.range.egui(
                 GuiInInterval::Edit {
                     max_range: HID_AXIS_MAX_RANGE,
-                    from_label: "From: ",
-                    to_label: "To: ",
+                    from_label: "",
+                    to_label: "",
                     sanitize_and_sort: true,
                     truncate: false,
                 },
@@ -704,68 +709,120 @@ impl<'s> DrawEgui<'s> for ClampCfg {
             .checkbox(&mut self.override_range, "Override output interval.")
             .changed();
 
-        self.sanitize_inplace();
+        if changed {
+            self.sanitize_inplace(());
+        }
 
         bool_to_simple_change_gui_cmd(changed)
     }
 }
 
 impl<'s> DrawEgui<'s> for IntegrateCfg {
-    type In = NumInterval<BaseNumT>;
+    type In = &'s GuiInCommon<'s>;
     type Out = Option<GuiCmd>;
 
-    fn egui(&mut self, input_interval: Self::In, ui: &mut egui::Ui) -> Self::Out {
-        let mut changed = false;
+    fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+        let mut gui_out = None;
+        let gui_out_mut = &mut gui_out;
+
+        ui.label("( ");
 
         ui.horizontal(|ui| {
-            changed |= self.range.egui(
+            ui.label("Accumulator(");
+            self.accumulator
+                .egui(
+                    GuiInValue::Edit(GuiInValueEditParams {
+                        allow_interval_edit: false,
+                        slider_log_scale: false,
+                        name: "Accumulator",
+                        choice_case: ValueUsageContext::TfmStepAuxXrc.into(),
+                        gui_common_ctx: gui_in,
+                    }),
+                    ui,
+                )
+                .inspect(|out| *gui_out_mut = Some(out.clone()));
+            ui.label(")");
+        });
+
+        ui.label(egui_phosphor::bold::PLUS);
+
+        let current_input = self.common_state_ref().last_in.load(Relaxed);
+
+        ui.horizontal(|ui| {
+            ui.label("Input gain(");
+            if ui
+                .add(egui::Slider::new(&mut self.smoothing_alpha, 0.001..=1.0).logarithmic(false))
+                .changed()
+            {
+                *gui_out_mut = bool_to_simple_change_gui_cmd(true);
+            };
+            ui.label(
+                egui::RichText::new(format!(
+                    ") * {:+011.04} -> {:+011.04} -> map to acc. range {} -> {:+011.04}",
+                    current_input,
+                    current_input * self.smoothing_alpha,
+                    self.accumulator.port_get_interval(),
+                    self.get_delta_acc_norm(TfmValue {
+                        value: current_input * self.smoothing_alpha,
+                        interval: self.common_state_ref().get_in_interval(),
+                        relativity: self.common_state_ref().is_in_relative().into(),
+                    })
+                ))
+                .monospace(),
+            );
+        });
+
+        ui.label(egui_phosphor::bold::PLUS);
+
+        ui.horizontal(|ui| {
+            ui.label(").remap_to(");
+            if self.range.egui(
                 GuiInInterval::Edit {
-                    max_range: input_interval.scale(1000.0).make_range_inclusive(),
-                    from_label: "From: ",
-                    to_label: "To: ",
+                    max_range: MAX_SPAN_INTERVAL.make_range_inclusive(),
+                    from_label: "",
+                    to_label: "",
                     sanitize_and_sort: true,
                     truncate: false,
                 },
                 ui,
-            );
+            ) {
+                *gui_out_mut = bool_to_simple_change_gui_cmd(true);
+            };
+            ui.label(")");
         });
 
         ui.separator();
 
-        changed |= ui
-            .add(
-                egui::Slider::new(&mut self.smoothing_alpha, 0.001..=1.0)
-                    .text("Input gain")
-                    .logarithmic(false),
-            )
-            .changed();
-
-        bool_to_simple_change_gui_cmd(changed)
+        gui_out
     }
 }
 
 impl<'s> DrawEgui<'s> for RaiseFallCfg {
-    type In = (&'s VariablesCfg, &'s DevicesCfgNew, NumInterval<BaseNumT>);
+    type In = (&'s GuiInCommon<'s>, NumInterval<BaseNumT>);
     type Out = Option<GuiCmd>;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
-        let (cfg_variables, cfg_devices, input_interval) = gui_in;
+        let input_interval = gui_in.1;
         let rize_and_fall_rates_interval = 0.01..=input_interval.to() * 10.0; // TODO: make multiplier configurable.
         let mut changed_simple = false;
         let mut gui_out = None;
         let gui_out_mut = &mut gui_out;
         ui.label(format!("Input interval: {}", input_interval));
+        ui.separator();
         changed_simple |= ui
             .add(
                 egui::Slider::new(&mut self.fall_delay, 0.0..=10.0).text("Fall delay"), // .drag_value_speed(0.001),
             )
             .changed();
+        ui.separator();
         changed_simple |= ui
             .add(egui::Slider::new(&mut self.raise_rate, rize_and_fall_rates_interval.clone()).text("Raise rate"))
             .changed();
+        ui.separator();
         changed_simple |= ui
             .add(egui::Slider::new(&mut self.fall_rate, rize_and_fall_rates_interval).text("Fall rate"))
             .changed();
+        ui.separator();
         changed_simple |= ui
             .add(
                 egui::Slider::new(&mut self.smoothing_alpha, 0.01..=1.0)
@@ -775,37 +832,35 @@ impl<'s> DrawEgui<'s> for RaiseFallCfg {
             .changed();
         ui.separator();
         ui.collapsing("Fall hold factor:", |ui| {
-            ui.separator();
-            self.fall_hold_factor
-                .egui(
-                    GuiInValue::Edit(GuiInValueEditParams {
-                        allow_interval_edit: false,
-                        slider_log_scale: false,
-                        cfg_variables,
-                        cfg_devices,
-                        name: "Choose hold factor source",
-                        choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
-                    }),
-                    ui,
-                )
-                .inspect(|out| *gui_out_mut = Some(out.clone()));
-            ui.separator();
-            changed_simple |= ui
-                .checkbox(&mut self.invert_fall_hold_factor, "Invert fall hold factor")
-                .changed();
+            ui.horizontal(|ui| {
+                self.fall_hold_factor
+                    .egui(
+                        GuiInValue::Edit(GuiInValueEditParams {
+                            allow_interval_edit: false,
+                            slider_log_scale: false,
+                            name: "Choose hold factor source",
+                            choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                            gui_common_ctx: gui_in.0,
+                        }),
+                        ui,
+                    )
+                    .inspect(|out| *gui_out_mut = Some(out.clone()));
+                ui.separator();
+                changed_simple |= ui
+                    .checkbox(&mut self.invert_fall_hold_factor, "Invert fall hold factor")
+                    .changed();
+            });
         });
+
         gui_out.or(bool_to_simple_change_gui_cmd(changed_simple))
     }
 }
 
 impl<'s> DrawEgui<'s> for EmaCfg {
-    type In = (&'s VariablesCfg, &'s DevicesCfgNew, bool);
+    type In = &'s GuiInCommon<'s>;
     type Out = Option<GuiCmd>;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
-        let cfg_variables = gui_in.0;
-        let cfg_devices = gui_in.1;
-        let in_is_relative = gui_in.2;
         let mut gui_out = None;
         ui.horizontal(|ui| {
             let param_name = "Time constant";
@@ -814,15 +869,14 @@ impl<'s> DrawEgui<'s> for EmaCfg {
                 GuiInValue::Edit(GuiInValueEditParams {
                     allow_interval_edit: true,
                     slider_log_scale: true,
-                    cfg_variables,
-                    cfg_devices,
                     name: param_name,
                     choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                    gui_common_ctx: gui_in,
                 }),
                 ui,
             );
         });
-        if in_is_relative {
+        if self.common_state_ref().is_in_relative() {
             ui.separator();
             gui_out = gui_out.or(bool_to_simple_change_gui_cmd(draw_gui_idle_tick_params(ui, self)));
         }
@@ -933,14 +987,117 @@ impl<'s> DrawEgui<'s> for SignedPowerCfg {
     }
 }
 
-impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
-    type In = (&'s VariablesCfg, &'s DevicesCfgNew, bool);
+impl<'s> DrawEgui<'s> for SumCfg {
+    type In = GuiInCommon<'s>;
     type Out = Option<GuiCmd>;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
-        let cfg_variables = gui_in.0;
-        let cfg_devices = gui_in.1;
-        let in_is_relative = gui_in.2;
+        let mut gui_out = None;
+        if let GuiInCommon::Edit { .. } = gui_in {
+            let step_id = self.common_state_ref().get_id();
+            let mut source_to_remove = None;
+
+            ui.label(format!("( {} ", self.common_state_ref().last_in.load(Relaxed)));
+
+            for (src_idx, src) in self.sources.iter_mut().enumerate() {
+                ui.push_id((step_id, src_idx), |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new(egui_phosphor::bold::PLUS).size(16.0));
+                        src.egui(
+                            GuiInValue::Edit(GuiInValueEditParams {
+                                name: "Summation source",
+                                choice_case: Some(ValueUsageContext::TfmStepAuxSrc),
+                                allow_interval_edit: true,
+                                slider_log_scale: false,
+                                gui_common_ctx: &gui_in,
+                            }),
+                            ui,
+                        )
+                        .inspect(|out| gui_out = out.clone().into());
+                        ui.separator();
+                        if ui.button(egui_phosphor::bold::TRASH).clicked() {
+                            source_to_remove = Some(src_idx);
+                        }
+                    });
+                });
+            }
+
+            ui.horizontal(|ui| {
+                ui.label(").clamp(");
+
+                if self.out_interval.egui(
+                    GuiInInterval::Edit {
+                        max_range: MAX_SPAN_INTERVAL.make_range_inclusive(),
+                        from_label: "",
+                        to_label: "",
+                        sanitize_and_sort: true,
+                        truncate: false,
+                    },
+                    ui,
+                ) {
+                    gui_out = bool_to_simple_change_gui_cmd(true);
+                };
+
+                ui.label(egui::RichText::new(format!(
+                    ") {} {}",
+                    egui_phosphor::bold::EQUALS,
+                    self.common_state_ref().last_out.load(Relaxed)
+                )));
+            });
+
+            ui.separator();
+            if ui.button("Add summation source").clicked() {
+                self.sources.push(Default::default());
+            }
+
+            if let Some(src_to_remove) = source_to_remove {
+                self.sources.remove(src_to_remove);
+                gui_out = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
+            }
+        }
+
+        gui_out
+    }
+}
+
+impl<'s> DrawEgui<'s> for VelocityToDisplacementCfg {
+    type In = ();
+    type Out = Option<GuiCmd>;
+
+    fn egui(&mut self, _gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+        let mut gui_out = None;
+        ui.separator();
+        ui.horizontal(|ui| {
+            ui.label("Scale by:");
+            if ui.add(egui::DragValue::new(&mut self.multiplier)).changed() {
+                gui_out = bool_to_simple_change_gui_cmd(true);
+            };
+        });
+        ui.separator();
+        ui.horizontal(|ui| {
+            ui.label("Remap to output range:");
+            if self.out_interval.egui(
+                GuiInInterval::Edit {
+                    max_range: MAX_SPAN_INTERVAL.make_range_inclusive(),
+                    from_label: "From",
+                    to_label: "To",
+                    sanitize_and_sort: true,
+                    truncate: false,
+                },
+                ui,
+            ) {
+                gui_out = bool_to_simple_change_gui_cmd(true);
+            };
+        });
+        gui_out
+    }
+}
+
+impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
+    type In = &'s GuiInCommon<'s>;
+    type Out = Option<GuiCmd>;
+
+    fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut gui_out = None;
         let gui_out_mut = &mut gui_out;
         ui.horizontal(|ui| {
@@ -951,10 +1108,9 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
                 GuiInValue::Edit(GuiInValueEditParams {
                     allow_interval_edit: true,
                     slider_log_scale: true,
-                    cfg_variables,
-                    cfg_devices,
                     name: param_name,
                     choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                    gui_common_ctx: gui_in,
                 }),
                 ui,
             );
@@ -970,10 +1126,9 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
                     GuiInValue::Edit(GuiInValueEditParams {
                         allow_interval_edit: true,
                         slider_log_scale: true,
-                        cfg_variables,
-                        cfg_devices,
                         name: param_name,
                         choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                        gui_common_ctx: gui_in,
                     }),
                     ui,
                 )
@@ -990,17 +1145,16 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
                     GuiInValue::Edit(GuiInValueEditParams {
                         allow_interval_edit: true,
                         slider_log_scale: true,
-                        cfg_variables,
-                        cfg_devices,
                         name: param_name,
                         choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                        gui_common_ctx: gui_in,
                     }),
                     ui,
                 )
                 .inspect(|out| *gui_out_mut = Some(out.clone()));
         });
 
-        if in_is_relative {
+        if self.common_state_ref().is_in_relative() {
             ui.separator();
             bool_to_simple_change_gui_cmd(draw_gui_idle_tick_params(ui, self))
                 .inspect(|out| *gui_out_mut = Some(out.clone()));
@@ -1011,98 +1165,85 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
 }
 
 impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
-    type In = GuiInTfmStepsSeq<'s>;
+    type In = GuiInCommon<'s>;
     type Out = Option<GuiCmd>;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut gui_out = None;
         let gui_out_mut = &mut gui_out;
         match gui_in {
-            GuiInTfmStepsSeq::Edit {
-                cfg_devices,
-                cfg_variables,
-                ..
-            } => {
+            GuiInCommon::Edit { .. } => {
                 let mut changed = false;
                 let mut use_custom = self.custom_source.is_some();
 
-                changed |= ui
-                    .checkbox(&mut use_custom, "Use custom value source for FFB")
-                    .on_hover_text(self.custom_source_doc_str())
-                    .changed();
-
-                ui.separator();
+                ui.horizontal(|ui| {
+                    changed |= ui
+                        .checkbox(&mut use_custom, "Use custom source")
+                        .on_hover_text(self.custom_source_doc_str())
+                        .changed();
+                });
                 if !use_custom {
-                    if self.custom_source.is_some() {
-                        self.custom_source = None;
-                        changed = true;
-                    }
+                    ui.label("Use force feedback component from mapping destination HID device: ")
+                        .on_hover_text(
+                            "Force feedback is received in 2d space with direction (Const force effect) or bound to X or Y \
+                            component (Spring/Friction/Damper/Inertia effects). \
+                            We are using FFB readings from destination virtual HID associated with the pipeline",
+                        );
+                    changed |= ui
+                        .selectable_value(&mut self.component, ForceFeedbackComponent::X, "X")
+                        .on_hover_text("Use X component of FFB")
+                        .changed();
+                    changed |= ui
+                        .selectable_value(&mut self.component, ForceFeedbackComponent::Y, "Y")
+                        .on_hover_text("Use Y component of FFB")
+                        .changed();
+                } else if let Some(ref mut custom_src) = self.custom_source {
                     ui.horizontal(|ui| {
-                        ui.label("Use force feedback component from mapping destination HID device: ")
-                            .on_hover_text(
-                                "Force feedback is received in 2d space with direction (Const force effect) or bound to X or Y \
-                                component (Spring/Friction/Damper/Inertia effects). \
-                                We are using FFB readings from destination virtual HID associated with the pipeline",
-                            );
-                        changed |= ui
-                            .selectable_value(&mut self.component, ForceFeedbackComponent::X, "X")
-                            .on_hover_text("Use X component of FFB")
-                            .changed();
-                        changed |= ui
-                            .selectable_value(&mut self.component, ForceFeedbackComponent::Y, "Y")
-                            .on_hover_text("Use Y component of FFB")
-                            .changed();
-                    });
-                } else {
-                    if use_custom && self.custom_source.is_none() {
-                        self.custom_source = Some(ValueSrcs::Static(StaticValueCfg {
-                            value: 0.0.into(),
-                            interval: SYMM_UNIT_INTERVAL.into(),
-                        }));
-                        changed = true;
-                    }
+                        ui.set_max_width(200.0);
+                        custom_src
+                            .egui(
+                                GuiInValue::Edit(GuiInValueEditParams {
+                                    allow_interval_edit: false,
+                                    slider_log_scale: false,
+                                    name: "Custom force feedback source",
+                                    choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                                    gui_common_ctx: &gui_in,
+                                }),
+                                ui,
+                            )
+                            .inspect(|out| *gui_out_mut = Some(out.clone()));
+                    })
+                    .response
+                    .on_hover_text(self.custom_source_doc_str());
+                }
 
-                    if let Some(ref mut custom_src) = self.custom_source {
-                        ui.horizontal(|ui| {
-                            custom_src
-                                .egui(
-                                    GuiInValue::Edit(GuiInValueEditParams {
-                                        allow_interval_edit: false,
-                                        slider_log_scale: false,
-                                        cfg_variables,
-                                        cfg_devices,
-                                        name: "FFB custom source",
-                                        choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
-                                    }),
-                                    ui,
-                                )
-                                .inspect(|out| *gui_out_mut = Some(out.clone()));
-                        })
-                        .response
-                        .on_hover_text(self.custom_source_doc_str());
-                    }
+                if !use_custom && self.custom_source.is_some() {
+                    self.custom_source = None;
+                    changed = true;
+                } else if use_custom && self.custom_source.is_none() {
+                    self.custom_source = Some(Default::default());
+                    changed = true;
                 }
 
                 ui.separator();
                 ui.horizontal(|ui| {
                     changed |= ui
-                        .checkbox(&mut self.invert, "Invert force feedback")
+                        .checkbox(&mut self.invert, "Invert")
                         .on_hover_text(self.invert_doc_str())
                         .changed();
                 });
 
                 ui.separator();
                 ui.horizontal(|ui| {
-                    ui.label("Force feedback gain");
+                    ui.label("Gain");
                     self.gain
                         .egui(
                             GuiInValue::Edit(GuiInValueEditParams {
                                 allow_interval_edit: false,
                                 slider_log_scale: false,
-                                cfg_variables,
-                                cfg_devices,
                                 name: "FFB gain",
                                 choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                                gui_common_ctx: &gui_in,
                             }),
                             ui,
                         )
@@ -1115,7 +1256,7 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
 
                 ui.separator();
                 {
-                    let c = ui.collapsing("Force feedback transformation:", |ui| {
+                    let c = ui.collapsing("Transformation", |ui| {
                         self.transformation
                             .egui(gui_in.clone().clone_and_push_hier(self.transformation.id), ui)
                     });
@@ -1124,7 +1265,7 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
                 }
                 .inspect(|out| *gui_out_mut = Some(out.clone()));
             }
-            GuiInTfmStepsSeq::Display => {}
+            GuiInCommon::_Display { .. } => {}
         }
 
         gui_out
@@ -1132,33 +1273,27 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
 }
 
 impl<'s> DrawEgui<'s> for SteeringCfg {
-    type In = GuiInTfmStepsSeq<'s>;
+    type In = GuiInCommon<'s>;
     type Out = Option<GuiCmd>;
 
-    fn egui(&mut self, state: Self::In, ui: &mut egui::Ui) -> Self::Out {
-        match state {
-            GuiInTfmStepsSeq::Edit {
-                cfg_devices,
-                cfg_variables,
-                ..
-            } => {
-                let mut changed_simple = false;
-                let mut gui_out = None;
-                let gui_out_mut = &mut gui_out;
-
+    fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+        let mut changed_simple = false;
+        let mut gui_out = None;
+        let gui_out_mut = &mut gui_out;
+        match gui_in {
+            GuiInCommon::Edit { .. } => {
                 ui.separator();
                 ui.horizontal(|ui| {
-                    let param_name = "Input gain";
+                    let param_name = "Gain";
                     ui.label(param_name).on_hover_text(self.input_gain_doc_str());
                     self.input_gain
                         .egui(
                             GuiInValue::Edit(GuiInValueEditParams {
                                 allow_interval_edit: false,
                                 slider_log_scale: false,
-                                cfg_variables,
-                                cfg_devices,
                                 name: param_name,
                                 choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                                gui_common_ctx: &gui_in,
                             }),
                             ui,
                         )
@@ -1168,18 +1303,17 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                 .on_hover_text(self.input_gain_doc_str());
                 ui.separator();
                 ui.horizontal(|ui| {
-                    let param_name = "Autocentering halflife";
-                    ui.label("Autocenter halflife (0 == off): ")
+                    let param_name = "Auto-center halflife";
+                    ui.label("Auto-center halflife (0 == off)")
                         .on_hover_text(self.auto_center_halflife_doc_str());
                     ui.horizontal(|ui| {
                         self.auto_center_halflife.egui(
                             GuiInValue::Edit(GuiInValueEditParams {
                                 allow_interval_edit: false,
                                 slider_log_scale: false,
-                                cfg_variables,
-                                cfg_devices,
                                 name: param_name,
                                 choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                                gui_common_ctx: &gui_in,
                             }),
                             ui,
                         )
@@ -1190,9 +1324,9 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
 
                 ui.separator();
                 if let Some(ff) = &mut self.force_feedback {
-                    if self.auto_center_halflife.get_numeric_value() > 0.0 {
+                    if self.auto_center_halflife.port_get_numeric_value(None::<&()>) > 0.0 {
                         ui.horizontal(|ui| {
-                            let param_name = "Apply autocentering along with force feedback.";
+                            let param_name = "Auto-center + force feedback";
                             ui.label(param_name)
                                 .on_hover_text(Self::auto_center_along_force_feedback_doc_str_static());
                             self.auto_center_along_force_feedback
@@ -1200,10 +1334,9 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                                     GuiInValue::Edit(GuiInValueEditParams {
                                         allow_interval_edit: false,
                                         slider_log_scale: false,
-                                        cfg_variables,
-                                        cfg_devices,
                                         name: param_name,
                                         choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                                        gui_common_ctx: &gui_in,
                                     }),
                                     ui,
                                 )
@@ -1211,19 +1344,17 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                         });
                     }
                     ui.separator();
-                    ui.collapsing("Force feedback params:", |ui| {
-                        ui.separator();
-                        ff.egui(state.clone(), ui)
-                            .inspect(|out| *gui_out_mut = Some(out.clone()));
+                    ui.collapsing("Force Feedback", |ui| {
+                        ff.egui(gui_in, ui).inspect(|out| *gui_out_mut = Some(out.clone()));
                     })
                     .header_response
                     .on_hover_text(self.doc_str());
                 } else {
                     ui.separator();
                     #[allow(clippy::field_reassign_with_default)]
-                    if ui.button("Add force feedback params").clicked() {
+                    if ui.button("Add Force Feedback").clicked() {
                         let mut ff = ForceFeedbackCfg::default();
-                        ff.enabled = true;
+                        *ff.enabled = true;
                         self.force_feedback = Some(ff);
                         changed_simple |= true;
                     }
@@ -1238,10 +1369,9 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                                 GuiInValue::Edit(GuiInValueEditParams {
                                     allow_interval_edit: false,
                                     slider_log_scale: false,
-                                    cfg_devices,
-                                    cfg_variables,
                                     name: "Choose hold factor source",
                                     choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                                    gui_common_ctx: &gui_in,
                                 }),
                                 ui,
                             )
@@ -1254,55 +1384,50 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                 bool_to_simple_change_gui_cmd(changed_simple).inspect(|out| *gui_out_mut = Some(out.clone()));
 
                 ui.separator();
-                ui.horizontal(|ui| {
-                    let param_name = "Custom accumulator";
-                    ui.label(param_name);
-                    if let Some(acc) = &mut self.accumulator {
-                        if ui.button("Use built-in accumulator").clicked() {
-                            self.accumulator = None;
+                ui.collapsing("Accumulator", |ui| {
+                    ui.horizontal(|ui| {
+                        if let Some(acc) = &mut self.accumulator {
+                            if ui.button("Use built-in accumulator").clicked() {
+                                self.accumulator = None;
+                            } else {
+                                ui.separator();
+                                acc.egui(
+                                    GuiInValue::Edit(GuiInValueEditParams {
+                                        allow_interval_edit: false,
+                                        slider_log_scale: false,
+                                        name: "Accumulator",
+                                        choice_case: ValueUsageContext::TfmStepAuxXrc.into(),
+                                        gui_common_ctx: &gui_in,
+                                    }),
+                                    ui,
+                                )
+                                .inspect(|out| *gui_out_mut = Some(out.clone()));
+                                ui.separator();
+                            }
                         } else {
-                            ui.separator();
-                            acc.egui(
-                                GuiInValue::Edit(GuiInValueEditParams {
-                                    allow_interval_edit: false,
-                                    slider_log_scale: false,
-                                    cfg_variables,
-                                    cfg_devices,
-                                    name: param_name,
-                                    choice_case: ValueUsageContext::TfmStepAuxXrc.into(),
-                                }),
-                                ui,
-                            )
-                            .inspect(|out| *gui_out_mut = Some(out.clone()));
-                            ui.separator();
+                            if ui.button("Use custom accumulator").clicked() {
+                                self.accumulator = Some(Default::default());
+                                *gui_out_mut = bool_to_simple_change_gui_cmd(true);
+                            }
                         }
-                    } else {
-                        if ui.button("Use custom accumulator").clicked() {
-                            self.accumulator = Some(Default::default());
-                            *gui_out_mut = bool_to_simple_change_gui_cmd(true);
-                        }
-                    }
-                })
-                .response
-                .on_hover_text(self.accumulator_doc_str());
-
-                ui.separator();
-
-                gui_out.or({
-                    let c = ui.collapsing(
-                        "Accumulated user input (pre force feedback and autocentering) transform",
-                        |ui| {
+                    });
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        ui.collapsing("Transformation", |ui| {
                             self.integrated_user_input_transform
-                                .egui(state.clone_and_push_hier(self.integrated_user_input_transform.id), ui)
-                        },
-                    );
-                    c.header_response
+                                .egui(gui_in.clone_and_push_hier(self.integrated_user_input_transform.id), ui)
+                                .inspect(|out| *gui_out_mut = Some(out.clone()))
+                        })
+                        .header_response
                         .on_hover_text(self.integrated_user_input_transform_doc_str());
-                    c.body_returned.unwrap_or_default()
+                    })
                 })
+                .header_response
+                .on_hover_text(self.accumulator_doc_str());
             }
-            GuiInTfmStepsSeq::Display => None,
+            GuiInCommon::_Display { .. } => {}
         }
+        gui_out
     }
 }
 
@@ -1391,7 +1516,7 @@ fn draw_gui_idle_tick_params(ui: &mut egui::Ui, tfm: &mut impl TfmStepIdleBehavi
 
 // --------------------------------------------
 impl<'s> DrawEgui<'s> for ScriptCfg {
-    type In = (ObjId, GuiInTfmStepsSeq<'s>, &'s VariablesCfg, &'s DevicesCfgNew);
+    type In = (ObjId, GuiInCommon<'s>, &'s VariablesCfg, &'s DevicesCfgNew);
     type Out = Option<GuiCmd>;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
@@ -1403,7 +1528,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
         let gui_out_mut = &mut gui_out;
 
         match gui_in.1 {
-            GuiInTfmStepsSeq::Edit {
+            GuiInCommon::Edit {
                 transient_script_aux_edits,
                 ..
             } => {
@@ -1452,10 +1577,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                                                         "Tfm",
                                                         self.aux_transformations.len() + 1,
                                                     ),
-                                                    TfmSeqCfg {
-                                                        in_meta: AutoOrManual::Manual(Default::default()),
-                                                        ..Default::default()
-                                                    },
+                                                    TfmSeqCfg::new_with_manual_input_params(),
                                                 );
                                             }
                                         };
@@ -1550,8 +1672,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                                                                 choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
                                                                 allow_interval_edit: true,
                                                                 slider_log_scale: false,
-                                                                cfg_variables: gui_in.2,
-                                                                cfg_devices: gui_in.3,
+                                                                gui_common_ctx: &gui_in.1,
                                                             }),
                                                             ui,
                                                         )
@@ -1567,8 +1688,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                                                                 choice_case: ValueUsageContext::TfmStepAuxDst.into(),
                                                                 allow_interval_edit: true,
                                                                 slider_log_scale: false,
-                                                                cfg_variables: gui_in.2,
-                                                                cfg_devices: gui_in.3,
+                                                                gui_common_ctx: &gui_in.1,
                                                             }),
                                                             ui,
                                                         )
@@ -1579,7 +1699,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                                                     if let Some(tfm) = self.aux_transformations.get_mut(name) {
                                                         ui.push_id(idx, |ui| {
                                                             ui.vertical(|ui| {
-                                                                tfm.egui(gui_in.1.clone(), ui)
+                                                                tfm.egui(gui_in.1, ui)
                                                                     .inspect(|out| *gui_out_mut = Some(out.clone()));
                                                             });
                                                         });
@@ -1625,8 +1745,8 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                             changed_settings_simple |= interval.egui(
                                 GuiInInterval::Edit {
                                     max_range: HID_AXIS_MAX_RANGE,
-                                    from_label: "From: ",
-                                    to_label: "To: ",
+                                    from_label: "",
+                                    to_label: "",
                                     sanitize_and_sort: true,
                                     truncate: false,
                                 },
@@ -1689,7 +1809,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
                     gui_out = Some(GuiCmd::ConfigChangeSimple)
                 }
             }
-            GuiInTfmStepsSeq::Display => {}
+            GuiInCommon::_Display { .. } => {}
         };
 
         gui_out
@@ -1697,7 +1817,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
 }
 
 impl<'s> DrawEgui<'s> for Vec<TfmSeqCfg> {
-    type In = GuiInTfmStepsSeq<'s>;
+    type In = GuiInCommon<'s>;
     type Out = Option<GuiCmd>;
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut gui_out = None;
@@ -1706,7 +1826,7 @@ impl<'s> DrawEgui<'s> for Vec<TfmSeqCfg> {
             let ch = CollapsingHeader::new(format!("Aux transformation #{} ({:.80}...)", tfm_idx, *tfm_seq.desc))
                 .id_salt(tfm_idx);
             gui_out = gui_out.or(ch
-                .show(ui, |ui| ui.group(|ui| tfm_seq.egui(gui_in.clone(), ui)).inner)
+                .show(ui, |ui| ui.group(|ui| tfm_seq.egui(gui_in, ui)).inner)
                 .body_returned
                 .unwrap_or_default());
             ui.separator();

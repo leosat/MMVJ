@@ -16,7 +16,7 @@ mod default_config_tests {
     use crate::schemas_common::ObjId;
     use crate::schemas_hid::HidDeviceCfg;
     use crate::schemas_transform::TfmStepCfg;
-    use crate::schemas_value::WithNumericValueSettable;
+    use crate::schemas_value_port::ValuePortIface;
     use clap::Parser;
     use log::LevelFilter;
     use std::collections::HashMap;
@@ -286,7 +286,7 @@ mod default_config_tests {
         for mapping in &mut cfg.mappings {
             for step in &mut mapping.transformation.steps {
                 if let TfmStepCfg::Steering(s) = step {
-                    s.auto_center_halflife.set_numeric_value(0.0);
+                    s.auto_center_halflife.port_set_numeric_value(0.0);
                 }
             }
         }

@@ -1,12 +1,13 @@
 use std::marker::PhantomData;
 
 use crate::num_interval::{NumIntervalValue, OutOfRangePolicy};
-use crate::schemas_value::{ValueIface, WithDeviceControlMatcherRef};
-use crate::tfm_exec::TfmExecCtx;
-use crate::{
-    config::WithSelfSanitize,
-    schemas_value::{WithNumericValueSettable, WithRelativity},
+use crate::schemas_transform::TfmSeqCfg;
+use crate::schemas_value::{
+    AutoOrManual, InputValueMetadata, TfmValue, ValueDsts, ValueIface, ValueSrcs, ValueXrcs,
+    WithDeviceControlMatcherRef, WithLastKnownIO,
 };
+use crate::tfm_exec::{TfmExecCtx, WithTfmExec};
+use crate::{config::WithSelfSanitize, schemas_value::WithRelativity};
 use crate::{relativity::Relativity, schemas_value::WithNumericValue};
 use garde::rules::range::Bounds;
 use num_traits::ToPrimitive;
@@ -26,43 +27,65 @@ pub(crate) trait WithMappingTriggerPredicate {
 
 // --------------------------------------------------------
 pub(crate) trait ValuePortIface:
-    WithMappingTriggerPredicate
-    + WithSelfSanitize
-    + WithNumericValue
-    + WithNumericValueSettable
-    + WithDeviceControlMatcherRef
+    WithMappingTriggerPredicate + WithSelfSanitize + WithDeviceControlMatcherRef
 {
     type InnerT: ValueIface;
-    type RemapT: PortRemapPolicy<Self::ValueT>;
+    type RemapT: PortRemapPolicy<<Self::InnerT as WithNumericValue>::ValueT>;
     type SanT: PortSanPolicy<Self::InnerT>;
 
-    fn port_get_default_interval_from_inner(&self) -> NumInterval<Self::ValueT>;
+    fn port_is_transformable(&self) -> bool;
+
+    fn port_transformation_ref(&self) -> Option<&TfmSeqCfg>;
+    fn port_transformation_mut(&mut self) -> Option<&mut TfmSeqCfg>;
+
+    fn port_transformation_on(&mut self);
+    fn port_transformation_off(&mut self);
+
+    fn port_get_numeric_value(&self, ctx: Option<&impl TfmExecCtx>) -> <Self::InnerT as WithNumericValue>::ValueT
+    where
+        BaseNumT: From<<Self::InnerT as WithNumericValue>::ValueT>,
+        <Self::InnerT as WithNumericValue>::ValueT: From<BaseNumT>;
+
+    fn port_set_numeric_value(&self, value: <Self::InnerT as WithNumericValue>::ValueT)
+    where
+        BaseNumT: From<<Self::InnerT as WithNumericValue>::ValueT>;
+
+    fn port_get_interval(&self) -> NumInterval<<Self::InnerT as WithNumericValue>::ValueT>;
+
+    fn port_get_default_interval_from_inner(&self) -> NumInterval<<Self::InnerT as WithNumericValue>::ValueT>;
     fn _port_get_identity_str(&self) -> String;
 
-    fn port_set_numeric_value_and_flush_to_devices(&self, value: Self::ValueT, cxt: &impl TfmExecCtx)
+    fn port_set_numeric_value_and_flush_to_devices(
+        &self,
+        value: <Self::InnerT as WithNumericValue>::ValueT,
+        ctx: &impl TfmExecCtx,
+    ) where
+        BaseNumT: From<<Self::InnerT as WithNumericValue>::ValueT>,
+        <Self::InnerT as WithNumericValue>::ValueT: From<BaseNumT>;
+
+    fn port_flush_numeric_value_to_devices(&self, ctx: &impl TfmExecCtx)
     where
-        BaseNumT: From<<Self::InnerT as WithNumericValue>::ValueT>;
-    fn port_flush_numeric_value_to_devices(&self, cxt: &impl TfmExecCtx)
-    where
-        BaseNumT: From<<Self::InnerT as WithNumericValue>::ValueT>;
+        BaseNumT: From<<Self::InnerT as WithNumericValue>::ValueT>,
+        <Self::InnerT as WithNumericValue>::ValueT: From<BaseNumT>;
 
     fn port_set_remap_off(&mut self);
     fn port_set_remap_from_inner_default(&mut self);
-    fn port_get_remap_interval(&self) -> Option<NumInterval<Self::ValueT>>;
-    fn port_set_remap_interval(&mut self, ri: NumInterval<Self::ValueT>);
+    fn port_get_remap_interval(&self) -> Option<NumInterval<<Self::InnerT as WithNumericValue>::ValueT>>;
+    fn port_set_remap_interval(&mut self, ri: NumInterval<<Self::InnerT as WithNumericValue>::ValueT>);
 
     fn port_inner_ref(&self) -> &Self::InnerT;
     fn port_inner_mut(&mut self) -> &mut Self::InnerT;
 }
 
-impl<InnerT, SanT, RemapT> WithDeviceControlMatcherRef for ValuePort<InnerT, SanT, RemapT>
+impl<InnerT, SanT, RemapT, TfmT> WithDeviceControlMatcherRef for ValuePort<InnerT, SanT, RemapT, TfmT>
 where
     InnerT: ValueIface,
     SanT: PortSanPolicy<InnerT>,
     RemapT: PortRemapPolicy<InnerT::ValueT>,
+    TfmT: TfmPolicyIface,
 {
     fn get_device_control_matcher_ref(&self) -> Option<&crate::schemas_value::DeviceControlMatcherRef> {
-        self.value.get_device_control_matcher_ref()
+        self.inner.get_device_control_matcher_ref()
     }
 }
 
@@ -75,58 +98,77 @@ where
 #[serde(bound(deserialize = "InnerT: ValueIface, <InnerT as WithNumericValue>::ValueT: serde::Deserialize<'de>"))]
 enum ValuePortSerdeHelper<InnerT: ValueIface> {
     AsPort {
+        //#[serde(flatten)] // Fails when inner is serialized to a single number.
+        #[serde(alias = "source", alias = "destination", alias = "target")]
+        value: InnerT,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        transformation: Option<TfmSeqCfg>,
         #[serde(skip_serializing_if = "Option::is_none")]
         #[serde(alias = "remap_from_interval", alias = "remap_to_interval")]
         remap: Option<NumInterval<InnerT::ValueT>>,
         #[serde(skip_serializing_if = "crate::schemas_common::is_false")]
         #[serde(default)]
         triggers_mapping: bool,
-        //#[serde(flatten)] // Fails when inner is serialized to a single number.
-        #[serde(alias = "source", alias = "destination", alias = "target")]
-        value: InnerT,
     },
     AsInner(InnerT),
 }
 
-impl<InnerT, SanT, RemapT> From<ValuePortSerdeHelper<InnerT>> for ValuePort<InnerT, SanT, RemapT>
+impl<InnerT, SanT, RemapT, TfmT> From<ValuePortSerdeHelper<InnerT>> for ValuePort<InnerT, SanT, RemapT, TfmT>
 where
-    InnerT: ValueIface,
+    InnerT: ValueIface, //<TfmPolicyT = TfmT>,
     SanT: PortSanPolicy<InnerT>,
     RemapT: PortRemapPolicy<InnerT::ValueT>,
+    TfmT: TfmPolicyIface,
 {
     fn from(value: ValuePortSerdeHelper<InnerT>) -> Self {
-        match value {
+        let mut port = match value {
             ValuePortSerdeHelper::AsInner(i) => i.into(),
             ValuePortSerdeHelper::AsPort {
                 remap,
                 triggers_mapping,
                 value,
+                transformation,
             } => Self {
                 remap,
                 triggers_mapping,
-                value,
+                inner: value,
                 _san_policy: PhantomData,
                 _remap_policy: PhantomData,
+                _port_effective_interval: Default::default(),
+                _tfm_policy: {
+                    let mut tfm_pol: TfmT = Default::default();
+                    if let Some(tfm_cfg) = transformation {
+                        tfm_pol.transformation_on();
+                        if let Some(tfm) = tfm_pol.transformation_mut() {
+                            *tfm = tfm_cfg;
+                        };
+                    }
+                    tfm_pol.into()
+                },
             },
-        }
+        };
+        port.sanitize_inplace(());
+        port
     }
 }
 
-impl<InnerT, SanT, RemapT> From<ValuePort<InnerT, SanT, RemapT>> for ValuePortSerdeHelper<InnerT>
+impl<InnerT, SanT, RemapT, TfmT> From<ValuePort<InnerT, SanT, RemapT, TfmT>> for ValuePortSerdeHelper<InnerT>
 where
     InnerT: ValueIface,
     SanT: PortSanPolicy<InnerT>,
     RemapT: PortRemapPolicy<InnerT::ValueT>,
+    TfmT: TfmPolicyIface,
 {
-    fn from(port: ValuePort<InnerT, SanT, RemapT>) -> Self {
-        if !port.value.value_is_static() {
+    fn from(port: ValuePort<InnerT, SanT, RemapT, TfmT>) -> Self {
+        if !port.inner.value_is_static() {
             ValuePortSerdeHelper::AsPort {
                 remap: port.remap,
                 triggers_mapping: port.triggers_mapping,
-                value: port.value,
+                value: port.inner,
+                transformation: port._tfm_policy.transformation_ref().cloned(),
             }
         } else {
-            ValuePortSerdeHelper::AsInner(port.value)
+            ValuePortSerdeHelper::AsInner(port.inner)
         }
     }
 }
@@ -187,139 +229,177 @@ pub(crate) struct RemapPolicyUserDefined;
 impl<ValueT: NumIntervalValue> PortRemapPolicy<ValueT> for RemapPolicyUserDefined {}
 
 // -------------------------------------------
-#[derive(JsonSchema, Debug, Clone, PartialOrd, PartialEq, Deserialize, Serialize)]
+pub(crate) trait TfmPolicyIface:
+    Clone + Traversable + TraversableMut + JsonSchema + Default + PartialOrd
+{
+    fn is_transformable() -> bool;
+    fn transformation_ref(&self) -> Option<&TfmSeqCfg>;
+    fn transformation_mut(&mut self) -> Option<&mut TfmSeqCfg>;
+    fn transformation_on(&mut self);
+    fn transformation_off(&mut self);
+}
+
+pub(crate) trait TfmPolicyDefaultChoice {
+    type TfmPolicyT: TfmPolicyIface + std::fmt::Debug + Clone + Traversable + TraversableMut + PartialOrd + Default;
+}
+
+#[derive(Default, Copy, Clone, PartialEq, PartialOrd, Debug, Traversable, TraversableMut, JsonSchema)]
+pub(crate) struct TfmPolicyDisabled {}
+impl TfmPolicyIface for TfmPolicyDisabled {
+    fn transformation_ref(&self) -> Option<&TfmSeqCfg> {
+        None
+    }
+
+    fn transformation_mut(&mut self) -> Option<&mut TfmSeqCfg> {
+        None
+    }
+
+    fn transformation_on(&mut self) { /* NOP */
+    }
+
+    fn transformation_off(&mut self) { /* NOP */
+    }
+
+    fn is_transformable() -> bool {
+        false
+    }
+}
+
+#[derive(Default, Clone, PartialEq, PartialOrd, Debug, Traversable, TraversableMut, JsonSchema)]
+pub(crate) struct TfmPolicyEnabled {
+    transformation: Option<TfmSeqCfg>,
+}
+
+impl TfmPolicyIface for TfmPolicyEnabled {
+    fn transformation_ref(&self) -> Option<&TfmSeqCfg> {
+        self.transformation.as_ref()
+    }
+
+    fn transformation_mut(&mut self) -> Option<&mut TfmSeqCfg> {
+        self.transformation.as_mut()
+    }
+
+    fn transformation_on(&mut self) {
+        self.transformation = Some(Default::default())
+    }
+
+    fn transformation_off(&mut self) {
+        self.transformation = None
+    }
+
+    fn is_transformable() -> bool {
+        true
+    }
+}
+
+impl TfmPolicyDefaultChoice for ValueSrcs {
+    type TfmPolicyT = TfmPolicyEnabled;
+}
+
+impl TfmPolicyDefaultChoice for ValueDsts {
+    type TfmPolicyT = TfmPolicyDisabled;
+}
+
+impl TfmPolicyDefaultChoice for ValueXrcs {
+    type TfmPolicyT = TfmPolicyDisabled;
+}
+
+// -------------------------------------------
+#[derive(JsonSchema, Debug, Clone, PartialOrd, PartialEq, Deserialize, Serialize, Traversable, TraversableMut)]
 #[serde(from = "ValuePortSerdeHelper<InnerT>", into = "ValuePortSerdeHelper<InnerT>")]
 #[serde(bound(serialize = "
+    TfmT: TfmPolicyIface,
     InnerT: ValueIface,
     RemapT: PortRemapPolicy<InnerT::ValueT>,
-    ValuePort<InnerT, SanT, RemapT>: WithNumericValue<ValueT = <InnerT as WithNumericValue>::ValueT>, 
     <InnerT as WithNumericValue>::ValueT: serde::Serialize
-"))]
+"))] // <TfmPolicyT = TfmT>
 #[serde(bound(deserialize = "
+    TfmT: TfmPolicyIface,
     InnerT: ValueIface,
     RemapT: PortRemapPolicy<InnerT::ValueT>,
-    ValuePort<InnerT, SanT, RemapT>: WithNumericValue<ValueT = <InnerT as WithNumericValue>::ValueT>, 
-    <InnerT as WithNumericValue>::ValueT: serde::Deserialize<'de>
-"))]
-pub(crate) struct ValuePort<InnerT, SanT = SanPolicyUseFromPortInner, RemapT = RemapPolicyUserDefined>
-where
+    <InnerT as WithNumericValue>::ValueT: for<'q> serde::Deserialize<'q>
+"))] // <TfmPolicyT = TfmT>
+pub(crate) struct ValuePort<
+    InnerT,
+    SanT = SanPolicyUseFromPortInner,
+    RemapT = RemapPolicyUserDefined,
+    TfmT = <InnerT as TfmPolicyDefaultChoice>::TfmPolicyT,
+> where
+    TfmT: TfmPolicyIface,
     InnerT: ValueIface,
     SanT: PortSanPolicy<InnerT>,
     RemapT: PortRemapPolicy<InnerT::ValueT>,
 {
-    pub(super) remap: Option<NumInterval<<InnerT as WithNumericValue>::ValueT>>,
-    pub(super) triggers_mapping: bool,
-    pub(super) value: InnerT,
+    inner: InnerT,
+    #[traverse(skip)]
+    remap: Option<NumInterval<<InnerT as WithNumericValue>::ValueT>>,
     #[serde(skip)]
+    #[traverse(skip)]
+    _san_policy: PhantomData<SanT>,
+    #[serde(skip)]
+    #[traverse(skip)]
     _remap_policy: PhantomData<RemapT>,
+    _tfm_policy: Box<TfmT>,
+    #[traverse(skip)]
+    triggers_mapping: bool,
     #[serde(skip)]
-    pub(super) _san_policy: PhantomData<SanT>,
+    #[traverse(skip)]
+    _port_effective_interval: NumInterval<<InnerT as WithNumericValue>::ValueT>,
 }
 
 // ----------------------------------------------
-
-impl<InnerT, SanT, RemapT> Traversable for ValuePort<InnerT, SanT, RemapT>
-where
-    InnerT: ValueIface + Traversable,
-    SanT: PortSanPolicy<InnerT>,
-    RemapT: PortRemapPolicy<InnerT::ValueT>,
-{
-    fn traverse<V: traversable::Visitor>(&self, visitor: &mut V) -> std::ops::ControlFlow<V::Break> {
-        self.value.traverse(visitor)
-    }
-}
-
-impl<InnerT, SanT, RemapT> TraversableMut for ValuePort<InnerT, SanT, RemapT>
-where
-    InnerT: ValueIface + TraversableMut,
-    SanT: PortSanPolicy<InnerT>,
-    RemapT: PortRemapPolicy<InnerT::ValueT>,
-{
-    fn traverse_mut<V: traversable::VisitorMut>(&mut self, visitor: &mut V) -> std::ops::ControlFlow<V::Break> {
-        self.value.traverse_mut(visitor)
-    }
-}
-
-// ----------------------------------------------
-impl<InnerT, SanT, RemapT> Default for ValuePort<InnerT, SanT, RemapT>
+impl<InnerT, SanT, RemapT, TfmT> Default for ValuePort<InnerT, SanT, RemapT, TfmT>
 where
     InnerT: ValueIface,
     SanT: PortSanPolicy<InnerT>,
     RemapT: PortRemapPolicy<InnerT::ValueT>,
+    TfmT: TfmPolicyIface,
 {
     fn default() -> Self {
-        Self {
+        let mut tmp = Self {
             remap: Default::default(),
             triggers_mapping: Default::default(),
-            value: Default::default(),
+            inner: Default::default(),
             _san_policy: PhantomData,
             _remap_policy: PhantomData,
-        }
+            _port_effective_interval: Default::default(),
+            _tfm_policy: Default::default(),
+        };
+        tmp.sanitize_inplace(());
+        tmp
     }
 }
 
 // ----------------------------------------------
 
-impl<InnerT, SanT, RemapT> From<InnerT> for ValuePort<InnerT, SanT, RemapT>
+impl<InnerT, SanT, RemapT, TfmT> From<InnerT> for ValuePort<InnerT, SanT, RemapT, TfmT>
 where
     InnerT: ValueIface,
     SanT: PortSanPolicy<InnerT>,
     RemapT: PortRemapPolicy<InnerT::ValueT>,
-    Self: WithNumericValue,
+    TfmT: TfmPolicyIface,
 {
     fn from(value: InnerT) -> Self {
         Self {
             remap: None,
             triggers_mapping: false,
-            value,
+            inner: value,
             _san_policy: PhantomData,
             _remap_policy: PhantomData,
+            _port_effective_interval: Default::default(),
+            _tfm_policy: Default::default(),
         }
     }
 }
 
-impl<InnerT, SanT, RemapT> WithNumericValueSettable for ValuePort<InnerT, SanT, RemapT>
-where
-    InnerT: ValueIface,
-    InnerT: WithNumericValueSanitizerStatic,
-    SanT: PortSanPolicy<InnerT>,
-    RemapT: PortRemapPolicy<InnerT::ValueT>,
-    Self: WithNumericValue<ValueT = <InnerT as WithNumericValue>::ValueT>,
-{
-    fn set_numeric_value(&self, mut value: <Self as WithNumericValue>::ValueT) {
-        value = SanT::san_policy_sanitize_numeric_value(value);
-        if let Some(remap) = RemapT::get_remap_range().or(self.remap) {
-            value = self
-                .value
-                .get_interval()
-                .map_from(value, &remap, OutOfRangePolicy::Clamp);
-        }
-        self.value.set_numeric_value(value);
-    }
-}
-
-impl<InnerT, SanT, RemapT> WithNumericValue for ValuePort<InnerT, SanT, RemapT>
-where
-    InnerT: ValueIface + WithNumericValueSanitizerStatic,
-    SanT: PortSanPolicy<InnerT>,
-    RemapT: PortRemapPolicy<InnerT::ValueT>,
-{
-    type ValueT = <InnerT as WithNumericValue>::ValueT;
-    fn get_numeric_value(&self) -> Self::ValueT {
-        let mut value = self.value.get_numeric_value();
-        if let Some(remap) = RemapT::get_remap_range().or(self.remap) {
-            value = remap.map_from(value, &self.value.get_interval(), OutOfRangePolicy::Clamp);
-        }
-        SanT::san_policy_sanitize_numeric_value(value)
-    }
-}
-
-impl<InnerT, SanT, RemapT> Bounds for ValuePort<InnerT, SanT, RemapT>
+impl<InnerT, SanT, RemapT, TfmT> Bounds for ValuePort<InnerT, SanT, RemapT, TfmT>
 where
     InnerT: ValueIface,
     SanT: PortSanPolicy<InnerT>,
     RemapT: PortRemapPolicy<InnerT::ValueT>,
-    Self: WithNumericValue,
+    TfmT: TfmPolicyIface,
+    BaseNumT: From<<InnerT as WithNumericValue>::ValueT>,
+    <InnerT as WithNumericValue>::ValueT: From<BaseNumT>,
 {
     type Size = BaseNumT;
     const MIN: Self::Size = Self::Size::MIN;
@@ -330,7 +410,7 @@ where
         lower_bound: Self::Size,
         upper_bound: Self::Size,
     ) -> Result<(), garde::rules::range::OutOfBounds> {
-        let value = self.get_numeric_value();
+        let value = self.port_get_numeric_value(None::<&()>);
         if value.to_f64().unwrap() < lower_bound.to_f64().unwrap() {
             Err(garde::rules::range::OutOfBounds::Lower)
         } else if value.to_f64().unwrap() > upper_bound.to_f64().unwrap() {
@@ -343,92 +423,198 @@ where
 
 // -----------------------------
 
-impl<InnerT, SanT, RemapT> WithSelfSanitize for ValuePort<InnerT, SanT, RemapT>
+impl<InnerT, SanT, RemapT, TfmT> WithSelfSanitize for ValuePort<InnerT, SanT, RemapT, TfmT>
 where
     InnerT: ValueIface,
     SanT: PortSanPolicy<InnerT>,
     RemapT: PortRemapPolicy<InnerT::ValueT>,
+    TfmT: TfmPolicyIface,
 {
-    fn sanitize_inplace(&mut self) {
-        if self.value.value_is_static() {
+    type SanInputT = ();
+    fn sanitize_inplace(&mut self, _: Self::SanInputT) {
+        if self.inner.value_is_static() {
             self.remap = None;
+            self._port_effective_interval = self.inner.get_interval();
         } else {
             if let Some(remap) = &mut self.remap {
                 remap.from = SanT::san_policy_sanitize_numeric_value(remap.from);
                 remap.to = SanT::san_policy_sanitize_numeric_value(remap.to);
             }
+
+            let inner_interval = self.port_inner_ref().get_interval();
+            let inner_rel = self.port_inner_ref().get_relativity();
+
+            if let Some(ref mut tfm) = self.port_transformation_mut() {
+                let (_, _) = tfm.recompute_steps_metadata_get_out_interval_and_relativity(AutoOrManual::Auto(
+                    InputValueMetadata {
+                        interval: inner_interval.cast().unwrap(),
+                        relativity: inner_rel,
+                    },
+                ));
+            }
+
+            self._port_effective_interval = self
+                .remap
+                .or(RemapT::get_remap_range().map(|r| r.cast().unwrap()))
+                .or(self
+                    .port_transformation_ref()
+                    .as_ref()
+                    .map(|tfm| tfm.get_out_interval().cast().unwrap()))
+                .or(inner_interval.into())
+                .unwrap()
         }
     }
 }
 
-impl<InnerT, SanT, RemapT> ValuePortIface for ValuePort<InnerT, SanT, RemapT>
+impl<InnerT, SanT, RemapT, TfmT> ValuePortIface for ValuePort<InnerT, SanT, RemapT, TfmT>
 where
     InnerT: ValueIface,
     SanT: PortSanPolicy<InnerT>,
     RemapT: PortRemapPolicy<InnerT::ValueT>,
+    TfmT: TfmPolicyIface,
 {
     type InnerT = InnerT;
     type RemapT = RemapT;
     type SanT = SanT;
 
-    fn port_get_default_interval_from_inner(&self) -> NumInterval<Self::ValueT> {
+    fn port_get_numeric_value(&self, ctx: Option<&impl TfmExecCtx>) -> InnerT::ValueT
+    where
+        BaseNumT: From<<InnerT as WithNumericValue>::ValueT>,
+        <InnerT as WithNumericValue>::ValueT: From<BaseNumT>,
+    {
+        let mut value = self.inner.get_numeric_value();
+        let post_tfm_value = if let Some(tfm) = self.port_transformation_ref() {
+            if let Some(ctx) = ctx {
+                tfm.exec(
+                    TfmValue {
+                        value: value.into(),
+                        interval: self.inner.get_interval().cast().unwrap(),
+                        relativity: self.inner.get_relativity(),
+                    },
+                    ctx,
+                )
+            } else {
+                TfmValue {
+                    value: tfm.get_last_known_io().1,
+                    interval: self.inner.get_interval().cast().unwrap(),
+                    relativity: self.inner.get_relativity(),
+                }
+            }
+        } else {
+            TfmValue {
+                value: value.into(),
+                interval: self.inner.get_interval().cast().unwrap(),
+                relativity: self.inner.get_relativity(),
+            }
+        };
+
+        if let Some(remap) = RemapT::get_remap_range().or(self.remap) {
+            value = remap.map_from(post_tfm_value.value, &post_tfm_value.interval, OutOfRangePolicy::Clamp);
+        }
+
+        SanT::san_policy_sanitize_numeric_value(value)
+    }
+
+    fn port_set_numeric_value(&self, mut value: InnerT::ValueT) {
+        value = SanT::san_policy_sanitize_numeric_value(value);
+
+        self.inner.set_numeric_value(self.inner.get_interval().map_from(
+            value,
+            &self.port_get_interval(),
+            OutOfRangePolicy::Clamp,
+        ));
+    }
+
+    fn port_get_default_interval_from_inner(&self) -> NumInterval<InnerT::ValueT> {
         InnerT::default().get_interval()
     }
 
     fn _port_get_identity_str(&self) -> String {
-        self.value.value_identity()
+        self.inner.value_identity()
     }
 
-    fn port_set_numeric_value_and_flush_to_devices(&self, value: Self::ValueT, ctx: &impl TfmExecCtx)
+    fn port_set_numeric_value_and_flush_to_devices(&self, value: InnerT::ValueT, ctx: &impl TfmExecCtx)
     where
         BaseNumT: From<<Self::InnerT as WithNumericValue>::ValueT>,
+        <InnerT as WithNumericValue>::ValueT: From<BaseNumT>,
     {
-        self.set_numeric_value(value);
+        self.port_set_numeric_value(value);
         self.port_flush_numeric_value_to_devices(ctx);
     }
 
     fn port_flush_numeric_value_to_devices(&self, ctx: &impl TfmExecCtx)
     where
         BaseNumT: From<<Self::InnerT as WithNumericValue>::ValueT>,
+        <InnerT as WithNumericValue>::ValueT: From<BaseNumT>,
     {
         if let Some(dcm_ref) = self.get_device_control_matcher_ref() {
             #[allow(deprecated)]
-            ctx.device_control_matcher_ref_write(dcm_ref, self.get_numeric_value().into());
+            ctx.device_control_matcher_ref_write(dcm_ref, self.inner.get_numeric_value().into());
         }
     }
 
     fn port_set_remap_off(&mut self) {
-        self.remap = None
+        self.remap = None;
+        self.sanitize_inplace(());
     }
 
     fn port_set_remap_from_inner_default(&mut self) {
-        self.remap = Some(InnerT::default().get_interval())
+        self.remap = Some(InnerT::default().get_interval());
+        self.sanitize_inplace(());
     }
 
-    fn port_get_remap_interval(&self) -> Option<NumInterval<Self::ValueT>> {
+    fn port_get_remap_interval(&self) -> Option<NumInterval<InnerT::ValueT>> {
         self.remap
     }
 
-    fn port_set_remap_interval(&mut self, ri: NumInterval<Self::ValueT>) {
+    fn port_set_remap_interval(&mut self, ri: NumInterval<InnerT::ValueT>) {
         self.remap = Some(ri);
+        self.sanitize_inplace(());
     }
 
     fn port_inner_ref(&self) -> &Self::InnerT {
-        &self.value
+        &self.inner
     }
 
     fn port_inner_mut(&mut self) -> &mut Self::InnerT {
-        &mut self.value
+        &mut self.inner
+    }
+
+    fn port_get_interval(&self) -> NumInterval<<Self::InnerT as WithNumericValue>::ValueT> {
+        self._port_effective_interval
+    }
+
+    fn port_transformation_mut(&mut self) -> Option<&mut TfmSeqCfg> {
+        self._tfm_policy.transformation_mut()
+    }
+
+    fn port_transformation_on(&mut self) {
+        self._tfm_policy.transformation_on();
+        self.sanitize_inplace(());
+    }
+
+    fn port_transformation_off(&mut self) {
+        self._tfm_policy.transformation_off();
+        self.sanitize_inplace(());
+    }
+
+    fn port_transformation_ref(&self) -> Option<&TfmSeqCfg> {
+        self._tfm_policy.transformation_ref()
+    }
+
+    fn port_is_transformable(&self) -> bool {
+        TfmT::is_transformable()
     }
 }
 
 // -----------------------------
 
-impl<InnerT, SanT, RemapT> WithMappingTriggerPredicate for ValuePort<InnerT, SanT, RemapT>
+impl<InnerT, SanT, RemapT, TfmT> WithMappingTriggerPredicate for ValuePort<InnerT, SanT, RemapT, TfmT>
 where
     InnerT: ValueIface,
     SanT: PortSanPolicy<InnerT>,
     RemapT: PortRemapPolicy<InnerT::ValueT>,
+    TfmT: TfmPolicyIface,
 {
     type PredicateT = bool;
 
@@ -445,7 +631,7 @@ where
     }
 }
 
-impl<InnerT: ValueIface + WithNumIntervalSanitizerStatic> WithNumIntervalSanitizerStatic
+impl<InnerT: ValueIface + WithNumIntervalSanitizerStatic + TfmPolicyDefaultChoice> WithNumIntervalSanitizerStatic
     for ValuePort<InnerT, SanPolicyUseFromPortInner>
 where
     Self: WithNumIntervalSanitizerStatic,
@@ -515,6 +701,11 @@ macro_rules! make_port_inner_nutype {
             }
         }
 
+
+        impl $crate::schemas_value_port::TfmPolicyDefaultChoice for $name {
+            type TfmPolicyT = $crate::schemas_value_port::TfmPolicyDisabled;
+        }
+
         impl Default for $name {
             fn default() -> Self {
                 Self::new($inner_default)
@@ -569,9 +760,17 @@ macro_rules! make_port_inner_nutype {
 
         impl<SanT: $crate::schemas_value_port::PortSanPolicy<$name>> ::core::convert::From<ValuePort<$name, SanT>> for $name {
             fn from(port: ValuePort<$name, SanT>) -> Self {
-                port.value
+                use $crate::schemas_value_port::ValuePortIface;
+                port.port_inner_ref().clone()
             }
         }
+
+        impl $crate::schemas_value::WithRelativity for $name {
+            fn get_relativity(&self) -> $crate::relativity::Relativity {
+                self.as_ref().get_relativity()
+            }
+        }
+
 
         impl $crate::schemas_value::WithNumericValue for $name {
             type ValueT = BaseNumT;
@@ -718,10 +917,16 @@ mod testing {
         let p_san_epsilon_for_zero = ValuePort::<PortInnerSanEpsilonForZero>::default();
         assert!(p_san_epsilon_for_zero.port_get_remap_interval().is_none());
         assert!(p_san_epsilon_for_zero.port_inner_ref().get_interval() == ZERO_INTERVAL); // Values written to [0,0] will be clamped to 0
-        p_san_epsilon_for_zero.set_numeric_value(100.0);
-        assert_eq!(p_san_epsilon_for_zero.get_numeric_value(), BaseNumT::EPSILON); // At port level 0 is sanitized to epsilon
-        p_san_epsilon_for_zero.set_numeric_value(-100.0);
-        assert_eq!(p_san_epsilon_for_zero.get_numeric_value(), BaseNumT::EPSILON);
+        p_san_epsilon_for_zero.port_set_numeric_value(100.0);
+        assert_eq!(
+            p_san_epsilon_for_zero.port_get_numeric_value(None::<&()>),
+            BaseNumT::EPSILON
+        ); // At port level 0 is sanitized to epsilon
+        p_san_epsilon_for_zero.port_set_numeric_value(-100.0);
+        assert_eq!(
+            p_san_epsilon_for_zero.port_get_numeric_value(None::<&()>),
+            BaseNumT::EPSILON
+        );
 
         // --------------------------------------------------
 
@@ -739,11 +944,11 @@ mod testing {
                 assert!(p.port_get_remap_interval().is_none());
                 assert!(p.port_inner_ref().get_interval() == PortInnerDeviceSanEpsilonGtZero::default().get_interval());
                 assert!(p.port_inner_ref().get_interval() == UNIT_INTERVAL);
-                p.set_numeric_value(1.0);
-                assert_eq!(p.get_numeric_value(), 1.0);
+                p.port_set_numeric_value(1.0);
+                assert_eq!(p.port_get_numeric_value(None::<&()>), 1.0);
                 assert_eq!(p.port_inner_ref().get_numeric_value(), 1.0);
-                p.set_numeric_value(-1.0);
-                assert_eq!(p.get_numeric_value(), BaseNumT::EPSILON);
+                p.port_set_numeric_value(-1.0);
+                assert_eq!(p.port_get_numeric_value(None::<&()>), BaseNumT::EPSILON);
             }
 
             {
@@ -755,20 +960,26 @@ mod testing {
                 };
 
                 p_san_ge_epsilon.port_set_remap_interval(SYMM_UNIT_INTERVAL);
-                assert!(p_san_ge_epsilon.port_inner_ref().get_interval() == UNIT_INTERVAL);
+                // dbg!(&p_san_ge_epsilon.port_get_interval());
+                p_san_ge_epsilon.port_set_numeric_value(-100.0);
 
-                p_san_ge_epsilon.set_numeric_value(-100.0);
-                assert_eq!(p_san_ge_epsilon.get_numeric_value(), BaseNumT::EPSILON);
-                assert!(
-                    p_san_ge_epsilon.port_inner_ref().get_numeric_value()
-                        == UNIT_INTERVAL.map_from(BaseNumT::EPSILON, &SYMM_UNIT_INTERVAL, OutOfRangePolicy::Clamp)
+                assert_eq!(p_san_ge_epsilon.port_get_numeric_value(None::<&()>), BaseNumT::EPSILON);
+                assert!(p_san_ge_epsilon.port_get_interval() == (BaseNumT::EPSILON..1.0).into());
+                assert!(p_san_ge_epsilon.port_inner_ref().get_interval() == UNIT_INTERVAL);
+                assert_eq!(
+                    p_san_ge_epsilon.port_inner_ref().get_numeric_value(),
+                    UNIT_INTERVAL.map_from(
+                        BaseNumT::EPSILON,
+                        &(BaseNumT::EPSILON..1.0).into(),
+                        OutOfRangePolicy::Clamp
+                    )
                 );
 
                 let mut p_no_san = ValuePort::<PortInnerDeviceSanEpsilonGtZero, SanPolicyNone>::default();
                 p_no_san.port_set_remap_interval(SYMM_UNIT_INTERVAL);
                 assert!(p_no_san.port_inner_ref().get_interval() == UNIT_INTERVAL);
-                p_no_san.set_numeric_value(-0.5);
-                assert!(fp_approx_eq(p_no_san.get_numeric_value(), -0.5));
+                p_no_san.port_set_numeric_value(-0.5);
+                assert!(fp_approx_eq(p_no_san.port_get_numeric_value(None::<&()>), -0.5));
                 assert!(fp_approx_eq(p_no_san.port_inner_ref().get_numeric_value(), 0.25));
             }
         }
@@ -792,6 +1003,8 @@ mod testing {
             ValueSrcs::Dynamic(make_device_control_matcher())
         }
 
+        dbg!(make_device_control_matcher());
+
         // ----------------------------------
         {
             make_output_port_inner_nutype!(
@@ -801,7 +1014,7 @@ mod testing {
                 san-exe: |v: BaseNumT| { if v <= BaseNumT::zero() {BaseNumT::EPSILON} else {v}}
             );
 
-            let port_to_device_san_gt_zero = ValuePort::<PortInnerDeviceSanEpsilonGtZero>::default();
+            let mut port_to_device_san_gt_zero = ValuePort::<PortInnerDeviceSanEpsilonGtZero>::default();
 
             struct MockExeCtx {
                 device_control_value_received: std::cell::Cell<BaseNumT>,
@@ -817,16 +1030,30 @@ mod testing {
                 device_control_value_received: Default::default(),
             };
 
-            port_to_device_san_gt_zero.set_numeric_value(42.0);
+            port_to_device_san_gt_zero.port_set_numeric_value(0.42);
             assert!(exe_ctx.device_control_value_received.get() == BaseNumT::default());
 
-            port_to_device_san_gt_zero.port_set_numeric_value_and_flush_to_devices(42.0, &exe_ctx);
-            assert_eq!(port_to_device_san_gt_zero.get_numeric_value(), 42.0);
-            assert_eq!(exe_ctx.device_control_value_received.get(), 42.0);
+            port_to_device_san_gt_zero.port_set_numeric_value_and_flush_to_devices(0.42, &exe_ctx);
+            assert_eq!(port_to_device_san_gt_zero.port_get_numeric_value(None::<&()>), 0.42);
+            assert_eq!(exe_ctx.device_control_value_received.get(), 0.42);
 
-            port_to_device_san_gt_zero.port_set_numeric_value_and_flush_to_devices(-42.0, &exe_ctx);
-            assert_eq!(port_to_device_san_gt_zero.get_numeric_value(), BaseNumT::EPSILON);
+            port_to_device_san_gt_zero.port_set_numeric_value_and_flush_to_devices(-0.42, &exe_ctx);
+            assert_eq!(
+                port_to_device_san_gt_zero.port_get_numeric_value(None::<&()>),
+                BaseNumT::EPSILON
+            );
             assert_eq!(exe_ctx.device_control_value_received.get(), BaseNumT::EPSILON);
+
+            port_to_device_san_gt_zero.port_set_remap_interval((-100.0..100.0).into());
+            assert_eq!(
+                port_to_device_san_gt_zero.port_get_remap_interval().unwrap(),
+                (BaseNumT::EPSILON..100.0).into()
+            );
+            port_to_device_san_gt_zero.port_set_numeric_value_and_flush_to_devices(50.0, &exe_ctx);
+
+            dbg!(&port_to_device_san_gt_zero);
+            assert_eq!(port_to_device_san_gt_zero.port_get_numeric_value(None::<&()>), 50.0);
+            assert_eq!(exe_ctx.device_control_value_received.get(), 0.5);
         }
     }
 }

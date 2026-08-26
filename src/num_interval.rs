@@ -67,6 +67,8 @@ pub(crate) trait NumIntervalValue:
     + Copy
     + Bounded
     + JsonSchema
+    // + for<'de> Deserialize<'de>
+    // + Serialize
     + Default // + ToNumInterval<Self>
 {
 }
@@ -188,6 +190,8 @@ pub(crate) fn from_type_interval_to_unit_clamping<T: NumIntervalValue /*+ ToNumI
 //-------------------------------------------------------------
 #[derive(Debug, Clone, Copy, schemars::JsonSchema, Serialize, Deserialize)]
 #[serde(from = "(T,T)", into = "(T,T)")]
+// #[serde(bound(deserialize = "T: NumIntervalValue"))]
+// #[serde(bound(serialize = "T: NumIntervalValue"))]
 pub(crate) struct NumInterval<T: NumIntervalValue> {
     pub(crate) from: T,
     pub(crate) to: T,
@@ -262,7 +266,7 @@ impl<T: NumIntervalValue> std::fmt::Display for NumInterval<T> {
 }
 
 impl<T: NumIntervalValue> NumInterval<T> {
-    pub(crate) fn scale(self, scalar: T) -> Self {
+    pub(crate) fn _scale(self, scalar: T) -> Self {
         NumInterval::new(self.from * scalar, self.to * scalar).sanitize_and_sort()
     }
 
@@ -800,7 +804,7 @@ mod tests {
 
     #[test]
     fn test_scaling() {
-        assert_eq!(NumInterval::new(1.0, 2.0).scale(2.0), NumInterval::new(2.0, 4.0));
+        assert_eq!(NumInterval::new(1.0, 2.0)._scale(2.0), NumInterval::new(2.0, 4.0));
     }
 
     #[test]

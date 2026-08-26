@@ -45,11 +45,13 @@ const XRC_SINK_VALUE_INTERVAL: NumInterval<BaseNumT> = NumInterval {
 
 pub(crate) trait ValueIface:
     Clone
+    // + crate::schemas_value_port::TfmPolicyDefaultChoice
     + From<ValueTargets>
     + std::fmt::Debug
     + Default
     + PartialEq
     + PartialOrd
+    + WithRelativity
     + WithDeviceControlMatcherRef
     + WithNumInterval
     + WithNumIntervalSettable
@@ -59,6 +61,8 @@ pub(crate) trait ValueIface:
     + Serialize
     + for<'de> Deserialize<'de>
     + JsonSchema
+    + Traversable
+    + TraversableMut
 {
     fn value_identity(&self) -> String;
     fn value_is_static(&self) -> bool;
@@ -624,7 +628,7 @@ impl std::fmt::Display for StaticValueCfg {
     Debug,
     Clone,
     Serialize,
-    DeserializeUntaggedVerboseError,
+    Deserialize, // UntaggedVerboseError,
     PartialEq,
     TraversableMut,
     Traversable,
@@ -634,7 +638,9 @@ impl std::fmt::Display for StaticValueCfg {
 pub(crate) enum ValueSrcs {
     // Rand { distr: ... , interval: ... },
     #[traverse(skip)]
+    #[garde(skip)]
     Static(#[garde(skip)] StaticValueCfg),
+    #[garde(skip)]
     Dynamic(#[garde(skip)] DynValueRefs),
 }
 
@@ -1124,6 +1130,15 @@ impl ValueIface for ValueXrcs {
     }
 }
 
+impl WithRelativity for ValueXrcs {
+    fn get_relativity(&self) -> Relativity {
+        match self {
+            Self::Sink(_) => Relativity::Abs,
+            Self::Dynamic(d) => d.get_relativity(),
+        }
+    }
+}
+
 impl WithDeviceControlMatcherRef for ValueXrcs {
     fn get_device_control_matcher_ref(&self) -> Option<&DeviceControlMatcherRef> {
         match self {
@@ -1208,6 +1223,15 @@ impl ValueIface for ValueDsts {
 
     fn value_is_static(&self) -> bool {
         matches!(self, Self::Void(..))
+    }
+}
+
+impl WithRelativity for ValueDsts {
+    fn get_relativity(&self) -> Relativity {
+        match self {
+            Self::Dynamic(d) => d.get_relativity(),
+            Self::Void(_) => Relativity::Abs,
+        }
     }
 }
 

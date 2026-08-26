@@ -1,6 +1,6 @@
 [package]
 name = "mmvj"
-version = "2026.8.26-0"
+version = "2026.9.2-0"
 edition = "2024"
 # rust-version = "1.85.0"
 authors = ["Leonid Satanovskiy"]
@@ -24,7 +24,8 @@ name = "mmvj"
 path = "src/bin/main.rs"
 
 [dependencies]
-with_doc_str = { path = "with_doc_str" }
+with_doc_str = { path = "src/with_doc_str" }
+mmvj_derive = { path = "src/mmvj_derive" }
 anyhow = "1.0"
 atomic_float = { version = "1.1.0", features = ["serde"] }
 bitflags = "2.11.1"
