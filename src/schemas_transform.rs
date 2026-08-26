@@ -1,20 +1,23 @@
+use with_doc_str::with_doc_str;
+
 use crate::base_num::{BaseAtomicT, BaseNumT};
 use crate::config::WithSelfSanitize;
 use crate::filters::OneEuroFilter;
 use crate::make_input_port_inner_nutype;
 use crate::relativity::Relativity;
-use crate::schemas_cfg::{DescriptionCfg, WithDescriptionMut};
+use crate::schemas_cfg::{_WithDescriptionMut, DescriptionCfg};
 use crate::schemas_value::{
-    AutoOrManual, InputValueMetadata, ValueXrcs, WithLastKnownIO, WithNumericValue, make_static_value_src,
+    AutoOrManual, InputValueMetadata, ValueXrcs, WithLastKnownIO, WithLastKnownIOSettable, WithNumericValue,
+    make_static_value_src,
 };
 use crate::schemas_value::{
     DeviceControlMatcherRef, DynValueRefs, ValueDsts, VariableRef, WithNumInterval, WithRelativityRef,
     serialize_value_src_rt_ignore_interval,
 };
 use crate::schemas_value_port::{
-    PortRemapPolicy, RemapPolicyUserDefined, SanPolicyNone, SanPolicyUseFromPortInner, ValuePort,
+    PortRemapPolicy, RemapPolicyUserDefined, SanPolicyNone, SanPolicyUseFromPortInner, TfmPolicyDisabled, ValuePort,
 };
-use crate::tfm_exec::{IntegrateExeState, RaiseFallExeState, ScriptExeState, SteeringExeState, TfmExeState};
+use crate::tfm_exec::{RaiseFallExeState, ScriptExeState, SteeringExeState, TfmExeState};
 use crate::{
     num_interval::NumInterval,
     num_interval::{SYMM_UNIT_INTERVAL, UNIT_INTERVAL},
@@ -26,14 +29,17 @@ use bitflags::bitflags;
 use crossbeam_utils::CachePadded;
 use enum_dispatch::enum_dispatch;
 use garde::Validate;
+use mmvj_derive::WithSelfSanitize;
 use schemars::JsonSchema;
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 #[cfg(feature = "gui")]
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
+use std::time::Instant;
 use strum_macros::{Display, EnumIter, EnumString};
 use traversable::Traversable;
 use traversable::TraversableMut;
@@ -98,12 +104,19 @@ pub(crate) fn default_filter_tau() -> ValueSrcs {
 /// This trait ensures that we do not forget to
 /// handle creation of separate state when
 /// tfm steps are duplicated interactively.
+#[enum_dispatch(TfmStepCfg)]
 pub(crate) trait TfmCfgDuplicateWithNewState
 where
     Self: Clone,
 {
     #[must_use]
     fn duplicate_with_new_state(&self) -> Self;
+}
+
+impl<T: TfmCfgDuplicateWithNewState> TfmCfgDuplicateWithNewState for Box<T> {
+    fn duplicate_with_new_state(&self) -> Self {
+        Box::new(self.as_ref().duplicate_with_new_state())
+    }
 }
 
 pub(crate) trait TfmCfgDuplicateTreeWithNewState
@@ -138,6 +151,7 @@ pub(crate) struct TfmStepCommonState {
     id: ObjId,
     intervals: (NumInterval<BaseNumT>, NumInterval<BaseNumT>),
     relativity: (Relativity, Relativity),
+    pub(crate) last_time: std::cell::Cell<std::time::Instant>,
     #[cfg(feature = "gui")]
     pub(crate) gui_trace_graph_opened: Arc<AtomicBool>,
     pub(crate) last_in: Arc<CachePadded<BaseAtomicT>>,
@@ -156,6 +170,7 @@ impl Default for TfmStepCommonState {
             trace_channel: None,
             last_in: Default::default(),
             last_out: Default::default(),
+            last_time: Instant::now().into(),
         }
     }
 }
@@ -185,7 +200,7 @@ impl TfmStepCommonState {
         self
     }
 
-    pub(crate) fn set_output_relativity(&mut self, is_relative: Relativity) -> &mut Self {
+    pub(crate) fn set_out_relativity(&mut self, is_relative: Relativity) -> &mut Self {
         self.relativity.1 = is_relative;
         self
     }
@@ -195,7 +210,7 @@ impl TfmStepCommonState {
         self
     }
 
-    pub(crate) fn set_output_interval(&mut self, interval: NumInterval<BaseNumT>) -> &mut Self {
+    pub(crate) fn set_out_interval(&mut self, interval: NumInterval<BaseNumT>) -> &mut Self {
         self.intervals.1 = interval;
         self
     }
@@ -204,9 +219,16 @@ impl TfmStepCommonState {
         self.intervals.0
     }
 
-    #[allow(unused)]
+    pub(crate) fn get_in_relativity(&self) -> Relativity {
+        self.relativity.0
+    }
+
     pub(crate) fn get_out_interval(&self) -> NumInterval<BaseNumT> {
         self.intervals.1
+    }
+
+    pub(crate) fn get_out_relativity(&self) -> Relativity {
+        self.relativity.1
     }
 
     #[allow(unused)]
@@ -256,6 +278,125 @@ impl PartialEq for TfmStepCommonStateShared {
 
 #[derive(
     JsonSchema,
+    PartialEq,
+    Default,
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Validate,
+    Traversable,
+    TraversableMut,
+    WithSelfSanitize,
+)]
+#[serde(deny_unknown_fields)]
+#[sanitize_inplace_with_epilogue]
+#[with_doc_str]
+/// Summation
+pub(crate) struct SumCfg {
+    /// ...
+    #[traverse(skip)]
+    #[serde(skip)]
+    #[garde(skip)]
+    #[sanitize_inplace(skip)]
+    common_state: TfmStepCommonStateShared,
+    #[traverse(skip)]
+    #[serde(default)]
+    #[serde(skip_serializing_if = "String::is_empty")]
+    #[garde(skip)]
+    #[sanitize_inplace(skip)]
+    /// ...
+    pub(crate) desc: DescriptionCfg,
+    #[traverse(skip)]
+    #[serde(default)]
+    #[garde(skip)]
+    /// ...
+    #[traverse(skip)]
+    #[sanitize_inplace(skip)]
+    pub(crate) enabled: StepEnabledCfg,
+    #[serde(default)]
+    #[garde(skip)]
+    pub(crate) sources: Vec<ValuePort<ValueSrcs>>,
+    #[traverse(skip)]
+    #[serde(default = "default_symm_unit_interval")]
+    #[garde(skip)]
+    #[sanitize_inplace(skip)]
+    pub(crate) out_interval: NumInterval<BaseNumT>,
+}
+
+impl SumCfg {
+    fn sanitize_inplace_epilogue(&mut self) {
+        let out_interval = self.out_interval;
+        self.common_state_mut().set_out_interval(out_interval);
+    }
+}
+
+impl TfmCfgDuplicateWithNewState for SumCfg {
+    fn duplicate_with_new_state(&self) -> Self {
+        let mut s = self.clone();
+        s.common_state = Default::default();
+        s
+    }
+}
+
+#[derive(
+    JsonSchema, PartialEq, Debug, Default, Clone, Serialize, Deserialize, Validate, Traversable, TraversableMut,
+)]
+#[serde(deny_unknown_fields)]
+#[with_doc_str]
+/// Given input as speed vector scales it based on dt and a custom multiplier
+pub(crate) struct VelocityToDisplacementCfg {
+    /// ...
+    #[traverse(skip)]
+    #[serde(skip)]
+    #[garde(skip)]
+    common_state: TfmStepCommonStateShared,
+    #[traverse(skip)]
+    #[serde(default)]
+    #[serde(skip_serializing_if = "String::is_empty")]
+    #[garde(skip)]
+    /// ...
+    pub(crate) desc: DescriptionCfg,
+    #[traverse(skip)]
+    #[serde(default)]
+    #[garde(skip)]
+    /// ...
+    #[traverse(skip)]
+    pub(crate) enabled: StepEnabledCfg,
+    #[traverse(skip)]
+    #[serde(default = "default_one")]
+    #[garde(skip)]
+    pub(crate) multiplier: BaseNumT,
+    #[traverse(skip)]
+    #[serde(default = "default_symm_unit_interval")]
+    #[garde(skip)]
+    pub(crate) out_interval: NumInterval<BaseNumT>,
+}
+
+impl WithSelfSanitize for VelocityToDisplacementCfg {
+    type SanInputT = ();
+
+    fn sanitize_inplace(&mut self, _input: Self::SanInputT) {
+        let out_interval = self.out_interval;
+        self.common_state_mut().set_out_interval(out_interval);
+        self.common_state_mut().set_out_relativity(Relativity::Rel);
+    }
+}
+
+const fn default_symm_unit_interval() -> NumInterval<BaseNumT> {
+    SYMM_UNIT_INTERVAL
+}
+
+impl TfmCfgDuplicateWithNewState for VelocityToDisplacementCfg {
+    fn duplicate_with_new_state(&self) -> Self {
+        let mut s = self.clone();
+        s.common_state = Default::default();
+        s
+    }
+}
+
+#[derive(
+    JsonSchema,
     Display,
     Debug,
     Serialize,
@@ -268,15 +409,16 @@ impl PartialEq for TfmStepCommonStateShared {
     PartialEq,
     Validate,
 )]
-#[enum_dispatch]
 #[strum(serialize_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
+#[enum_dispatch]
 pub(crate) enum TfmStepCfg {
+    Sum(#[garde(skip)] SumCfg),
+    VelocityToDisplacement(#[garde(skip)] VelocityToDisplacementCfg),
     #[traverse(skip)]
     Nop(#[garde(skip)] NopCfg),
     #[traverse(skip)]
     Invert(#[garde(skip)] InvertCfg),
-    #[traverse(skip)]
     Integrate(#[garde(skip)] IntegrateCfg),
     Steering(#[garde(skip)] Box<SteeringCfg>),
     #[traverse(skip)]
@@ -304,23 +446,27 @@ pub(crate) enum TfmStepCfg {
     // _ForceFeedback(#[garde(skip)] Box<ForceFeedbackCfg>),
 }
 
-impl TfmCfgDuplicateWithNewState for TfmStepCfg {
-    fn duplicate_with_new_state(&self) -> Self {
+impl WithSelfSanitize for TfmStepCfg {
+    type SanInputT = ();
+
+    fn sanitize_inplace(&mut self, input: Self::SanInputT) {
         match self {
-            Self::Nop(s) => Self::Nop(s.duplicate_with_new_state()),
-            Self::Invert(s) => Self::Invert(s.duplicate_with_new_state()),
-            Self::Integrate(s) => Self::Integrate(s.duplicate_with_new_state()),
-            Self::Steering(s) => Self::Steering(s.duplicate_with_new_state().into()),
-            Self::Clamp(s) => Self::Clamp(s.duplicate_with_new_state()),
-            Self::RaiseFall(s) => Self::RaiseFall(s.duplicate_with_new_state().into()),
-            Self::Ema(s) => Self::Ema(s.duplicate_with_new_state()),
-            Self::Linear(s) => Self::Linear(s.duplicate_with_new_state()),
-            Self::Smoothstep(s) => Self::Smoothstep(s.duplicate_with_new_state()),
-            Self::SCurve(s) => Self::SCurve(s.duplicate_with_new_state()),
-            Self::Exp(s) => Self::Exp(s.duplicate_with_new_state()),
-            Self::SignedPower(s) => Self::SignedPower(s.duplicate_with_new_state()),
-            Self::OneEuro(s) => Self::OneEuro(s.duplicate_with_new_state().into()),
-            Self::Script(s) => Self::Script(s.duplicate_with_new_state()),
+            TfmStepCfg::Sum(s) => s.sanitize_inplace(input),
+            TfmStepCfg::VelocityToDisplacement(s) => s.sanitize_inplace(input),
+            TfmStepCfg::Nop(s) => s.sanitize_inplace(input),
+            TfmStepCfg::Invert(s) => s.sanitize_inplace(input),
+            TfmStepCfg::Integrate(s) => s.sanitize_inplace(input),
+            TfmStepCfg::Steering(s) => s.sanitize_inplace(input),
+            TfmStepCfg::Clamp(s) => s.sanitize_inplace(input),
+            TfmStepCfg::RaiseFall(s) => s.sanitize_inplace(input),
+            TfmStepCfg::Ema(s) => s.sanitize_inplace(input),
+            TfmStepCfg::Linear(s) => s.sanitize_inplace(input),
+            TfmStepCfg::Smoothstep(s) => s.sanitize_inplace(input),
+            TfmStepCfg::SCurve(s) => s.sanitize_inplace(input),
+            TfmStepCfg::Exp(s) => s.sanitize_inplace(input),
+            TfmStepCfg::SignedPower(s) => s.sanitize_inplace(input),
+            TfmStepCfg::OneEuro(s) => s.sanitize_inplace(input),
+            TfmStepCfg::Script(s) => s.sanitize_inplace(input),
         }
     }
 }
@@ -328,12 +474,18 @@ impl TfmCfgDuplicateWithNewState for TfmStepCfg {
 pub(crate) const DEFAULT_TRANSFORM_DESCRIPTION: &str = "No transform description available... yet.";
 
 impl TfmStepCfg {
+    pub(crate) fn _get_out_interval(&self) -> NumInterval<BaseNumT> {
+        <Self as WithCommonState>::common_state_ref(self).get_out_interval()
+    }
+
     pub(crate) const fn doc_str(&self) -> &'static str {
         match self {
             TfmStepCfg::Steering(s) => s.doc_str(),
             TfmStepCfg::Script(s) => s.doc_str(),
             TfmStepCfg::OneEuro(s) => s.doc_str(),
             TfmStepCfg::Ema(s) => s.doc_str(),
+            TfmStepCfg::Sum(s) => s.doc_str(),
+            TfmStepCfg::VelocityToDisplacement(s) => s.doc_str(),
             TfmStepCfg::Nop(_)
             | TfmStepCfg::Invert(_)
             | TfmStepCfg::Integrate(_)
@@ -354,6 +506,8 @@ impl TfmStepCfg {
 impl TfmStepCfg {
     pub(crate) fn get_enabled_ref_mut(&mut self) -> &mut bool {
         match self {
+            Self::VelocityToDisplacement(s) => &mut s.enabled,
+            Self::Sum(s) => &mut s.enabled,
             Self::Nop(s) => &mut s.enabled,
             Self::Invert(s) => &mut s.enabled,
             Self::Integrate(s) => &mut s.enabled,
@@ -397,8 +551,6 @@ pub(crate) enum ForceFeedbackComponent {
     // XY,
 }
 
-use with_doc_str::with_doc_str;
-
 /// Force-feedback configuration for the steering transform.
 ///
 /// Controls how FFB forces from the game (read via the virtual HID device)
@@ -417,13 +569,16 @@ use with_doc_str::with_doc_str;
     PartialEq,
     Default,
     Validate,
+    WithSelfSanitize,
 )]
 #[serde(deny_unknown_fields)]
+#[sanitize_inplace_with_epilogue]
 #[with_doc_str]
 pub(crate) struct ForceFeedbackCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     /// Internal state
     pub common_state: TfmStepCommonStateShared,
 
@@ -432,12 +587,15 @@ pub(crate) struct ForceFeedbackCfg {
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) desc: DescriptionCfg,
 
     /// Enable/disable FFB processing. When `false`, no force is applied.
-    #[serde(default = "default_step_enabled")]
+    #[serde(default)]
     #[garde(skip)]
-    pub(crate) enabled: bool,
+    #[traverse(skip)]
+    #[sanitize_inplace(skip)]
+    pub(crate) enabled: StepEnabledCfg,
 
     /// Multiplier applied to the (optionally filtered) FFB force.
     ///
@@ -455,6 +613,7 @@ pub(crate) struct ForceFeedbackCfg {
     /// (e.g. assists the turn instead of resisting it).
     #[serde(default)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) invert: bool,
 
     /// Selects which FFB axis to read from the virtual device.
@@ -463,6 +622,7 @@ pub(crate) struct ForceFeedbackCfg {
     /// - `Y`: secondary axis / separate effect channel.
     #[serde(default)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) component: ForceFeedbackComponent,
 
     /// Sub-pipeline applied to the raw FFB signal **before** `gain` and
@@ -484,7 +644,7 @@ pub(crate) struct ForceFeedbackCfg {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     #[garde(skip)]
-    pub(crate) custom_source: Option<ValueSrcs>,
+    pub(crate) custom_source: Option<ValuePort<ValueSrcs, SanPolicyNone, RemapPolicySymmUnit, TfmPolicyDisabled>>,
 }
 
 make_input_port_inner_nutype!(
@@ -493,6 +653,17 @@ make_input_port_inner_nutype!(
     san-doc: "Gain is ensured to be >= 0.0",
     san-exe: |v: BaseNumT| {v.max(0.0)}
 );
+
+impl ForceFeedbackCfg {
+    fn sanitize_inplace_epilogue(&mut self) {
+        let (_, _) = self
+            .transformation
+            .recompute_steps_metadata_get_out_interval_and_relativity(AutoOrManual::Auto(InputValueMetadata {
+                interval: SYMM_UNIT_INTERVAL,
+                relativity: Relativity::Rel,
+            }));
+    }
+}
 
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
@@ -503,8 +674,8 @@ pub(crate) struct ClampCfgCompat__ {
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) desc: DescriptionCfg,
-    #[serde(default = "default_step_enabled")]
-    pub(crate) enabled: bool,
+    #[serde(default)]
+    pub(crate) enabled: StepEnabledCfg,
     #[serde(default)]
     pub(crate) range: Option<NumInterval<BaseNumT>>,
     #[serde(skip_serializing)]
@@ -527,8 +698,8 @@ pub(crate) struct ClampCfg {
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) desc: DescriptionCfg,
-    #[serde(default = "default_step_enabled")]
-    pub(crate) enabled: bool,
+    #[serde(default)]
+    pub(crate) enabled: StepEnabledCfg,
     #[serde(default)]
     pub(crate) range: NumInterval<BaseNumT>,
     #[serde(default = "default_clamp_transform_override_interval")]
@@ -561,7 +732,7 @@ impl From<ClampCfgCompat__> for ClampCfg {
 }
 
 impl WithSelfSanitize for ClampCfg {
-    fn sanitize_inplace(&mut self) {
+    fn sanitize_inplace(&mut self, _input: Self::SanInputT) {
         let mut clamping_interval = self.get_clamping_interval();
         let in_interval = self.get_in_interval();
         let clamping_interval_saved = clamping_interval;
@@ -574,7 +745,13 @@ impl WithSelfSanitize for ClampCfg {
             );
             self.range = clamping_interval;
         }
+
+        if self.override_range {
+            self.common_state_mut().set_out_interval(clamping_interval);
+        }
     }
+
+    type SanInputT = ();
 }
 
 impl ClampCfg {
@@ -593,7 +770,7 @@ impl ClampCfg {
     }
 }
 
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 #[serde(from = "bool", into = "bool")]
 pub(crate) struct NopCfg {
@@ -601,8 +778,13 @@ pub(crate) struct NopCfg {
     #[garde(skip)]
     common_state: TfmStepCommonStateShared,
     #[garde(skip)]
-    #[serde(default = "default_step_enabled")]
-    pub(crate) enabled: bool,
+    #[serde(default)]
+    pub(crate) enabled: StepEnabledCfg,
+}
+
+impl WithSelfSanitize for NopCfg {
+    fn sanitize_inplace(&mut self, _input: Self::SanInputT) {}
+    type SanInputT = ();
 }
 
 impl TfmCfgDuplicateWithNewState for NopCfg {
@@ -613,18 +795,9 @@ impl TfmCfgDuplicateWithNewState for NopCfg {
     }
 }
 
-impl Default for NopCfg {
-    fn default() -> Self {
-        Self {
-            common_state: Default::default(),
-            enabled: default_step_enabled(),
-        }
-    }
-}
-
 impl From<NopCfg> for bool {
     fn from(value: NopCfg) -> Self {
-        value.enabled
+        *value.enabled
     }
 }
 
@@ -632,20 +805,63 @@ impl From<bool> for NopCfg {
     fn from(value: bool) -> Self {
         Self {
             common_state: Default::default(),
-            enabled: value,
+            enabled: StepEnabledCfg(value),
         }
     }
 }
 
+// ----------------------------
+
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct StepEnabledCfg(pub(crate) bool);
+
+impl DerefMut for StepEnabledCfg {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Deref for StepEnabledCfg {
+    type Target = bool;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Default for StepEnabledCfg {
+    fn default() -> Self {
+        Self(default_step_enabled())
+    }
+}
+
+// ------------------------------
+
+#[derive(JsonSchema, Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) enum InvertModeCfg {
+    #[default]
+    ValueOnly,
+    IntervalOnly,
+    ValueAndInterval,
+}
+
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct InvertCfg {
     #[serde(skip)]
     #[garde(skip)]
     common_state: TfmStepCommonStateShared,
     #[garde(skip)]
-    #[serde(default = "default_step_enabled")]
-    pub(crate) enabled: bool,
+    #[serde(default)]
+    pub(crate) enabled: StepEnabledCfg,
+    #[serde(skip)]
+    #[garde(skip)]
+    pub(crate) mode: InvertModeCfg,
+}
+
+impl WithSelfSanitize for InvertCfg {
+    fn sanitize_inplace(&mut self, _input: Self::SanInputT) {}
+    type SanInputT = ();
 }
 
 impl TfmCfgDuplicateWithNewState for InvertCfg {
@@ -656,16 +872,7 @@ impl TfmCfgDuplicateWithNewState for InvertCfg {
     }
 }
 
-impl Default for InvertCfg {
-    fn default() -> Self {
-        Self {
-            common_state: Default::default(),
-            enabled: default_step_enabled(),
-        }
-    }
-}
-
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate, Traversable, TraversableMut)]
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate, Traversable, TraversableMut, WithSelfSanitize)]
 #[serde(deny_unknown_fields)]
 #[with_doc_str]
 /// An Exponential Moving Average (EMA) filter is a recursive lowpass filter.
@@ -680,33 +887,40 @@ pub(crate) struct EmaCfg {
     #[traverse(skip)]
     #[serde(skip)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     common_state: TfmStepCommonStateShared,
     #[traverse(skip)]
     #[serde(skip)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     /// ...
     pub(super) exe_state: Arc<std::sync::Mutex<crate::filters::EmaFilter>>,
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     /// ...
     pub(crate) desc: DescriptionCfg,
     #[traverse(skip)]
-    #[serde(default = "default_step_enabled")]
+    #[serde(default)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     /// ...
-    pub(crate) enabled: bool,
+    #[traverse(skip)]
+    pub(crate) enabled: StepEnabledCfg,
     #[traverse(skip)]
     #[serde(default = "default_false")]
     #[serde(skip_serializing_if = "is_false")]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     /// ...
     pub(crate) on_relative_input_feed_on_idle: bool,
     #[traverse(skip)]
     #[serde(default = "default_false")]
     #[serde(skip_serializing_if = "is_false")]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) on_relative_input_reset_on_idle: bool,
     #[serde(default)]
     #[garde(skip)]
@@ -747,7 +961,7 @@ impl PartialEq for EmaCfg {
 impl Default for EmaCfg {
     fn default() -> Self {
         Self {
-            enabled: default_step_enabled(),
+            enabled: Default::default(),
             on_relative_input_feed_on_idle: default_false(),
             tau: Default::default(),
             on_relative_input_reset_on_idle: default_false(),
@@ -772,18 +986,20 @@ impl Default for EmaCfg {
 /// Ideal for smoothing noisy relative inputs (mouse,
 /// trackball) before a steering step, as a final output smoother
 /// after steering, or inside a force-feedback sub-pipeline.
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate, Traversable, TraversableMut)]
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate, Traversable, TraversableMut, WithSelfSanitize)]
 #[serde(deny_unknown_fields)]
 #[with_doc_str]
 pub(crate) struct OneEuroFilterCfg {
     #[serde(skip)]
     #[garde(skip)]
     #[traverse(skip)]
+    #[sanitize_inplace(skip)]
     common_state: TfmStepCommonStateShared,
 
     #[serde(skip)]
     #[garde(skip)]
     #[traverse(skip)]
+    #[sanitize_inplace(skip)]
     pub(super) exe_state: Arc<std::sync::Mutex<OneEuroFilter>>,
 
     /// Optional human-readable description shown in the GUI.
@@ -791,14 +1007,17 @@ pub(crate) struct OneEuroFilterCfg {
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
     #[traverse(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) desc: DescriptionCfg,
 
     /// Master on/off switch for the entire one-euro step. When `false`,
     /// the input value passes through unchanged and no filter state is updated.
-    #[serde(default = "default_step_enabled")]
+    #[serde(default)]
     #[garde(skip)]
     #[traverse(skip)]
-    pub(crate) enabled: bool,
+    #[traverse(skip)]
+    #[sanitize_inplace(skip)]
+    pub(crate) enabled: StepEnabledCfg,
 
     /// When `true` and the input has **relative** semantics, the last
     /// known value is re-fed into the filter on idle ticks so the
@@ -812,6 +1031,7 @@ pub(crate) struct OneEuroFilterCfg {
     #[serde(skip_serializing_if = "is_false")]
     #[garde(skip)]
     #[traverse(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) on_relative_input_feed_on_idle: bool,
 
     /// When `true` and the input has **relative** semantics, the filter
@@ -825,9 +1045,10 @@ pub(crate) struct OneEuroFilterCfg {
     #[serde(skip_serializing_if = "is_false")]
     #[garde(skip)]
     #[traverse(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) on_relative_input_reset_on_idle: bool,
 
-    /// Speed coefficient (β). Controls how much the cutoff frequency
+    /// Velocity coefficient (β). Controls how much the cutoff frequency
     /// increases in response to fast input movement.
     ///
     /// Adaptive cutoff formula: `cutoff = min_cutoff_hz + β · |dx̂|`
@@ -893,7 +1114,7 @@ make_input_port_inner_nutype!(
 make_input_port_inner_nutype!(
     OneEuroDCutOffHz,
     default: default_1euro_d_cutoff_hz(),
-    san-doc: "Speed cut off is ensured to be > 0.0",
+    san-doc: "Velocity cut off is ensured to be > 0.0",
     san-exe: |v: BaseNumT| {v.max(BaseNumT::EPSILON)}
 );
 
@@ -921,7 +1142,7 @@ impl PartialEq for OneEuroFilterCfg {
 impl Default for OneEuroFilterCfg {
     fn default() -> Self {
         Self {
-            enabled: default_step_enabled(),
+            enabled: Default::default(),
             on_relative_input_feed_on_idle: default_false(),
             beta: Default::default(),
             min_cutoff_hz: Default::default(),
@@ -934,27 +1155,35 @@ impl Default for OneEuroFilterCfg {
     }
 }
 
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, WithSelfSanitize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct LinearCfg {
     #[serde(skip)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     common_state: TfmStepCommonStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
+    #[sanitize_inplace(skip)]
     pub(crate) desc: DescriptionCfg,
-    #[serde(default = "default_step_enabled")]
-    pub(crate) enabled: bool,
+    #[serde(default)]
+    #[sanitize_inplace(skip)]
+    pub(crate) enabled: StepEnabledCfg,
     #[serde(default = "default_linear_slope")]
+    #[sanitize_inplace(skip)]
     pub(crate) slope: BaseNumT,
     #[serde(default)]
+    #[sanitize_inplace(skip)]
     pub(crate) shift_x: BaseNumT,
     #[serde(default)]
+    #[sanitize_inplace(skip)]
     pub(crate) shift_y: BaseNumT,
     #[serde(default)]
+    #[sanitize_inplace(skip)]
     pub(crate) center_symmetric: bool,
     #[serde(default = "default_on_idle")]
     #[serde(skip_serializing_if = "is_true")]
+    #[sanitize_inplace(skip)]
     pub(crate) on_idle: bool,
 }
 
@@ -968,7 +1197,7 @@ impl TfmCfgDuplicateWithNewState for LinearCfg {
 impl Default for LinearCfg {
     fn default() -> Self {
         Self {
-            enabled: default_step_enabled(),
+            enabled: Default::default(),
             slope: default_linear_slope(),
             shift_x: Default::default(),
             shift_y: Default::default(),
@@ -980,18 +1209,22 @@ impl Default for LinearCfg {
     }
 }
 
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, WithSelfSanitize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct SmoothstepCfg {
     #[serde(skip)]
+    #[sanitize_inplace(skip)]
     common_state: TfmStepCommonStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
+    #[sanitize_inplace(skip)]
     pub(crate) desc: DescriptionCfg,
-    #[serde(default = "default_step_enabled")]
-    pub(crate) enabled: bool,
+    #[serde(default)]
+    #[sanitize_inplace(skip)]
+    pub(crate) enabled: StepEnabledCfg,
     #[serde(default = "default_on_idle")]
     #[serde(skip_serializing_if = "is_true")]
+    #[sanitize_inplace(skip)]
     pub(crate) on_idle: bool,
 }
 
@@ -1006,7 +1239,7 @@ impl TfmCfgDuplicateWithNewState for SmoothstepCfg {
 impl Default for SmoothstepCfg {
     fn default() -> Self {
         Self {
-            enabled: default_step_enabled(),
+            enabled: Default::default(),
             on_idle: default_on_idle(),
             desc: Default::default(),
             common_state: Default::default(),
@@ -1014,25 +1247,30 @@ impl Default for SmoothstepCfg {
     }
 }
 
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Validate)]
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Validate, WithSelfSanitize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct SCurveCfg {
     #[serde(skip)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     common_state: TfmStepCommonStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) desc: DescriptionCfg,
-    #[serde(default = "default_step_enabled")]
+    #[serde(default)]
     #[garde(skip)]
-    pub(crate) enabled: bool,
+    #[sanitize_inplace(skip)]
+    pub(crate) enabled: StepEnabledCfg,
     #[serde(default = "default_scurve_steepness")]
     #[garde(range(min = 0.0))]
+    #[sanitize_inplace(skip)]
     pub(crate) steepness: BaseNumT,
     #[serde(default = "default_on_idle")]
     #[serde(skip_serializing_if = "is_true")]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) on_idle: bool,
 }
 
@@ -1046,7 +1284,7 @@ impl TfmCfgDuplicateWithNewState for SCurveCfg {
 impl Default for SCurveCfg {
     fn default() -> Self {
         Self {
-            enabled: default_step_enabled(),
+            enabled: Default::default(),
             steepness: default_scurve_steepness(),
             on_idle: default_on_idle(),
             desc: Default::default(),
@@ -1060,29 +1298,35 @@ impl Default for SCurveCfg {
 //     validate(greater = 1.0, less = 40.0)
 // )]
 // pub(crate) struct NormExpBase(BaseNumericT);
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Validate)]
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Validate, WithSelfSanitize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct NormExpCfg {
     #[serde(skip)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     common_state: TfmStepCommonStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) desc: DescriptionCfg,
-    #[serde(default = "default_step_enabled")]
+    #[serde(default)]
     #[garde(skip)]
-    pub(crate) enabled: bool,
+    #[sanitize_inplace(skip)]
+    pub(crate) enabled: StepEnabledCfg,
     #[serde(default = "default_norm_exp_base")]
-    #[garde(range(min = 0.0))]
     /// Base must be positive
+    #[garde(range(min = 0.0))]
+    #[sanitize_inplace(skip)]
     pub(crate) base: BaseNumT,
     #[serde(default)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) center_symmetric: bool,
     #[serde(default = "default_on_idle")]
     #[serde(skip_serializing_if = "is_true")]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) on_idle: bool,
 }
 
@@ -1097,7 +1341,7 @@ impl TfmCfgDuplicateWithNewState for NormExpCfg {
 impl Default for NormExpCfg {
     fn default() -> Self {
         Self {
-            enabled: default_step_enabled(),
+            enabled: Default::default(),
             base: default_norm_exp_base(),
             center_symmetric: Default::default(),
             on_idle: default_on_idle(),
@@ -1107,29 +1351,35 @@ impl Default for NormExpCfg {
     }
 }
 
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Validate)]
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Validate, WithSelfSanitize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct SignedPowerCfg {
     #[serde(skip)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     common_state: TfmStepCommonStateShared,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) desc: DescriptionCfg,
-    #[serde(default = "default_step_enabled")]
+    #[serde(default)]
     #[garde(skip)]
-    pub(crate) enabled: bool,
+    #[sanitize_inplace(skip)]
+    pub(crate) enabled: StepEnabledCfg,
     #[serde(default = "default_one")]
     #[garde(range(min = 0.0))]
     /// Power must be positive
+    #[sanitize_inplace(skip)]
     pub(crate) power: BaseNumT,
     #[serde(default)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) center_symmetric: bool,
     #[serde(default = "default_on_idle")]
     #[serde(skip_serializing_if = "is_true")]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) on_idle: bool,
 }
 
@@ -1144,7 +1394,7 @@ impl TfmCfgDuplicateWithNewState for SignedPowerCfg {
 impl Default for SignedPowerCfg {
     fn default() -> Self {
         Self {
-            enabled: default_step_enabled(),
+            enabled: Default::default(),
             power: 1.0,
             center_symmetric: Default::default(),
             on_idle: default_on_idle(),
@@ -1156,7 +1406,7 @@ impl Default for SignedPowerCfg {
 
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Default, Validate)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct HighPassCfg {
+pub(crate) struct _HighPassCfg {
     #[serde(skip)]
     #[garde(skip)]
     common_state: TfmStepCommonStateShared,
@@ -1164,9 +1414,9 @@ pub(crate) struct HighPassCfg {
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
     pub(crate) desc: DescriptionCfg,
-    #[serde(default = "default_step_enabled")]
+    #[serde(default)]
     #[garde(skip)]
-    pub(crate) enabled: bool,
+    pub(crate) enabled: StepEnabledCfg,
     #[garde(range(min = 0.0))]
     pub(crate) cutoff: BaseNumT,
     #[serde(default = "default_on_idle")]
@@ -1175,40 +1425,52 @@ pub(crate) struct HighPassCfg {
     pub(crate) on_idle: bool,
 }
 
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate, Traversable, TraversableMut)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct IntegrateCfg {
     #[serde(skip)]
     #[garde(skip)]
+    #[traverse(skip)]
     common_state: TfmStepCommonStateShared,
-    #[serde(skip)]
-    #[garde(skip)]
-    pub(super) exe_state: Arc<std::sync::Mutex<IntegrateExeState>>,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
+    #[traverse(skip)]
     pub(crate) desc: DescriptionCfg,
-    #[serde(default = "default_step_enabled")]
+    #[serde(default)]
     #[garde(skip)]
-    pub(crate) enabled: bool,
+    #[traverse(skip)]
+    pub(crate) enabled: StepEnabledCfg,
     #[garde(skip)]
+    #[traverse(skip)]
     pub(crate) range: NumInterval<BaseNumT>,
     #[serde(default)]
-    #[garde(range(min = 0.0))]
-    pub(crate) deadzone_norm: BaseNumT,
+    #[garde(skip)]
+    pub(crate) accumulator: ValuePort<ValueXrcs, SanPolicyNone, RemapPolicyUnit>,
     #[serde(default = "default_one")]
     #[garde(range(min = 0.0, max = 1.0))]
+    #[traverse(skip)]
     pub(crate) smoothing_alpha: BaseNumT,
-    #[serde(default = "default_on_idle")]
-    #[serde(skip_serializing_if = "is_true")]
-    #[garde(skip)]
-    pub(crate) on_idle: bool,
+    #[serde(default)]
+    #[serde(skip_serializing)]
+    #[garde(range(min = 0.0))]
+    pub(crate) deadzone_norm: BaseNumT,
+}
+
+impl WithSelfSanitize for IntegrateCfg {
+    type SanInputT = ();
+    fn sanitize_inplace(&mut self, _: Self::SanInputT) {
+        self.accumulator.sanitize_inplace(());
+
+        self.common_state_mut().set_out_relativity(Relativity::Abs);
+        let out_interval = self.range;
+        self.common_state_mut().set_out_interval(out_interval);
+    }
 }
 
 impl TfmCfgDuplicateWithNewState for IntegrateCfg {
     fn duplicate_with_new_state(&self) -> Self {
         let mut s = self.clone();
-        s.exe_state = Default::default();
         s.common_state = Default::default();
         s
     }
@@ -1220,29 +1482,61 @@ impl PartialEq for IntegrateCfg {
             && self.desc == other.desc
             && self.enabled == other.enabled
             && self.range == other.range
-            && self.deadzone_norm == other.deadzone_norm
             && self.smoothing_alpha == other.smoothing_alpha
-            && self.on_idle == other.on_idle
     }
 }
 
 impl Default for IntegrateCfg {
     fn default() -> Self {
         Self {
-            enabled: default_step_enabled(),
+            enabled: Default::default(),
             range: NumInterval::new(-100.0, 100.0),
-            deadzone_norm: 0.0,
             smoothing_alpha: default_smoothing_alpha(),
-            on_idle: default_on_idle(),
             desc: Default::default(),
             common_state: Default::default(),
-            exe_state: Default::default(),
+            accumulator: Default::default(),
+            deadzone_norm: Default::default(),
         }
     }
 }
 
 // ==================================================================
 impl TfmSeqCfg {
+    pub(crate) fn in_meta_mut(&mut self) -> &mut AutoOrManual<InputValueMetadata<BaseNumT>> {
+        &mut self.in_meta
+    }
+
+    pub(crate) fn new_with_manual_input_params() -> Self {
+        let mut tmp: Self = Default::default();
+        tmp.switch_input_params_to_manual();
+        tmp
+    }
+
+    pub(crate) fn switch_input_params_to_manual(&mut self) {
+        self.in_meta = self.in_meta.make_manual();
+    }
+
+    pub(crate) fn _off(&mut self) {
+        self.steps.clear();
+        self.recompute_metadata_and_sanitize_recursive(None);
+    }
+
+    pub(crate) fn get_in_interval(&self) -> NumInterval<BaseNumT> {
+        self.in_meta.interval
+    }
+
+    pub(crate) fn get_in_relativity(&self) -> Relativity {
+        self.in_meta.relativity
+    }
+
+    pub(crate) fn get_out_interval(&self) -> NumInterval<BaseNumT> {
+        self.out_meta.0
+    }
+
+    pub(crate) fn get_out_relativity(&self) -> Relativity {
+        self.out_meta.1
+    }
+
     #[cfg(feature = "gui")]
     pub(crate) fn disable_gui_tracing(&self) {
         use traversable::Visitor;
@@ -1259,80 +1553,49 @@ impl TfmSeqCfg {
         let _ = self.steps.traverse(&mut DisableGuiTracingVisitor {});
     }
 
-    pub(crate) fn recompute_metadata_with_known_inputs(&mut self) {
-        self.recompute_metadata(self.in_meta);
+    pub(crate) fn recompute_metadata_and_sanitize_recursive(
+        &mut self,
+        input: Option<AutoOrManual<InputValueMetadata<BaseNumT>>>,
+    ) {
+        self.out_meta = self.recompute_steps_metadata_get_out_interval_and_relativity(input.unwrap_or(self.in_meta));
+
+        let _ = self
+            .steps
+            .traverse_mut(&mut traversable::function::visitor_mut::<TfmSeqCfg, (), _, _>(
+                |tfm_seq| {
+                    tfm_seq.recompute_metadata_and_sanitize_recursive(Some(tfm_seq.in_meta));
+                    std::ops::ControlFlow::Break(())
+                },
+                |_| std::ops::ControlFlow::Continue(()),
+            ));
     }
 
-    pub(crate) fn recompute_metadata(&mut self, input: AutoOrManual<InputValueMetadata<BaseNumT>>) {
+    #[must_use]
+    pub(crate) fn recompute_steps_metadata_get_out_interval_and_relativity(
+        &mut self,
+        input: AutoOrManual<InputValueMetadata<BaseNumT>>,
+    ) -> (NumInterval<BaseNumT>, Relativity) {
         self.in_meta = input;
-        let mut in_relativity = self.in_meta.relativity;
-        let mut in_interval = self.in_meta.interval;
+        let mut cur_relativity = self.in_meta.relativity;
+        let mut cur_interval = self.in_meta.interval;
+
         for step in &mut self.steps {
             step.common_state_mut()
-                .set_input_relativity(in_relativity)
-                .set_input_interval(in_interval);
-            let (out_interval, out_relativity) = match step {
-                TfmStepCfg::Script(script) => {
-                    script
-                        .aux_transformations
-                        .iter_mut()
-                        .for_each(|t| t.1.recompute_metadata(t.1.in_meta));
-                    (
-                        script.output_interval.unwrap_or(in_interval),
-                        script.output_relativity.unwrap_or(in_relativity),
-                    )
-                }
-                TfmStepCfg::Integrate(integrate) if integrate.enabled => (integrate.range, Relativity::Abs),
-                TfmStepCfg::Steering(steering) if steering.enabled => {
-                    steering
-                        .integrated_user_input_transform
-                        .recompute_metadata(AutoOrManual::Auto(InputValueMetadata {
-                            interval: SYMM_UNIT_INTERVAL,
-                            relativity: Relativity::Abs,
-                        }));
-                    if let Some(ff) = &mut steering.force_feedback {
-                        ff.transformation
-                            .recompute_metadata(AutoOrManual::Auto(InputValueMetadata {
-                                interval: SYMM_UNIT_INTERVAL,
-                                relativity: Relativity::Rel,
-                            }));
-                    };
-                    (SYMM_UNIT_INTERVAL, Relativity::Abs)
-                }
-                // TfmStepCfg::_ForceFeedback(force_feedback) if force_feedback.enabled => {
-                //     (SYMM_UNIT_INTERVAL, Relativity::Abs)
-                // }
-                TfmStepCfg::Clamp(clamp) if clamp.enabled => {
-                    clamp.sanitize_inplace();
-                    (clamp.get_out_interval(), in_relativity)
-                }
-                TfmStepCfg::Nop(_)
-                | TfmStepCfg::Invert(_)
-                | TfmStepCfg::Integrate(_)
-                | TfmStepCfg::Steering(_)
-                | TfmStepCfg::Clamp(_)
-                | TfmStepCfg::RaiseFall(_)
-                | TfmStepCfg::Ema(_)
-                | TfmStepCfg::Linear(_)
-                | TfmStepCfg::Smoothstep(_)
-                | TfmStepCfg::SCurve(_)
-                | TfmStepCfg::Exp(_)
-                | TfmStepCfg::SignedPower(_)
-                | TfmStepCfg::OneEuro(_) =>
-                // | TfmStepCfg::_HighPass(_)
-                // | TfmStepCfg::_ForceFeedback(_) =>
-                {
-                    (in_interval, in_relativity)
-                }
-            };
-
+                .set_input_relativity(cur_relativity)
+                .set_input_interval(cur_interval);
             step.common_state_mut()
-                .set_output_relativity(out_relativity)
-                .set_output_interval(out_interval);
+                .set_out_relativity(cur_relativity)
+                .set_out_interval(cur_interval);
 
-            in_interval = out_interval;
-            in_relativity = out_relativity;
+            step.sanitize_inplace(());
+
+            if *step.get_enabled_ref_mut() {
+                cur_interval = step.common_state_ref().get_out_interval();
+                cur_relativity = step.common_state_ref().get_out_relativity();
+            }
         }
+
+        (cur_interval, cur_relativity)
     }
 }
 
@@ -1443,6 +1706,7 @@ impl From<TfmSeqVariants> for TfmSeqCfg {
                 id: Default::default(),
                 steps: s,
                 in_meta: AutoOrManual::Auto(Default::default()),
+                out_meta: Default::default(),
                 last_io: Default::default(),
                 desc: Default::default(),
             },
@@ -1453,6 +1717,7 @@ impl From<TfmSeqVariants> for TfmSeqCfg {
                     interval: f.in_meta.interval,
                     relativity: f.in_meta.relativity,
                 }),
+                out_meta: Default::default(),
                 last_io: Default::default(),
                 desc: f.desc,
             },
@@ -1468,6 +1733,7 @@ impl From<TfmSeqCfg> for TfmSeqVariants {
                 steps: value.steps,
                 in_meta: value.in_meta,
                 last_io: Default::default(),
+                out_meta: Default::default(),
                 desc: value.desc,
             })
         } else {
@@ -1495,12 +1761,16 @@ macro_rules! tfm_seq_tpl {
             #[traverse(skip)]
             #[serde(skip)]
             #[garde(skip)]
-            pub(crate) last_io: Arc<CachePadded<BaseAtomicT>>,
+            last_io: (Arc<CachePadded<BaseAtomicT>>,Arc<CachePadded<BaseAtomicT>>),
+            #[traverse(skip)]
+            #[serde(skip)]
+            #[garde(skip)]
+            out_meta: (NumInterval<BaseNumT>, Relativity),
             #[traverse(skip)]
             // #[serde(default)]
             #[serde(flatten)]
             #[garde(skip)]
-            pub(crate) in_meta: AutoOrManual<InputValueMetadata<BaseNumT>>,
+            in_meta: AutoOrManual<InputValueMetadata<BaseNumT>>,
             #[garde(skip)]
             pub(crate) steps: Vec<TfmStepCfg>,
         }
@@ -1514,6 +1784,19 @@ tfm_seq_tpl!(
     meta: serde(from = "TfmSeqVariants", into = "TfmSeqVariants")
 );
 
+impl WithSelfSanitize for TfmSeqCfg {
+    type SanInputT = ();
+    fn sanitize_inplace(&mut self, input: Self::SanInputT) {
+        self.steps.iter_mut().for_each(|tfm| tfm.sanitize_inplace(input));
+    }
+}
+
+impl PartialOrd for TfmSeqCfg {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.id.partial_cmp(&other.id)
+    }
+}
+
 impl TfmCfgDuplicateWithNewState for TfmSeqCfg {
     fn duplicate_with_new_state(&self) -> Self {
         let mut s = self.duplicate_tree_with_new_state();
@@ -1522,7 +1805,7 @@ impl TfmCfgDuplicateWithNewState for TfmSeqCfg {
     }
 }
 
-impl WithDescriptionMut for TfmSeqCfg {
+impl _WithDescriptionMut for TfmSeqCfg {
     fn description_mut(&mut self) -> Option<&mut DescriptionCfg> {
         Some(&mut self.desc)
     }
@@ -1534,9 +1817,20 @@ impl WithRelativityRef for TfmSeqCfg {
     }
 }
 
-impl WithLastKnownIO<BaseNumT> for TfmSeqCfg {
-    fn get_last_known_io(&self) -> BaseNumT {
-        self.last_io.load(Relaxed)
+impl WithLastKnownIOSettable<(Option<BaseNumT>, Option<BaseNumT>)> for TfmSeqCfg {
+    fn set_last_known_io(&self, value: (Option<BaseNumT>, Option<BaseNumT>)) {
+        if let Some(v) = value.0 {
+            self.last_io.0.store(v, Relaxed)
+        }
+        if let Some(v) = value.1 {
+            self.last_io.1.store(v, Relaxed)
+        }
+    }
+}
+
+impl WithLastKnownIO<(BaseNumT, BaseNumT)> for TfmSeqCfg {
+    fn get_last_known_io(&self) -> (BaseNumT, BaseNumT) {
+        (self.last_io.0.load(Relaxed), self.last_io.1.load(Relaxed))
     }
 }
 
@@ -1544,7 +1838,7 @@ impl WithNumericValue for TfmSeqCfg {
     type ValueT = BaseNumT;
 
     fn get_numeric_value(&self) -> Self::ValueT {
-        self.get_last_known_io()
+        self.get_last_known_io().0
     }
 }
 
@@ -1585,10 +1879,21 @@ pub(crate) trait WithCommonState {
     fn common_state_ref(&self) -> &TfmStepCommonState;
 }
 
-#[allow(unused)]
+impl<T: WithCommonState> WithCommonState for Box<T> {
+    fn common_state_ref(&self) -> &TfmStepCommonState {
+        self.as_ref().common_state_ref()
+    }
+}
+
 #[enum_dispatch(TfmStepCfg)]
 pub(crate) trait WithCommonStateMut {
     fn common_state_mut(&mut self) -> &mut TfmStepCommonState;
+}
+
+impl<T: WithCommonStateMut> WithCommonStateMut for Box<T> {
+    fn common_state_mut(&mut self) -> &mut TfmStepCommonState {
+        self.as_mut().common_state_mut()
+    }
 }
 
 macro_rules! impl_with_common_state {
@@ -1609,23 +1914,23 @@ macro_rules! impl_with_common_state {
 }
 
 impl_with_common_state!(
+    SumCfg,
+    VelocityToDisplacementCfg,
     ForceFeedbackCfg,
-    Box<ForceFeedbackCfg>,
     ClampCfg,
     NopCfg,
     InvertCfg,
     EmaCfg,
-    Box<OneEuroFilterCfg>,
+    OneEuroFilterCfg,
     LinearCfg,
     SmoothstepCfg,
     SCurveCfg,
     NormExpCfg,
     SignedPowerCfg,
-    HighPassCfg,
+    _HighPassCfg,
     IntegrateCfg,
     SteeringCfg,
-    Box<SteeringCfg>,
-    Box<RaiseFallCfg>,
+    RaiseFallCfg,
     ScriptCfg,
 );
 
@@ -1637,18 +1942,21 @@ impl_with_common_state!(
 ///
 /// See the doc/steering.md for a full
 /// guide, signal-flow diagram, and configuration examples.
-#[derive(Debug, Clone, Serialize, Traversable, TraversableMut, Deserialize, JsonSchema, Validate)]
+#[derive(Debug, Clone, Serialize, Traversable, TraversableMut, Deserialize, JsonSchema, Validate, WithSelfSanitize)]
+#[sanitize_inplace_with_epilogue]
 #[with_doc_str]
 pub(crate) struct SteeringCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     /// Internal state
     common_state: TfmStepCommonStateShared,
 
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     /// Internal state
     pub(super) exe_state: Arc<std::sync::Mutex<SteeringExeState>>,
 
@@ -1657,12 +1965,15 @@ pub(crate) struct SteeringCfg {
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) desc: DescriptionCfg,
 
     /// Master on/off switch. When `false` the input passes through unchanged.
-    #[serde(default = "default_step_enabled")]
+    #[serde(default)]
     #[garde(skip)]
-    pub(crate) enabled: bool,
+    #[traverse(skip)]
+    #[sanitize_inplace(skip)]
+    pub(crate) enabled: StepEnabledCfg,
 
     /// Optional external variable (or device control) that persists the raw
     /// accumulated wheel angle (`pre_filter`) across ticks.
@@ -1671,6 +1982,7 @@ pub(crate) struct SteeringCfg {
     #[garde(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[sanitize_inplace(skip)]
     pub(crate) accumulator: Option<ValuePort<ValueXrcs, SanPolicyNone, RemapPolicySymmUnit>>,
 
     /// *(Reserved — currently unused.)*
@@ -1679,6 +1991,7 @@ pub(crate) struct SteeringCfg {
     #[allow(dead_code)]
     #[serde(default)]
     #[garde(range(min = 0.0))]
+    #[sanitize_inplace(skip)]
     pub(crate) deadzone_counts: BaseNumT,
 
     /// Multiplier applied to the raw input **before**
@@ -1763,6 +2076,20 @@ pub(crate) struct SteeringCfg {
     #[serde(default)]
     #[garde(skip)]
     pub(crate) integrated_user_input_transform: TfmSeqCfg,
+}
+
+impl SteeringCfg {
+    fn sanitize_inplace_epilogue(&mut self) {
+        let (_, _) = self
+            .integrated_user_input_transform
+            .recompute_steps_metadata_get_out_interval_and_relativity(AutoOrManual::Auto(InputValueMetadata {
+                interval: SYMM_UNIT_INTERVAL,
+                relativity: Relativity::Abs,
+            }));
+
+        self.common_state.set_out_interval(SYMM_UNIT_INTERVAL);
+        self.common_state.set_out_relativity(Relativity::Abs);
+    }
 }
 
 pub(crate) fn default_zero_range_zero_to_one() -> ValueSrcs {
@@ -1851,7 +2178,7 @@ impl TfmExeState for SteeringCfg {
 impl Default for SteeringCfg {
     fn default() -> Self {
         Self {
-            enabled: default_step_enabled(),
+            enabled: Default::default(),
             deadzone_counts: 0.0,
             input_gain: Default::default(),
             auto_center_halflife: Default::default(),
@@ -1867,41 +2194,52 @@ impl Default for SteeringCfg {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Traversable, TraversableMut, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Traversable, TraversableMut, Validate, WithSelfSanitize)]
 pub(crate) struct RaiseFallCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     common_state: TfmStepCommonStateShared,
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     pub(super) exe_state: Arc<std::sync::Mutex<RaiseFallExeState>>,
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) desc: DescriptionCfg,
-    #[serde(default = "default_step_enabled")]
+    #[serde(default)]
     #[garde(skip)]
-    pub(crate) enabled: bool,
+    #[traverse(skip)]
+    #[sanitize_inplace(skip)]
+    pub(crate) enabled: StepEnabledCfg,
     #[garde(range(min = 0.0))] // Rate limits must be positive
+    #[sanitize_inplace(skip)]
     pub(crate) raise_rate: BaseNumT,
     #[garde(range(min = 0.0))]
+    #[sanitize_inplace(skip)]
     pub(crate) fall_rate: BaseNumT,
     #[serde(default = "default_smoothing_alpha")]
     #[garde(range(min = 0.0, max = 1.0))]
+    #[sanitize_inplace(skip)]
     pub(crate) smoothing_alpha: BaseNumT,
     #[serde(default)]
     #[garde(range(min = 0.0))]
     /// Time delay must be positive
+    #[sanitize_inplace(skip)]
     pub(crate) fall_delay: BaseNumT,
     #[serde(serialize_with = "serialize_value_src_rt_ignore_interval")]
     #[serde(default)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) fall_hold_factor: ValueSrcs,
     #[serde(default)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) invert_fall_hold_factor: bool,
 }
 
@@ -1930,7 +2268,7 @@ impl PartialEq for RaiseFallCfg {
 impl Default for RaiseFallCfg {
     fn default() -> Self {
         Self {
-            enabled: default_step_enabled(),
+            enabled: Default::default(),
             raise_rate: Default::default(),
             fall_rate: Default::default(),
             smoothing_alpha: Default::default(),
@@ -2004,24 +2342,28 @@ pub(crate) enum ScriptLanguage {
 ///
 /// See `doc/script.md` for a full guide, signal-flow diagram, API
 /// reference, and configuration examples.
-#[derive(Clone, Serialize, Deserialize, JsonSchema, Debug, TraversableMut, Traversable)]
+#[derive(Clone, Serialize, Deserialize, JsonSchema, Debug, TraversableMut, Traversable, WithSelfSanitize)]
 #[with_doc_str]
+#[sanitize_inplace_with_epilogue]
 pub(crate) struct ScriptCfg {
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     /// Internal state
     common_state: TfmStepCommonStateShared,
 
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     /// Internal state
     pub(super) exe_state: Arc<std::sync::Mutex<Option<ScriptExeState>>>,
 
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
+    #[sanitize_inplace(skip)]
     #[cfg(feature = "gui")]
     /// Internal state
     pub(super) edit_epoch: usize,
@@ -2030,18 +2372,22 @@ pub(crate) struct ScriptCfg {
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
+    #[sanitize_inplace(skip)]
     pub(crate) desc: DescriptionCfg,
 
     /// Master on/off switch. When `false` the input passes through
     /// unchanged and the script is **not** executed.
-    #[serde(default = "default_step_enabled")]
-    pub(crate) enabled: bool,
+    #[serde(default)]
+    #[traverse(skip)]
+    #[sanitize_inplace(skip)]
+    pub(crate) enabled: StepEnabledCfg,
 
     /// Scripting language to use. Currently only `Luau` is supported.
     ///
     /// Defaults to `Luau`; may be omitted entirely.
     #[serde(default)]
     #[traverse(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) lang: ScriptLanguage,
 
     /// Luau source code executed on every tick.
@@ -2058,6 +2404,7 @@ pub(crate) struct ScriptCfg {
     /// Use YAML block scalars (`|-`) for multi-line scripts.
     #[serde(default)]
     #[traverse(skip)]
+    #[sanitize_inplace(skip)]
     pub(crate) script: String,
 
     /// Overrides the **output interval metadata** of this step.
@@ -2067,6 +2414,7 @@ pub(crate) struct ScriptCfg {
     /// range and downstream steps need the correct interval.
     #[traverse(skip)]
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[sanitize_inplace(skip)]
     pub(crate) output_interval: Option<NumInterval<BaseNumT>>,
 
     /// Overrides the **output relativity metadata** of this step.
@@ -2076,6 +2424,7 @@ pub(crate) struct ScriptCfg {
     /// between relative and absolute semantics.
     #[traverse(skip)]
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[sanitize_inplace(skip)]
     pub(crate) output_relativity: Option<Relativity>,
 
     /// Auxiliary data **sources** readable from the script via
@@ -2118,6 +2467,19 @@ pub(crate) struct ScriptCfg {
     pub(crate) aux_transformations: BTreeMap<String, TfmSeqCfg>,
 }
 
+impl ScriptCfg {
+    fn sanitize_inplace_epilogue(&mut self) {
+        let out_interval = self
+            .output_interval
+            .unwrap_or(self.common_state_ref().get_in_interval());
+        let out_relativity = self
+            .output_relativity
+            .unwrap_or(self.common_state_ref().get_in_relativity());
+        self.common_state_mut().set_out_interval(out_interval);
+        self.common_state_mut().set_out_relativity(out_relativity);
+    }
+}
+
 impl TfmCfgDuplicateWithNewState for ScriptCfg {
     fn duplicate_with_new_state(&self) -> Self {
         let mut s = self.clone();
@@ -2143,9 +2505,9 @@ impl PartialEq for ScriptCfg {
 
 impl Default for ScriptCfg {
     fn default() -> Self {
-        Self {
+        let mut tmp = Self {
             desc: Default::default(),
-            enabled: default_step_enabled(),
+            enabled: Default::default(),
             lang: Default::default(),
             script: Default::default(),
             output_interval: Default::default(),
@@ -2157,7 +2519,9 @@ impl Default for ScriptCfg {
             exe_state: Default::default(),
             #[cfg(feature = "gui")]
             edit_epoch: Default::default(),
-        }
+        };
+        tmp.sanitize_inplace(());
+        tmp
     }
 }
 
@@ -2213,11 +2577,13 @@ impl WithRuntimeId for TfmStepCfg {
     }
 }
 
-impl WithDescriptionMut for TfmStepCfg {
+impl _WithDescriptionMut for TfmStepCfg {
     fn description_mut(&mut self) -> Option<&mut DescriptionCfg> {
         match self {
             TfmStepCfg::Nop(_) => None,
             TfmStepCfg::Invert(_) => None,
+            TfmStepCfg::VelocityToDisplacement(s) => Some(&mut s.desc),
+            TfmStepCfg::Sum(s) => Some(&mut s.desc),
             TfmStepCfg::Integrate(s) => Some(&mut s.desc),
             TfmStepCfg::Steering(s) => Some(&mut s.desc),
             TfmStepCfg::Clamp(s) => Some(&mut s.desc),
@@ -2247,11 +2613,11 @@ mod tests {
         clamp_cfg.common_state_mut().set_input_interval((3.0..4.0).into());
 
         clamp_cfg.range = (-100.0..-100.0).into();
-        clamp_cfg.sanitize_inplace();
+        clamp_cfg.sanitize_inplace(());
         assert!(clamp_cfg.range.to == 3.0);
 
         clamp_cfg.range = (100.0..100.0).into();
-        clamp_cfg.sanitize_inplace();
+        clamp_cfg.sanitize_inplace(());
         assert!(clamp_cfg.range.from == 4.0);
     }
 

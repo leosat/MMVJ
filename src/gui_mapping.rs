@@ -1,41 +1,21 @@
-use crate::config::MORE_DEBUG;
-use crate::gui_common::{
-    DrawEgui, GuiCmd, GuiDndJob, GuiDndJobMoveTfmStep, ScriptAuxKind, bool_to_simple_change_gui_cmd, draw_collapsing_ui,
-};
-use crate::gui_telemetry_graph::GuiTelemetryGraphStates;
-use crate::gui_transform_step::GuiInTfmStepsSeq;
+use crate::config::{MORE_DEBUG, WithSelfSanitize};
+use crate::gui_common::{DrawEgui, GuiCmd, GuiDndJobMoveTfmStep, bool_to_simple_change_gui_cmd, draw_collapsing_ui};
+use crate::gui_transform_step::GuiInCommon;
 use crate::gui_value::{GuiInValue, GuiInValueEditParams};
 use crate::mapping::MappingEngineCmd;
-use crate::schemas_cfg::{DevicesCfgNew, VariablesCfg};
 
-use crate::schemas_common::{ObjId, WithRuntimeId};
+use crate::schemas_common::WithRuntimeId;
 use crate::schemas_mapping::Mapping;
 use crate::schemas_transform::{DynValFilter, TfmCfgDuplicateTreeWithNewState, collect_dynamic_value_matchers};
 use crate::schemas_transform::{TfmSeqCfg, TfmStepCfg};
 use crate::schemas_value::{DynValueRefs, ValueDsts};
 use std::any::Any;
-use std::collections::HashMap;
-use std::ops::ControlFlow;
 use std::sync::atomic::Ordering::Relaxed;
 
 use egui::epaint::CornerRadiusF32;
 use egui::{Frame, Shadow, TextEdit};
-use traversable::TraversableMut;
 use unchecked_refcell::UncheckedRefCell;
 // -------------------------------
-
-#[derive(Default, Clone, Copy)]
-pub(crate) enum GuiInMapping<'s> {
-    #[default]
-    _Display,
-    Edit {
-        graph_states: &'s UncheckedRefCell<GuiTelemetryGraphStates>,
-        cfg_devices: &'s DevicesCfgNew,
-        cfg_variables: &'s VariablesCfg,
-        #[allow(clippy::type_complexity)]
-        transient_script_aux_edits: &'s UncheckedRefCell<HashMap<(ObjId, ScriptAuxKind), (String, String)>>,
-    },
-}
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum ValueUsageContext {
@@ -68,22 +48,18 @@ impl ValueUsageContext {
 }
 
 impl<'s> DrawEgui<'s> for Mapping {
-    type In = (usize, GuiInMapping<'s>);
+    type In = (usize, GuiInCommon<'s>);
     type Out = Option<GuiCmd>;
 
-    fn egui(&mut self, state: Self::In, ui: &mut egui::Ui) -> Self::Out {
+    fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut gui_out = None;
-        let _mapping_idx = state.0;
-        let state = state.1;
-        match state {
-            GuiInMapping::_Display => gui_out,
-            GuiInMapping::Edit {
-                graph_states,
-                cfg_devices,
-                cfg_variables,
-                transient_script_aux_edits,
-                ..
-            } => {
+        let _mapping_idx = gui_in.0;
+        let gui_in_common = gui_in.1;
+        let gui_style = gui_in.1.get_style();
+
+        match gui_in_common {
+            GuiInCommon::_Display { .. } => gui_out,
+            GuiInCommon::Edit { .. } => {
                 gui_out = Frame::default()
                     .inner_margin(0)
                     .shadow(Shadow::default())
@@ -148,10 +124,9 @@ impl<'s> DrawEgui<'s> for Mapping {
                                         GuiInValue::Edit(GuiInValueEditParams {
                                             allow_interval_edit: true,
                                             slider_log_scale: false,
-                                            cfg_variables,
-                                            cfg_devices,
                                             name: "Choose main mapping source",
                                             choice_case: ValueUsageContext::MappingSrc.into(),
+                                            gui_common_ctx: &gui_in_common,
                                         }),
                                         ui,
                                     );
@@ -195,10 +170,9 @@ impl<'s> DrawEgui<'s> for Mapping {
                                         GuiInValue::Edit(GuiInValueEditParams {
                                             allow_interval_edit: true,
                                             slider_log_scale: false,
-                                            cfg_variables,
-                                            cfg_devices,
                                             name: "Choose main mapping destination",
                                             choice_case: ValueUsageContext::MappingDst.into(),
+                                            gui_common_ctx: &gui_in_common,
                                         }),
                                         ui,
                                     );
@@ -234,47 +208,18 @@ impl<'s> DrawEgui<'s> for Mapping {
 
                         gui_out = gui_out.or(ui
                             .collapsing(
-                                egui::RichText::new("Transformation").heading(), // .background_color(Color32::from_gray(220))
-                                // .color(Color32::BLACK)
-                                |ui| {
-                                    self.transformation.egui(
-                                        GuiInTfmStepsSeq::Edit {
-                                            graph_states,
-                                            cfg_devices,
-                                            hier: Vec::new(),
-                                            cfg_variables,
-                                            transient_script_aux_edits,
-                                        },
-                                        ui,
-                                    )
-                                },
+                                gui_style.tfm_big_title_decorate(egui::RichText::new("Transformation")),
+                                |ui| self.transformation.egui(gui_in_common, ui),
                             )
                             .body_returned
                             .unwrap_or_default());
 
-                        if let Some(GuiCmd::DragAndDrop(GuiDndJob::MoveTfmStep(dnd_job))) = &gui_out {
-                            if MORE_DEBUG {
-                                dbg!(&dnd_job);
-                            }
-                            let mut dnd_visitor = DndJobMoveTfmStep_Visitor {
-                                dnd_job: dnd_job.clone(),
-                                dropped_tfm_step: None,
-                            };
-                            for i in 0..=1 {
-                                if self.transformation.traverse_mut(&mut dnd_visitor) == ControlFlow::Break(()) {
-                                    gui_out = Some(GuiCmd::ConfigChangeSimple);
-                                    break;
-                                } else if i == 1 {
-                                    log::error!("Dnd job failed to complete in 2 traversals. Error in implementation.");
-                                }
-                            }
-                        }
                         gui_out
                     })
                     .inner;
 
                 if gui_out.is_some() {
-                    self.recompute_metadata(Some(self.name.clone()));
+                    self.sanitize_inplace(());
                 }
 
                 gui_out
@@ -387,11 +332,13 @@ impl crate::gui_main::GuiMain {
                         .egui(
                             (
                                 self.gui_tab_mappings_current_opened_mapping_idx,
-                                GuiInMapping::Edit {
+                                GuiInCommon::Edit {
                                     graph_states: &self.telemetry_graphs,
                                     cfg_devices: &self.cfg.devices,
                                     cfg_variables: &self.cfg.variables,
                                     transient_script_aux_edits: &self.transient_states_script_aux_edit,
+                                    hier: &UncheckedRefCell::new(Vec::new()),
+                                    style: &self.style,
                                 },
                             ),
                             ui,
@@ -418,9 +365,9 @@ impl crate::gui_main::GuiMain {
 }
 
 #[allow(non_camel_case_types)]
-struct DndJobMoveTfmStep_Visitor {
-    dnd_job: GuiDndJobMoveTfmStep,
-    dropped_tfm_step: Option<TfmStepCfg>,
+pub(crate) struct DndJobMoveTfmStep_Visitor {
+    pub(crate) dnd_job: GuiDndJobMoveTfmStep,
+    pub(crate) dropped_tfm_step: Option<TfmStepCfg>,
 }
 
 impl traversable::VisitorMut for DndJobMoveTfmStep_Visitor {
@@ -460,13 +407,13 @@ impl traversable::VisitorMut for DndJobMoveTfmStep_Visitor {
                             .steps
                             .retain_mut(|step| step.get_id() != self.dnd_job.src_obj_runtime_id);
 
-                        tfm_seq.recompute_metadata_with_known_inputs();
+                        tfm_seq.recompute_metadata_and_sanitize_recursive(None);
                     }
                 }
             } else if tfm_seq.id == self.dnd_job.dst_container_id_opt.unwrap() {
-                if MORE_DEBUG {
-                    dbg!("Drag and drop: insering!");
-                }
+                //if MORE_DEBUG {
+                // dbg!("Drag and drop: inserting!");
+                //}
 
                 if self.dnd_job.dst_idx_opt.unwrap() == usize::MAX {
                     tfm_seq.steps.push(self.dropped_tfm_step.as_ref().unwrap().clone());
@@ -479,8 +426,7 @@ impl traversable::VisitorMut for DndJobMoveTfmStep_Visitor {
                     self.dnd_job.dst_idx_opt.unwrap()
                 };
 
-                tfm_seq.recompute_metadata_with_known_inputs();
-
+                tfm_seq.recompute_metadata_and_sanitize_recursive(None);
                 return std::ops::ControlFlow::Break(());
             }
         }

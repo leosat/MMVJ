@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -6,6 +8,15 @@ pub(crate) enum Relativity {
     Rel,
     #[default]
     Abs,
+}
+
+impl Display for Relativity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Relativity::Rel => "Rel",
+            Relativity::Abs => "Abs",
+        })
+    }
 }
 
 impl From<Relativity> for bool {

@@ -1,3 +1,4 @@
+use crate::config::WithSelfSanitize;
 use crate::device_and_device_manager::DeviceKind;
 use crate::mapping::MappingEngineCmd;
 use crate::{schemas_common::ObjId, schemas_control_matcher::ControlMatchers};
@@ -85,7 +86,7 @@ impl traversable::VisitorMut for GuiCmdVariableChange {
 
     fn leave_mut(&mut self, this: &mut dyn core::any::Any) -> std::ops::ControlFlow<Self::Break> {
         if let Some(mapping) = this.downcast_mut::<Mapping>() {
-            mapping.recompute_metadata(None);
+            mapping.sanitize_inplace(());
         }
 
         std::ops::ControlFlow::Continue(())
@@ -301,6 +302,10 @@ pub(crate) fn bool_to_simple_change_gui_cmd(changed: bool) -> Option<GuiCmd> {
         None
     }
 }
+
+// -------------------------------
+
+// -------------------------------
 
 // pub(crate) fn bool_to_general_change_gui_cmd(changed: bool) -> Option<GuiCmd> {
 //     if changed {

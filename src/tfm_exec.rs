@@ -1,3 +1,4 @@
+use crate::config::WithSelfSanitize;
 use crate::filters::OneEuroFilter;
 use crate::filters::clamp_dt_by_min_and_max_period;
 use crate::num_interval::SYMM_UNIT_INTERVAL;
@@ -13,7 +14,9 @@ use crate::relativity::Relativity;
 
 use crate::schemas_common::WithRuntimeId;
 
+use crate::schemas_transform::SumCfg;
 use crate::schemas_transform::TfmCfgDuplicateWithNewState;
+use crate::schemas_transform::VelocityToDisplacementCfg;
 use crate::schemas_transform::WithCommonState;
 use crate::schemas_transform::{
     ClampCfg, EmaCfg, ForceFeedbackComponent, IntegrateCfg, InvertCfg, LinearCfg, NormExpCfg, OneEuroFilterCfg,
@@ -21,6 +24,7 @@ use crate::schemas_transform::{
 };
 
 use crate::schemas_value::DeviceControlMatcherRef;
+use crate::schemas_value::WithLastKnownIOSettable;
 use crate::schemas_value::{DynValueRefs, ValueDsts, WithNumInterval, WithRelativity};
 use crate::schemas_value::{TfmValue, WithNumericValue};
 
@@ -45,8 +49,14 @@ pub(crate) trait TfmExeState {
     fn exe_state_reset(&self, reset_with: Self::ResetInput<'_>);
 }
 
+impl TfmExecCtx for () {}
+
 #[allow(unused)]
 pub(crate) trait TfmExecCtx {
+    fn get_dt(&self) -> std::time::Duration {
+        std::time::Duration::ZERO
+    }
+
     fn is_idle_tick(&self) -> bool {
         false
     }
@@ -60,7 +70,7 @@ pub(crate) trait TfmExecCtx {
     }
 
     #[deprecated = "Raw usage of this API is deprecated, replace with ValuePort usage when API is complete."]
-    fn device_control_matcher_ref_write(&self, dcm_ref: &DeviceControlMatcherRef, value: BaseNumT);
+    fn device_control_matcher_ref_write(&self, dcm_ref: &DeviceControlMatcherRef, value: BaseNumT) {}
 
     fn get_lua(&self) -> Option<&mlua::Lua> {
         None
@@ -91,30 +101,22 @@ pub(crate) trait TfmExecCtx {
     }
 }
 
-pub(crate) trait WithTfmExec: TfmCfgDuplicateWithNewState {
+pub(crate) trait WithTfmExec: TfmCfgDuplicateWithNewState + WithSelfSanitize {
     fn exec(&self, input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT>;
 }
 
 impl WithTfmExec for TfmSeqCfg {
     fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
+        let in_interval = self.get_in_interval();
+        if input.interval != in_interval {
+            input.value = in_interval.map_from(input.value, &input.interval, OutOfRangePolicy::Clamp);
+            input.interval = in_interval;
+        }
+        self.set_last_known_io((Some(input.value), None));
         for step in &self.steps {
             input = step.exec(input, ctx);
-            if !input.interval.contains_value_closed(input.value) {
-                branches::mark_unlikely();
-                if get_debug_level().is_mid_or_above() {
-                    branches::mark_unlikely();
-                    log::warn!(
-                        "Value {} must fit in interval {} after transformation step ``{}'' (ID: {}). \
-                         Each step must ensure it, clamping!",
-                        input.value,
-                        input.interval,
-                        step,
-                        step.get_id()
-                    );
-                }
-                input.value = input.interval.clamp(input.value);
-            }
         }
+        self.set_last_known_io((None, Some(input.value)));
         input
     }
 }
@@ -143,7 +145,25 @@ impl WithTfmExec for TfmStepCfg {
             TfmStepCfg::Script(s) => s.exec(input, ctx),
             // TfmStepCfg::_HighPass(_) => input,
             // TfmStepCfg::_ForceFeedback(_) => input,
+            TfmStepCfg::Sum(s) => s.exec(input, ctx),
+            TfmStepCfg::VelocityToDisplacement(s) => s.exec(input, ctx),
         };
+
+        if !input.interval.contains_value_closed(input.value) {
+            branches::mark_unlikely();
+            if get_debug_level().is_mid_or_above() {
+                branches::mark_unlikely();
+                log::warn!(
+                    "Value {} must fit in interval {} after transformation step ``{}'' (ID: {}). \
+                         Each step must ensure it, clamping!",
+                    input.value,
+                    input.interval,
+                    self,
+                    self.get_id()
+                );
+            }
+            input.value = input.interval.clamp(input.value);
+        }
 
         self.common_state_ref().last_out.store(input.value, Relaxed);
         #[cfg(feature = "gui")]
@@ -154,9 +174,41 @@ impl WithTfmExec for TfmStepCfg {
     }
 }
 
+impl WithTfmExec for SumCfg {
+    fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
+        if branches::unlikely(!*self.enabled) {
+            return input;
+        }
+        self.sources.iter().for_each(|src| {
+            input.value += src.port_get_numeric_value(Some(ctx));
+        });
+        input.interval = self.out_interval;
+        input
+    }
+}
+
+impl WithTfmExec for VelocityToDisplacementCfg {
+    fn exec(&self, mut input: TfmValue<BaseNumT>, _ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
+        if branches::unlikely(!*self.enabled) {
+            return input;
+        }
+        input.value = self.out_interval.map_from(
+            input.value
+                * self.multiplier
+                * (std::time::Instant::now() - self.common_state_ref().last_time.get()).as_secs_f32() as BaseNumT,
+            &input.interval,
+            OutOfRangePolicy::Clamp,
+        );
+        input.interval = self.out_interval;
+        input.relativity = self.common_state_ref().is_out_relative().into();
+        self.common_state_ref().last_time.set(std::time::Instant::now());
+        input
+    }
+}
+
 impl WithTfmExec for ClampCfg {
     fn exec(&self, mut input: TfmValue<BaseNumT>, _ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
-        if !self.enabled {
+        if !*self.enabled {
             return input;
         }
         input.value = self.get_clamping_interval().clamp(input.value);
@@ -185,16 +237,16 @@ impl TfmExeState for OneEuroFilterCfg {
 
 impl WithTfmExec for OneEuroFilterCfg {
     fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
-        if self.enabled
+        if *self.enabled
             && (!ctx.is_idle_tick() || input.relativity == Relativity::Abs || self.on_relative_input_feed_on_idle)
         {
             input.value = self.exe_state_mut().filter(
                 input.value,
                 Instant::now(),
-                self.min_cutoff_hz.get_numeric_value(),
+                self.min_cutoff_hz.port_get_numeric_value(Some(ctx)),
                 // .get_numeric_value_clamped_predicated(ClampPred::IfDynamic),
-                self.beta.get_numeric_value(), //get_numeric_value_clamped_predicated(ClampPred::IfDynamic),
-                self.d_cutoff_hz.get_numeric_value(), //.get_numeric_value_clamped_predicated(ClampPred::IfDynamic),
+                self.beta.port_get_numeric_value(Some(ctx)), //get_numeric_value_clamped_predicated(ClampPred::IfDynamic),
+                self.d_cutoff_hz.port_get_numeric_value(Some(ctx)), //.get_numeric_value_clamped_predicated(ClampPred::IfDynamic),
             );
         } else if self.on_relative_input_reset_on_idle {
             self.exe_state_reset(input.value);
@@ -239,9 +291,9 @@ impl TfmExeState for RaiseFallCfg {
     }
 }
 
-impl WithTfmExec for RaiseFallCfg {
+impl WithTfmExec for Box<RaiseFallCfg> {
     fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
-        if !self.enabled {
+        if !*self.enabled {
             return input;
         }
         if input.relativity != Relativity::Abs {
@@ -326,12 +378,12 @@ impl TfmExeState for EmaCfg {
 
 impl WithTfmExec for EmaCfg {
     fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
-        if self.enabled
+        if *self.enabled
             && (!ctx.is_idle_tick() || input.relativity == Relativity::Abs || self.on_relative_input_feed_on_idle)
         {
-            input.value = self
-                .exe_state_mut()
-                .filter(input.value, Instant::now(), self.tau.get_numeric_value());
+            input.value =
+                self.exe_state_mut()
+                    .filter(input.value, Instant::now(), self.tau.port_get_numeric_value(Some(ctx)));
         } else if self.on_relative_input_reset_on_idle {
             self.exe_state_reset(input.value);
         }
@@ -342,7 +394,7 @@ impl WithTfmExec for EmaCfg {
 
 impl WithTfmExec for SignedPowerCfg {
     fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
-        if !(self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
+        if !(*self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
             return input;
         }
         input.value = if self.center_symmetric {
@@ -369,7 +421,7 @@ impl WithTfmExec for SignedPowerCfg {
 
 impl WithTfmExec for NormExpCfg {
     fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
-        if !(self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
+        if !(*self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
             return input;
         }
         input.value = if self.center_symmetric {
@@ -396,7 +448,7 @@ impl WithTfmExec for NormExpCfg {
 
 impl WithTfmExec for SCurveCfg {
     fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
-        if !(self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
+        if !(*self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
             return input;
         }
         input.value = input.interval.map_from_unit(
@@ -414,7 +466,7 @@ impl WithTfmExec for SCurveCfg {
 
 impl WithTfmExec for SmoothstepCfg {
     fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
-        if !(self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
+        if !(*self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
             return input;
         }
         input.value = input.interval.map_from_unit(
@@ -431,7 +483,7 @@ impl WithTfmExec for SmoothstepCfg {
 
 impl WithTfmExec for LinearCfg {
     fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
-        if !(self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
+        if !(*self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
             return input;
         }
         input.value = if self.center_symmetric {
@@ -575,7 +627,7 @@ impl TfmExeState for ScriptCfg {
 impl WithTfmExec for ScriptCfg {
     #[inline]
     fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
-        if !self.enabled {
+        if !*self.enabled {
             return input;
         }
 
@@ -679,7 +731,7 @@ impl WithTfmExec for ScriptCfg {
                                 SrcOrDstKey::Num(0) => Ok(input.value),
                                 SrcOrDstKey::Str(s) => {
                                     if let Some(src) = self.aux_srcs.get(&s) {
-                                        Ok(src.get_numeric_value())
+                                        Ok(src.port_get_numeric_value(Some(ctx)))
                                     } else {
                                         Err(mlua::Error::RuntimeError(format!("Can't find source with key {s}")))
                                     }
@@ -688,7 +740,7 @@ impl WithTfmExec for ScriptCfg {
                                     .aux_srcs
                                     .iter()
                                     .nth(n as usize - 1)
-                                    .map(|v| v.1.get_numeric_value())
+                                    .map(|v| v.1.port_get_numeric_value(Some(ctx)))
                                     .ok_or_else(|| {
                                         mlua::Error::RuntimeError(format!("Can't find source with key {n}"))
                                     }),
@@ -787,7 +839,7 @@ impl WithTfmExec for ScriptCfg {
 
 impl WithTfmExec for InvertCfg {
     fn exec(&self, mut input: TfmValue<BaseNumT>, _ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
-        if !self.enabled {
+        if !*self.enabled {
             return input;
         }
         input.value = match input.relativity {
@@ -798,40 +850,63 @@ impl WithTfmExec for InvertCfg {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialOrd, PartialEq)]
-pub(crate) struct IntegrateExeState {
-    pub(crate) prev_val: BaseNumT, //  prev_val: (self.range.from() + self.range.to()) * 0.5,
-}
+// #[derive(Default, Debug, Clone, Copy, PartialOrd, PartialEq)]
+// pub(crate) struct IntegrateExeState {
+//     pub(crate) prev_val: BaseNumT, //  prev_val: (self.range.from() + self.range.to()) * 0.5,
+// }
 
-impl TfmExeState for IntegrateCfg {
-    type StateMutT<'a>
-        = std::sync::MutexGuard<'a, IntegrateExeState>
-    where
-        Self: 'a;
+// impl TfmExeState for IntegrateCfg {
+//     type StateMutT<'a>
+//         = std::sync::MutexGuard<'a, IntegrateExeState>
+//     where
+//         Self: 'a;
 
-    type ResetInput<'b> = ();
+//     type ResetInput<'b> = ();
 
-    fn exe_state_mut(&self) -> Self::StateMutT<'_> {
-        self.exe_state.lock().unwrap()
-    }
+//     fn exe_state_mut(&self) -> Self::StateMutT<'_> {
+//         self.exe_state.lock().unwrap()
+//     }
 
-    fn exe_state_reset(&self, _: Self::ResetInput<'_>) {
-        *self.exe_state_mut() = Default::default()
+//     fn exe_state_reset(&self, _: Self::ResetInput<'_>) {
+//         *self.exe_state_mut() = Default::default()
+//     }
+// }
+
+impl IntegrateCfg {
+    pub(crate) fn get_delta_acc_norm(&self, input: TfmValue<BaseNumT>) -> BaseNumT {
+        input.value.signum()
+            * self.accumulator.port_get_interval().map_from(
+                input
+                    .interval
+                    .map_to_symm_unit::<BaseNumT>(input.value, OutOfRangePolicy::Clamp)
+                    .abs(),
+                &UNIT_INTERVAL,
+                OutOfRangePolicy::Clamp,
+            )
     }
 }
 
 impl WithTfmExec for IntegrateCfg {
     fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
-        if !(self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
+        if !*self.enabled {
             return input;
         }
-        let mut state = self.exe_state_mut();
-        if input.value.abs() < self.deadzone_norm * self.range.span() {
-            input.value = 0.0;
-        }
-        state.prev_val = self.range.clamp(state.prev_val + input.value * self.smoothing_alpha);
+
+        // dbg!(acc_interval);
+
+        let acc_value = self.accumulator.port_get_numeric_value(Some(ctx));
+        let acc_interval = self.accumulator.port_get_interval();
+
+        input.value *= self.smoothing_alpha;
+
+        let acc_delta = self.get_delta_acc_norm(input);
+        let acc_out = acc_interval.clamp(acc_value + acc_delta);
+
+        self.accumulator
+            .port_set_numeric_value_and_flush_to_devices(acc_out, ctx);
+
         TfmValue::<BaseNumT> {
-            value: state.prev_val,
+            value: self.range.map_from(acc_out, &acc_interval, OutOfRangePolicy::Clamp),
             interval: self.range,
             relativity: Relativity::Abs,
         }
@@ -853,28 +928,28 @@ impl Default for SteeringExeState {
     }
 }
 
-impl WithTfmExec for SteeringCfg {
+impl WithTfmExec for Box<SteeringCfg> {
     fn exec(&self, input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
-        if !self.enabled {
+        if !*self.enabled {
             return input;
         }
         let now = Instant::now();
         let state = &mut self.exe_state_mut();
         let value = input.value;
 
-        let auto_center_along_force_feedback = self.auto_center_along_force_feedback.get_numeric_value();
+        let auto_center_along_force_feedback = self.auto_center_along_force_feedback.port_get_numeric_value(Some(ctx));
 
         let dt = clamp_dt_by_min_and_max_period((now - state.last_time).as_secs_f32() as BaseNumT);
 
         let delta: BaseNumT = input
             .interval
             .map_to_symm_unit::<BaseNumT>(value, OutOfRangePolicy::Clamp)
-            * self.input_gain.get_numeric_value();
+            * self.input_gain.port_get_numeric_value(Some(ctx));
 
         let mut post_filter: BaseNumT;
 
         if let Some(acc) = &self.accumulator {
-            state.pre_filter = acc.get_numeric_value();
+            state.pre_filter = acc.port_get_numeric_value(Some(ctx));
         }
 
         state.pre_filter = SYMM_UNIT_INTERVAL.clamp(state.pre_filter.add(delta));
@@ -942,15 +1017,15 @@ impl WithTfmExec for SteeringCfg {
             now,
         );
 
-        let hold_factor_unit = self.hold_factor.get_numeric_value();
+        let hold_factor_unit = self.hold_factor.port_get_numeric_value(Some(ctx));
 
         '_FFB_and_autocentering: {
             let ff_force_symm_norm = if let Some(ff_config) = &self.force_feedback {
-                if ff_config.enabled {
+                if *ff_config.enabled {
                     let raw_force = if let Some(custom_src) = &ff_config.custom_source {
                         SYMM_UNIT_INTERVAL.map_from(
-                            custom_src.get_numeric_value(),
-                            &custom_src.get_interval(),
+                            custom_src.port_get_numeric_value(None::<&()>),
+                            &custom_src.port_get_interval(),
                             OutOfRangePolicy::WarnIfDebugAndClamp,
                         )
                     } else {
@@ -998,7 +1073,7 @@ impl WithTfmExec for SteeringCfg {
                     };
 
                     let filtered_and_scaled_force =
-                        SYMM_UNIT_INTERVAL.clamp(filtered_force * ff_config.gain.get_numeric_value());
+                        SYMM_UNIT_INTERVAL.clamp(filtered_force * ff_config.gain.port_get_numeric_value(Some(ctx)));
 
                     if ff_config.invert {
                         -filtered_and_scaled_force
@@ -1042,7 +1117,7 @@ impl WithTfmExec for SteeringCfg {
                 );
             }
 
-            let autocentering_halflife = self.auto_center_halflife.get_numeric_value().abs();
+            let autocentering_halflife = self.auto_center_halflife.port_get_numeric_value(Some(ctx)).abs();
 
             let ffb_is_small = ff_force_symm_norm.abs() < 1e-4;
 

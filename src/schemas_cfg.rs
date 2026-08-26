@@ -21,7 +21,7 @@ use with_doc_str::with_doc_str;
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub(crate) struct DescriptionCfg(pub(crate) String);
 
-pub(crate) trait WithDescriptionMut {
+pub(crate) trait _WithDescriptionMut {
     fn description_mut(&mut self) -> Option<&mut DescriptionCfg>;
 }
 

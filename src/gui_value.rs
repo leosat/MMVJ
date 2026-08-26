@@ -4,6 +4,7 @@ use eframe::egui;
 
 use crate::config::WithSelfSanitize;
 use crate::gui_common::{GuiCmd, bool_to_simple_change_gui_cmd, draw_collapsing_ui};
+use crate::gui_transform_step::GuiInCommon;
 use crate::mapping::MappingEngineCmd;
 use crate::relativity::Relativity;
 
@@ -11,8 +12,8 @@ use crate::schemas_value::ValueIface;
 use crate::schemas_value::{AutoOrManual, ValueXrcs, WithNumIntervalSettable};
 
 use crate::schemas_value_port::{
-    PortRemapPolicy, PortSanPolicy, SanPolicyNone, SanPolicyUseFromPortInner, ValuePort, ValuePortIface,
-    WithNumericValueSanitizerStatic,
+    PortRemapPolicy, PortSanPolicy, SanPolicyNone, SanPolicyUseFromPortInner, TfmPolicyDefaultChoice, TfmPolicyIface,
+    ValuePort, ValuePortIface, WithNumericValueSanitizerStatic,
 };
 
 use crate::{
@@ -37,8 +38,7 @@ pub(crate) struct GuiInValueEditParams<'s> {
     pub(crate) choice_case: Option<ValueUsageContext>,
     pub(crate) allow_interval_edit: bool,
     pub(crate) slider_log_scale: bool,
-    pub(crate) cfg_variables: &'s VariablesCfg,
-    pub(crate) cfg_devices: &'s DevicesCfgNew,
+    pub(crate) gui_common_ctx: &'s GuiInCommon<'s>,
 }
 
 #[derive(Clone, Copy)]
@@ -120,7 +120,9 @@ impl<'s> DrawEgui<'s> for NumInterval<BaseNumT> {
                 sanitize_and_sort,
                 truncate,
             } => {
-                ui.label(from_label);
+                if !from_label.is_empty() {
+                    ui.label(from_label);
+                }
                 changed |= ui
                     .add(
                         egui::DragValue::new(&mut self.from)
@@ -129,7 +131,9 @@ impl<'s> DrawEgui<'s> for NumInterval<BaseNumT> {
                     )
                     .changed();
                 ui.separator();
-                ui.label(to_label);
+                if !to_label.is_empty() {
+                    ui.label(to_label);
+                }
                 changed |= ui
                     .add(
                         egui::DragValue::new(&mut self.to)
@@ -154,20 +158,25 @@ impl<'s> DrawEgui<'s> for NumInterval<BaseNumT> {
     }
 }
 
-impl<'s, PortInnerT, SanPolicyT, RemapT> DrawEgui<'s> for ValuePort<PortInnerT, SanPolicyT, RemapT>
+impl<'s, PortInnerT, SanPolicyT, RemapT, TfmT> DrawEgui<'s> for ValuePort<PortInnerT, SanPolicyT, RemapT, TfmT>
 where
-    <Self as WithNumericValue>::ValueT: eframe::emath::Numeric,
+    <PortInnerT as WithNumericValue>::ValueT: eframe::emath::Numeric,
     RemapT: PortRemapPolicy<PortInnerT::ValueT>,
+    TfmT: TfmPolicyIface,
     SanPolicyT: PortSanPolicy<PortInnerT> + GuiSanInfo<PortInnerT>,
-    PortInnerT: ValueIface + DrawEgui<'s, In = GuiInValue<'s>, Out = Option<GuiCmd>>,
-    NumInterval<<Self as WithNumericValue>::ValueT>: DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
+    PortInnerT: ValueIface + DrawEgui<'s, In = GuiInValue<'s>, Out = Option<GuiCmd>> + TfmPolicyDefaultChoice,
+    NumInterval<<PortInnerT as WithNumericValue>::ValueT>: DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
+    BaseNumT: From<<PortInnerT as WithNumericValue>::ValueT>,
+    <PortInnerT as WithNumericValue>::ValueT: From<BaseNumT>,
 {
     type In = GuiInValue<'s>;
     type Out = Option<GuiCmd>;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let gui_out = draw_egui_for_port::<SanPolicyT, Self, PortInnerT>(self, gui_in, ui);
-        self.sanitize_inplace();
+        if gui_out.is_some() {
+            self.sanitize_inplace(());
+        }
         gui_out
     }
 }
@@ -180,8 +189,8 @@ fn get_new_value_target<'s>(gui_in: GuiInValue<'s>, ui: &mut egui::Ui) -> Option
             ui,
             params.name,
             params.name,
-            params.cfg_devices,
-            params.cfg_variables,
+            params.gui_common_ctx.cfg_devices(),
+            params.gui_common_ctx.cfg_variables(),
         )
     {
         target.into()
@@ -218,113 +227,149 @@ where
     PortInnerT: ValueIface,
     SanPolicyT: GuiSanInfo<PortInnerT>,
     <PortT as ValuePortIface>::InnerT: ValueIface + DrawEgui<'s, In = GuiInValue<'s>, Out = Option<GuiCmd>>,
-    NumInterval<<PortT as WithNumericValue>::ValueT>: DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
-    PortT::ValueT: eframe::emath::Numeric,
+    NumInterval<<<PortT as ValuePortIface>::InnerT as WithNumericValue>::ValueT>:
+        DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
+    PortInnerT::ValueT: eframe::emath::Numeric,
+    BaseNumT: From<<<PortT as ValuePortIface>::InnerT as WithNumericValue>::ValueT>,
+    <<PortT as ValuePortIface>::InnerT as WithNumericValue>::ValueT: From<BaseNumT>,
 {
-    if let Some(new_target) = get_new_value_target(gui_in, ui) {
-        *port.port_inner_mut() = new_target.into();
-        return Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
-    }
+    match gui_in {
+        GuiInValue::Edit(params) => {
+            if let Some(new_target) = get_new_value_target(gui_in, ui) {
+                *port.port_inner_mut() = new_target.into();
+                return Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
+            }
 
-    if let GuiInValue::Edit(ref mut params) = gui_in {
-        params.choice_case = None
-    }
+            if let GuiInValue::Edit(ref mut params) = gui_in {
+                params.choice_case = None
+            }
 
-    if port.port_inner_ref().value_is_static() {
-        let mut gui_out = ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
+            if port.port_inner_ref().value_is_static() {
+                let mut gui_out = ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
 
-        let default_interval = port.port_get_default_interval_from_inner().cast().unwrap();
+                let default_interval = port.port_get_default_interval_from_inner().cast().unwrap();
 
-        if default_interval != port.port_inner_ref().get_interval()
-            && ui
-                .button(format!(
-                    "reset interval to default parameter interval {}",
-                    default_interval
-                ))
-                .clicked()
-        {
-            port.port_inner_mut().set_interval(default_interval);
-            gui_out = bool_to_simple_change_gui_cmd(true);
+                if default_interval != port.port_inner_ref().get_interval()
+                    && ui.button(format!("reset to {default_interval}",)).clicked()
+                {
+                    port.port_inner_mut().set_interval(default_interval);
+                    gui_out = bool_to_simple_change_gui_cmd(true);
+                }
+
+                gui_out
+            } else {
+                let mut gui_out = None;
+                let gui_out_mut = &mut gui_out;
+                let mut changed_simple = false;
+
+                ui.label(
+                    egui::RichText::new(format!(
+                        "{:+012.5} {}",
+                        port.port_get_numeric_value(None::<&()>),
+                        port.port_get_interval()
+                    ))
+                    .monospace()
+                    .size(11.0),
+                );
+
+                ui.separator();
+                SanPolicyT::draw_san_info::<PortInnerT>(ui);
+                ui.separator();
+
+                ui.vertical(|ui| {
+                    draw_collapsing_ui(ui, Some(port as *mut PortT), None, |ui| {
+                        ui.label(egui::RichText::new(egui_phosphor::bold::PLUGS).size(14.0))
+                            .on_hover_text("Value port: allows sanitization and optional range remapping");
+                        // ui.label(format!("PORT({})", port.port_get_identity_str()));
+                        ui.label("...");
+                    })
+                    .body(|ui| {
+                        ui.separator();
+
+                        ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui))
+                            .inner
+                            .inspect(|out| *gui_out_mut = Some(out.clone()));
+
+                        if port.port_is_transformable() {
+                            ui.separator();
+
+                            if let Some(tfm) = port.port_transformation_mut() {
+                                let mut remove_tfm = false;
+                                ui.collapsing("Transformation", |ui| {
+                                    tfm.egui(*params.gui_common_ctx, ui)
+                                        .inspect(|out| *gui_out_mut = Some(out.clone()));
+                                    ui.separator();
+                                    if ui.button("remove transformation").clicked() {
+                                        remove_tfm = true;
+                                        *gui_out_mut = bool_to_simple_change_gui_cmd(true);
+                                    }
+                                });
+                                if remove_tfm {
+                                    port.port_transformation_off();
+                                }
+                            } else {
+                                if ui.small_button("add transformation").clicked() {
+                                    port.port_transformation_on();
+                                    *gui_out_mut = bool_to_simple_change_gui_cmd(true);
+                                }
+                            }
+                        }
+
+                        ui.separator();
+                        ui.horizontal(|ui| {
+                            if let Some(mut remap_to) = port.port_get_remap_interval() {
+                                ui.label("remap: ");
+
+                                if remap_to.egui(
+                                    GuiInInterval::Edit {
+                                        max_range: BaseNumT::MIN..=BaseNumT::MAX, // port.get_max_interval().cast().unwrap().make_range_inclusive(),
+                                        from_label: "",
+                                        to_label: "",
+                                        sanitize_and_sort: true,
+                                        truncate: false,
+                                    },
+                                    ui,
+                                ) {
+                                    port.port_set_remap_interval(remap_to);
+                                    changed_simple = true;
+                                };
+
+                                if remap_to == port.port_get_default_interval_from_inner() {
+                                    ui.label("(=default range)");
+                                } else {
+                                    ui.label("(overridden range)");
+                                }
+
+                                if ui
+                                    .button(egui::RichText::new(egui_phosphor::bold::TRASH).size(14.0))
+                                    .on_hover_text("Turn remapping Off")
+                                    .clicked()
+                                {
+                                    port.port_set_remap_off();
+                                    changed_simple = true;
+                                }
+                            } else {
+                                let policy_enforced_remap_range = PortT::RemapT::get_remap_range();
+                                if policy_enforced_remap_range.is_none()
+                                    && ui
+                                        .button("enable remapping")
+                                        .on_hover_text("Turn remapping On")
+                                        .clicked()
+                                {
+                                    port.port_set_remap_from_inner_default();
+                                    changed_simple = true;
+                                } else if let Some(policy_enforced_remap_range) = policy_enforced_remap_range {
+                                    ui.label(format!("Port-enforced remapping range: {policy_enforced_remap_range}",));
+                                }
+                            }
+                        });
+                    })
+                });
+
+                gui_out.or(bool_to_simple_change_gui_cmd(changed_simple))
+            }
         }
-
-        gui_out
-    } else {
-        let mut gui_out = None;
-        let mut changed_simple = false;
-        ui.label(
-            egui::RichText::new(format!("{:+012.5}", port.get_numeric_value()))
-                .monospace()
-                .size(11.0),
-        );
-
-        ui.separator();
-        SanPolicyT::draw_san_info::<PortInnerT>(ui);
-        ui.separator();
-
-        ui.vertical(|ui| {
-            draw_collapsing_ui(ui, Some(port as *mut PortT), None, |ui| {
-                ui.label(egui::RichText::new(egui_phosphor::bold::PLUGS).size(14.0))
-                    .on_hover_text("Value port: allows sanitization and optional range remapping");
-                // ui.label(format!("PORT({})", port.port_get_identity_str()));
-                ui.label("...");
-            })
-            .body(|ui| {
-                ui.separator();
-
-                gui_out = ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
-
-                ui.separator();
-                ui.horizontal(|ui| {
-                    if let Some(mut remap_to) = port.port_get_remap_interval() {
-                        ui.label("Remapping range: ");
-
-                        if remap_to.egui(
-                            GuiInInterval::Edit {
-                                max_range: BaseNumT::MIN..=BaseNumT::MAX, // port.get_max_interval().cast().unwrap().make_range_inclusive(),
-                                from_label: "From",
-                                to_label: "To",
-                                sanitize_and_sort: true,
-                                truncate: false,
-                            },
-                            ui,
-                        ) {
-                            port.port_set_remap_interval(remap_to);
-                            changed_simple = true;
-                        };
-
-                        if remap_to == port.port_get_default_interval_from_inner() {
-                            ui.label("(=default range)");
-                        } else {
-                            ui.label("(overridden range)");
-                        }
-
-                        if ui
-                            .button(egui::RichText::new(egui_phosphor::bold::TRASH).size(14.0))
-                            .on_hover_text("Turn remapping Off")
-                            .clicked()
-                        {
-                            port.port_set_remap_off();
-                            changed_simple = true;
-                        }
-                    } else {
-                        let policy_enforced_remap_range = PortT::RemapT::get_remap_range();
-                        if policy_enforced_remap_range.is_none()
-                            && ui
-                                .button("Enable remapping")
-                                .on_hover_text("Turn remapping On")
-                                .clicked()
-                        {
-                            port.port_set_remap_from_inner_default();
-                            changed_simple = true;
-                        } else if let Some(policy_enforced_remap_range) = policy_enforced_remap_range {
-                            ui.label(format!("Port-enforced remapping range: {policy_enforced_remap_range}",));
-                        }
-                    }
-                })
-            })
-        });
-
-        gui_out.or(bool_to_simple_change_gui_cmd(changed_simple))
+        GuiInValue::Display { .. } => None,
     }
 }
 

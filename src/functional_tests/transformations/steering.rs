@@ -8,8 +8,8 @@ mod steering_tfm_deserialization_and_exec_tests {
     use crate::schemas_value::AutoOrManual;
     use crate::schemas_value::DeviceControlMatcherRef;
     use crate::schemas_value::ValueDsts;
-    use crate::schemas_value::WithNumericValue;
     use crate::schemas_value::{InputValueMetadata, TfmValue};
+    use crate::schemas_value_port::ValuePortIface;
     use crate::tfm_exec::TfmExeState;
     use crate::tfm_exec::{TfmExecCtx, WithTfmExec};
     use std::cell::RefCell;
@@ -96,7 +96,7 @@ mod steering_tfm_deserialization_and_exec_tests {
     /// Set up pipeline metadata the same way `Mapping::recompute_metadata`
     /// does for a mouse REL_X source.
     fn setup_mouse_metadata(tfm: &mut TfmSeqCfg) {
-        tfm.recompute_metadata(AutoOrManual::Auto(InputValueMetadata {
+        let _ = tfm.recompute_steps_metadata_get_out_interval_and_relativity(AutoOrManual::Auto(InputValueMetadata {
             interval: NumInterval::new(-127.0, 127.0),
             relativity: Relativity::Rel,
         }));
@@ -155,13 +155,13 @@ mod steering_tfm_deserialization_and_exec_tests {
         assert!(matches!(&tfm.steps[1], TfmStepCfg::Steering(_)), "step 1 = Steering");
 
         if let TfmStepCfg::Steering(s) = &tfm.steps[1] {
-            assert!(s.enabled);
-            assert!(approx(s.input_gain.get_numeric_value(), 0.1));
-            assert!(approx(s.auto_center_halflife.get_numeric_value(), 0.15));
+            assert!(*s.enabled);
+            assert!(approx(s.input_gain.port_get_numeric_value(None::<&()>), 0.1));
+            assert!(approx(s.auto_center_halflife.port_get_numeric_value(None::<&()>), 0.15));
 
             let ff = s.force_feedback.as_ref().expect("FFB must be present");
-            assert!(ff.enabled);
-            assert!(approx(ff.gain.get_numeric_value(), 1.0));
+            assert!(*ff.enabled);
+            assert!(approx(ff.gain.port_get_numeric_value(None::<&()>), 1.0));
             assert!(!ff.invert);
             assert_eq!(ff.transformation.steps.len(), 1, "FF sub-pipeline: 1 EMA");
 
@@ -535,7 +535,7 @@ mod steering_tfm_deserialization_and_exec_tests {
             let tfm: TfmSeqCfg = serde_saphyr::from_str(&yaml).unwrap();
             if let TfmStepCfg::Steering(s) = &tfm.steps[0] {
                 assert!(
-                    approx(s.input_gain.get_numeric_value(), 0.42),
+                    approx(s.input_gain.port_get_numeric_value(None::<&()>), 0.42),
                     "alias `{alias}` -> input_gain"
                 );
             }

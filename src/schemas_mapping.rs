@@ -1,3 +1,4 @@
+use std::ops::Not;
 use std::sync::Arc;
 #[cfg(feature = "gui")]
 use std::sync::atomic::AtomicBool;
@@ -5,6 +6,7 @@ use std::sync::atomic::Ordering::Relaxed;
 
 use crate::base_num::BaseAtomicT;
 use crate::base_num::BaseNumT;
+use crate::config::WithSelfSanitize;
 use crate::schemas_common::ObjId;
 use crate::schemas_common::WithRuntimeId;
 use crate::schemas_common::default_true;
@@ -113,38 +115,40 @@ impl Default for Mapping {
             transformation: Default::default(),
             requires_idle_tick: Default::default(),
         };
-        m.recompute_metadata(Some(m.name.clone()));
+        m.sanitize_inplace(());
         m
     }
 }
 
-impl Mapping {
-    pub(crate) fn _set_src(&mut self, src: ValueSrcs) {
-        self.src = src;
-        self.recompute_metadata(None);
-    }
-
-    pub(crate) fn _set_dst(&mut self, dst: ValueDsts) {
-        self.dst = dst;
-        self.recompute_metadata(None);
-    }
-
-    pub(crate) fn recompute_metadata(&mut self, name: Option<String>) {
-        if let Some(name) = name {
-            self.name = name;
-        }
-
+impl WithSelfSanitize for Mapping {
+    fn sanitize_inplace(&mut self, _input: Self::SanInputT) {
         if self.name.is_empty() {
             self.name = format!("{} -> {}", self.src, self.dst);
         }
 
         self.transformation
-            .recompute_metadata(AutoOrManual::Auto(crate::schemas_value::InputValueMetadata {
-                interval: self.src.get_interval(),
-                relativity: self.src.get_relativity(),
-            }));
+            .recompute_metadata_and_sanitize_recursive(Some(AutoOrManual::Auto(
+                crate::schemas_value::InputValueMetadata {
+                    interval: self.src.get_interval(),
+                    relativity: self.src.get_relativity(),
+                },
+            )));
 
         self.requires_idle_tick = self.requires_idle_tick();
+    }
+
+    type SanInputT = ();
+}
+
+impl Mapping {
+    pub(crate) fn _set_src(&mut self, src: ValueSrcs) {
+        self.src = src;
+        self.sanitize_inplace(());
+    }
+
+    pub(crate) fn _set_dst(&mut self, dst: ValueDsts) {
+        self.dst = dst;
+        self.sanitize_inplace(());
     }
 
     pub(crate) fn requires_idle_tick(&self) -> bool {
@@ -157,7 +161,11 @@ impl Mapping {
                     | TfmStepCfg::OneEuro { .. }
                     | TfmStepCfg::Script { .. }
             )
-        }) || !collect_dynamic_value_matchers(self, |ctx| ctx.contains(DynValFilter::Var)).is_empty()
+        }) || collect_dynamic_value_matchers(self, |ctx| {
+            ctx.contains(DynValFilter::Var) /*&& ctx.contains(DynValFilter::Src)*/
+        })
+        .is_empty()
+        .not()
             || self.src.is_static()
     }
 }
