@@ -408,7 +408,9 @@ impl DeviceManagerCommon for HidManager {
             let mut out = None;
             for v in &*devices {
                 for v in v.1 {
-                    if v.0.borrow().get_name() == device_info.name {
+                    if v.0.borrow().get_name() == device_info.name
+                        && v.0.borrow().get_filesystem_path() == device_info.path
+                    {
                         out = Some(Rc::clone(&v.0));
                         break;
                     }
