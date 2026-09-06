@@ -1,3 +1,4 @@
+use deserialize_untagged_verbose_error::DeserializeUntaggedVerboseError;
 use with_doc_str::with_doc_str;
 
 use crate::base_num::{BaseAtomicT, BaseNumT};
@@ -32,7 +33,6 @@ use enum_dispatch::enum_dispatch;
 use garde::Validate;
 use mmvj_derive::WithSelfSanitize;
 use schemars::JsonSchema;
-use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
@@ -326,7 +326,13 @@ pub(crate) struct SumCfg {
     #[garde(skip)]
     pub(crate) sources: Vec<ValuePort<ValueSrcs>>,
     #[traverse(skip)]
-    #[serde(default = "default_symm_unit_interval")]
+    #[serde(
+        default = "default_symm_unit_interval",
+        alias = "output_interval",
+        alias = "output_range",
+        alias = "out_interval",
+        rename = "out_range"
+    )]
     #[garde(skip)]
     #[sanitize_inplace(skip)]
     pub(crate) out_interval: NumInterval<BaseNumT>,
@@ -377,7 +383,13 @@ pub(crate) struct VelocityToDisplacementCfg {
     #[garde(skip)]
     pub(crate) multiplier: BaseNumT,
     #[traverse(skip)]
-    #[serde(default = "default_symm_unit_interval")]
+    #[serde(
+        default = "default_symm_unit_interval",
+        alias = "output_interval",
+        alias = "output_range",
+        alias = "out_interval",
+        rename = "out_range"
+    )]
     #[garde(skip)]
     pub(crate) out_interval: NumInterval<BaseNumT>,
 }
@@ -1472,16 +1484,23 @@ pub(crate) struct IntegrateCfg {
     #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
     pub(crate) enabled: StepEnabledCfg,
     #[garde(skip)]
+    #[serde(
+        alias = "range",
+        alias = "output_interval",
+        alias = "output_range",
+        rename = "out_range"
+    )]
     #[traverse(skip)]
-    pub(crate) range: NumInterval<BaseNumT>,
+    pub(crate) out_interval: NumInterval<BaseNumT>,
     #[serde(default)]
     #[serde(skip_serializing_if = "skip_serializing_value_port")]
     #[garde(skip)]
     pub(crate) accumulator: ValuePort<ValueXrcs, SanPolicyNone, RemapPolicyUnit>,
     #[serde(default = "default_one")]
+    #[serde(alias = "smoothing_alpha", alias = "input_sensitivity", alias = "input_gain")]
     #[garde(range(min = 0.0, max = 1.0))]
     #[traverse(skip)]
-    pub(crate) smoothing_alpha: BaseNumT,
+    pub(crate) in_gain: BaseNumT,
     #[serde(default)]
     #[serde(skip_serializing)]
     #[garde(range(min = 0.0))]
@@ -1494,7 +1513,7 @@ impl WithSelfSanitize for IntegrateCfg {
         self.accumulator.sanitize_inplace(());
 
         self.common_state_mut().set_out_relativity(Relativity::Abs);
-        let out_interval = self.range;
+        let out_interval = self.out_interval;
         self.common_state_mut().set_out_interval(out_interval);
     }
 }
@@ -1512,8 +1531,8 @@ impl PartialEq for IntegrateCfg {
         self.common_state == other.common_state
             && self.desc == other.desc
             && self.enabled == other.enabled
-            && self.range == other.range
-            && self.smoothing_alpha == other.smoothing_alpha
+            && self.out_interval == other.out_interval
+            && self.in_gain == other.in_gain
     }
 }
 
@@ -1521,8 +1540,8 @@ impl Default for IntegrateCfg {
     fn default() -> Self {
         Self {
             enabled: Default::default(),
-            range: NumInterval::new(-100.0, 100.0),
-            smoothing_alpha: default_smoothing_alpha(),
+            out_interval: NumInterval::new(-100.0, 100.0),
+            in_gain: default_smoothing_alpha(),
             desc: Default::default(),
             common_state: Default::default(),
             accumulator: Default::default(),
@@ -1697,32 +1716,34 @@ pub(crate) fn collect_dynamic_value_matchers(
 }
 
 // ==================================================================
-#[derive(Debug, Clone, Traversable, TraversableMut, JsonSchema, PartialEq, Serialize)]
+#[derive(
+    Debug, Clone, Traversable, TraversableMut, JsonSchema, PartialEq, Serialize, DeserializeUntaggedVerboseError,
+)]
 #[serde(untagged)]
 enum TfmSeqVariants {
     Short(Vec<TfmStepCfg>),
     Full(TfmSeqFull),
 }
 
-impl<'de> Deserialize<'de> for TfmSeqVariants {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        use serde::de::Error;
-        let vv: serde_value::Value = Deserialize::deserialize(deserializer)?;
-        match Vec::<_>::deserialize(vv.clone().into_deserializer()) {
-            Ok(v) => Ok(Self::Short(v)),
-            Err(e1) => match TfmSeqFull::deserialize(vv.into_deserializer()) {
-                Ok(v) => Ok(Self::Full(v)),
-                Err(e2) => Err(D::Error::custom(format!(
-                    "Configuration parse error.\nIf using steps list only: {}\nIf using steps + input spec: {}\n",
-                    e1, e2
-                ))),
-            },
-        }
-    }
-}
+// impl<'de> Deserialize<'de> for TfmSeqVariants {
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//     where
+//         D: Deserializer<'de>,
+//     {
+//         use serde::de::Error;
+//         let vv: serde_value::Value = Deserialize::deserialize(deserializer)?;
+//         match Vec::<_>::deserialize(vv.clone().into_deserializer()) {
+//             Ok(v) => Ok(Self::Short(v)),
+//             Err(e1) => match TfmSeqFull::deserialize(vv.into_deserializer()) {
+//                 Ok(v) => Ok(Self::Full(v)),
+//                 Err(e2) => Err(D::Error::custom(format!(
+//                     "Configuration parse error.\nIf using steps list only: {}\nIf using steps + input spec: {}\n",
+//                     e1, e2
+//                 ))),
+//             },
+//         }
+//     }
+// }
 
 impl Default for TfmSeqVariants {
     fn default() -> Self {
@@ -1902,7 +1923,7 @@ impl PartialEq for SteeringCfg {
             && self.enabled == other.enabled
             && self.accumulator == other.accumulator
             && self.deadzone_counts == other.deadzone_counts
-            && self.input_gain == other.input_gain
+            && self.in_gain == other.in_gain
             && self.auto_center_halflife == other.auto_center_halflife
             && self.auto_center_along_force_feedback == other.auto_center_along_force_feedback
             && self.hold_factor == other.hold_factor
@@ -2043,9 +2064,8 @@ pub(crate) struct SteeringCfg {
     ///
     /// YAML aliases: `smoothing_alpha`, `input_sensitivity`.
     #[garde(skip)]
-    #[serde(alias = "smoothing_alpha")]
-    #[serde(alias = "input_sensitivity")]
-    pub(crate) input_gain: ValuePort<SteeringInputGainCfg, SanPolicyUseFromPortInner, RemapPolicyUserDefined>,
+    #[serde(alias = "smoothing_alpha", alias = "input_sensitivity", alias = "input_gain")]
+    pub(crate) in_gain: ValuePort<SteeringInputGainCfg, SanPolicyUseFromPortInner, RemapPolicyUserDefined>,
 
     /// Half-life (in seconds) of the exponential autocentering decay.
     ///
@@ -2219,7 +2239,7 @@ impl Default for SteeringCfg {
         Self {
             enabled: Default::default(),
             deadzone_counts: 0.0,
-            input_gain: Default::default(),
+            in_gain: Default::default(),
             auto_center_halflife: Default::default(),
             auto_center_along_force_feedback: Default::default(),
             hold_factor: Default::default(),
@@ -2454,7 +2474,11 @@ pub(crate) struct ScriptCfg {
     /// input. Set this when the script produces values in a different
     /// range and downstream steps need the correct interval.
     #[traverse(skip)]
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename = "out_range",
+        alias = "output_interval"
+    )]
     #[sanitize_inplace(skip)]
     pub(crate) output_interval: Option<NumInterval<BaseNumT>>,
 

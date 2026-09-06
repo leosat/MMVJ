@@ -83,7 +83,12 @@ pub(crate) struct TfmValue<ValueT: NumIntervalValue> {
 
 #[derive(Clone, Copy, Default, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub(crate) struct InputValueMetadata<ValueT: NumIntervalValue> {
-    #[serde(rename = "in_range")]
+    #[serde(
+        rename = "in_range",
+        alias = "in_interval",
+        alias = "input_range",
+        alias = "input_interval"
+    )]
     pub(crate) interval: NumInterval<ValueT>,
     #[serde(rename = "in_relativity")]
     pub(crate) relativity: Relativity,

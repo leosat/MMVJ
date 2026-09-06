@@ -751,7 +751,7 @@ impl<'s> DrawEgui<'s> for IntegrateCfg {
         ui.horizontal(|ui| {
             ui.label("Input gain(");
             if ui
-                .add(egui::Slider::new(&mut self.smoothing_alpha, 0.001..=1.0).logarithmic(false))
+                .add(egui::Slider::new(&mut self.in_gain, 0.001..=1.0).logarithmic(false))
                 .changed()
             {
                 *gui_out_mut = bool_to_simple_change_gui_cmd(true);
@@ -760,10 +760,10 @@ impl<'s> DrawEgui<'s> for IntegrateCfg {
                 egui::RichText::new(format!(
                     ") * {:+011.04} -> {:+011.04} -> map to acc. range {} -> {:+011.04}",
                     current_input,
-                    current_input * self.smoothing_alpha,
+                    current_input * self.in_gain,
                     self.accumulator.port_get_interval(),
                     self.get_delta_acc_norm(TfmValue {
-                        value: current_input * self.smoothing_alpha,
+                        value: current_input * self.in_gain,
                         interval: self.common_state_ref().get_in_interval(),
                         relativity: self.common_state_ref().is_in_relative().into(),
                     })
@@ -776,7 +776,7 @@ impl<'s> DrawEgui<'s> for IntegrateCfg {
 
         ui.horizontal(|ui| {
             ui.label(").remap_to(");
-            if self.range.egui(
+            if self.out_interval.egui(
                 GuiInInterval::Edit {
                     max_range: MAX_SPAN_INTERVAL.make_range_inclusive(),
                     from_label: "",
@@ -1285,8 +1285,8 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                 ui.separator();
                 ui.horizontal(|ui| {
                     let param_name = "Gain";
-                    ui.label(param_name).on_hover_text(self.input_gain_doc_str());
-                    self.input_gain
+                    ui.label(param_name).on_hover_text(self.in_gain_doc_str());
+                    self.in_gain
                         .egui(
                             GuiInValue::Edit(GuiInValueEditParams {
                                 allow_interval_edit: false,
@@ -1300,7 +1300,7 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                         .inspect(|out| *gui_out_mut = Some(out.clone()));
                 })
                 .response
-                .on_hover_text(self.input_gain_doc_str());
+                .on_hover_text(self.in_gain_doc_str());
                 ui.separator();
                 ui.horizontal(|ui| {
                     let param_name = "Auto-center halflife";

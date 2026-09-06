@@ -897,7 +897,7 @@ impl WithTfmExec for IntegrateCfg {
         let acc_value = self.accumulator.port_get_numeric_value(Some(ctx));
         let acc_interval = self.accumulator.port_get_interval();
 
-        input.value *= self.smoothing_alpha;
+        input.value *= self.in_gain;
 
         let acc_delta = self.get_delta_acc_norm(input);
         let acc_out = acc_interval.clamp(acc_value + acc_delta);
@@ -906,8 +906,10 @@ impl WithTfmExec for IntegrateCfg {
             .port_set_numeric_value_and_flush_to_devices(acc_out, ctx);
 
         TfmValue::<BaseNumT> {
-            value: self.range.map_from(acc_out, &acc_interval, OutOfRangePolicy::Clamp),
-            interval: self.range,
+            value: self
+                .out_interval
+                .map_from(acc_out, &acc_interval, OutOfRangePolicy::Clamp),
+            interval: self.out_interval,
             relativity: Relativity::Abs,
         }
     }
@@ -944,7 +946,7 @@ impl WithTfmExec for Box<SteeringCfg> {
         let delta: BaseNumT = input
             .interval
             .map_to_symm_unit::<BaseNumT>(value, OutOfRangePolicy::Clamp)
-            * self.input_gain.port_get_numeric_value(Some(ctx));
+            * self.in_gain.port_get_numeric_value(Some(ctx));
 
         let mut post_filter: BaseNumT;
 
