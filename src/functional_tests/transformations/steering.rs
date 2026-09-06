@@ -156,7 +156,7 @@ mod steering_tfm_deserialization_and_exec_tests {
 
         if let TfmStepCfg::Steering(s) = &tfm.steps[1] {
             assert!(*s.enabled);
-            assert!(approx(s.input_gain.port_get_numeric_value(None::<&()>), 0.1));
+            assert!(approx(s.in_gain.port_get_numeric_value(None::<&()>), 0.1));
             assert!(approx(s.auto_center_halflife.port_get_numeric_value(None::<&()>), 0.15));
 
             let ff = s.force_feedback.as_ref().expect("FFB must be present");
@@ -535,7 +535,7 @@ mod steering_tfm_deserialization_and_exec_tests {
             let tfm: TfmSeqCfg = serde_saphyr::from_str(&yaml).unwrap();
             if let TfmStepCfg::Steering(s) = &tfm.steps[0] {
                 assert!(
-                    approx(s.input_gain.port_get_numeric_value(None::<&()>), 0.42),
+                    approx(s.in_gain.port_get_numeric_value(None::<&()>), 0.42),
                     "alias `{alias}` -> input_gain"
                 );
             }

@@ -1488,7 +1488,7 @@
           },
           "default": []
         },
-        "out_interval": {
+        "out_range": {
           "$ref": "#/$defs/NumInterval",
           "default": [
             -1.0,
@@ -1563,7 +1563,7 @@
           "format": "float",
           "default": 1.0
         },
-        "out_interval": {
+        "out_range": {
           "$ref": "#/$defs/NumInterval",
           "default": [
             -1.0,
@@ -1594,13 +1594,13 @@
         "enabled": {
           "$ref": "#/$defs/StepEnabledCfg"
         },
-        "range": {
+        "out_range": {
           "$ref": "#/$defs/NumInterval"
         },
         "accumulator": {
           "$ref": "#/$defs/ValuePort2"
         },
-        "smoothing_alpha": {
+        "in_gain": {
           "type": "number",
           "format": "float",
           "minimum": 0.0,
@@ -1616,7 +1616,7 @@
       },
       "additionalProperties": false,
       "required": [
-        "range"
+        "out_range"
       ]
     },
     "ValuePort2": {
@@ -1706,7 +1706,7 @@
           "format": "float",
           "minimum": 0.0
         },
-        "input_gain": {
+        "in_gain": {
           "description": "Multiplier applied to the raw input **before**\naccumulation. Mapped from its own interval to [0, 1].\n\n- Low (0.05–0.15): heavy, slow steering.\n- High (0.3–0.5): quick, responsive steering.\n\nAccepts a static value or a dynamic reference (`var:` / `dev:`)\nfor runtime adjustment.\n\nYAML aliases: `smoothing_alpha`, `input_sensitivity`.",
           "$ref": "#/$defs/ValuePort3"
         },
@@ -1742,7 +1742,7 @@
         }
       },
       "required": [
-        "input_gain"
+        "in_gain"
       ]
     },
     "ValuePort3": {
@@ -2554,7 +2554,7 @@
           "type": "string",
           "default": ""
         },
-        "output_interval": {
+        "out_range": {
           "description": "Overrides the **output interval metadata** of this step.\n\nWhen `None` (default), the output interval is inherited from the\ninput. Set this when the script produces values in a different\nrange and downstream steps need the correct interval.",
           "anyOf": [
             {
