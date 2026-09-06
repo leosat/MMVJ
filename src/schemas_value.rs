@@ -66,6 +66,7 @@ pub(crate) trait ValueIface:
 {
     fn value_identity(&self) -> String;
     fn value_is_static(&self) -> bool;
+    fn value_is_xrc_sink(&self) -> bool;
 }
 
 pub(crate) trait _WithDstRefCount {
@@ -669,6 +670,10 @@ impl ValueIface for ValueSrcs {
     fn value_is_static(&self) -> bool {
         self.is_static()
     }
+
+    fn value_is_xrc_sink(&self) -> bool {
+        false
+    }
 }
 
 impl WithNumIntervalSettable for ValueSrcs {
@@ -1118,6 +1123,10 @@ impl Default for ValueXrcs {
 }
 
 impl ValueIface for ValueXrcs {
+    fn value_is_xrc_sink(&self) -> bool {
+        matches!(self, Self::Sink(..))
+    }
+
     fn value_identity(&self) -> String {
         match self {
             Self::Dynamic(d) => d.to_string(),
@@ -1210,6 +1219,10 @@ impl From<ValueXrcs> for ValueSrcs {
 // }
 
 impl ValueIface for ValueDsts {
+    fn value_is_xrc_sink(&self) -> bool {
+        false
+    }
+
     fn value_identity(&self) -> String {
         match self {
             Self::Void(_) => egui_phosphor::bold::EMPTY.into(),
