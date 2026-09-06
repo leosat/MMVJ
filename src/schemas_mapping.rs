@@ -79,6 +79,7 @@ pub(crate) struct Mapping {
     pub(crate) dst: ValueDsts,
     #[serde(default)]
     #[garde(skip)]
+    #[serde(skip_serializing_if = "TfmSeqCfg::skip_serializing")]
     pub(crate) transformation: TfmSeqCfg,
     #[serde(skip)]
     #[garde(skip)]

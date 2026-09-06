@@ -740,9 +740,14 @@ macro_rules! make_port_inner_nutype {
         }
 
         impl $crate::schemas_value::ValueIface for $name {
+            fn value_is_xrc_sink(&self) -> bool {
+                self.as_ref().value_is_xrc_sink()
+            }
+
             fn value_identity(&self) -> String {
                 self.as_ref().value_identity()
             }
+
             fn value_is_static(&self) -> bool {
                 self.as_ref().is_static()
             }
