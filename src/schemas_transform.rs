@@ -34,6 +34,7 @@ use garde::Validate;
 use mmvj_derive::WithSelfSanitize;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
+use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
@@ -158,7 +159,6 @@ pub(crate) struct TfmStepCommonState {
     id: ObjId,
     intervals: (NumInterval<BaseNumT>, NumInterval<BaseNumT>),
     relativity: (Relativity, Relativity),
-    pub(crate) last_time: std::cell::Cell<std::time::Instant>,
     last_in: Arc<CachePadded<BaseAtomicT>>,
     last_out: Arc<CachePadded<BaseAtomicT>>,
     #[cfg(feature = "gui")]
@@ -186,14 +186,13 @@ impl Default for TfmStepCommonState {
     fn default() -> Self {
         Self {
             id: Default::default(),
-            intervals: (NumInterval::default(), NumInterval::default()),
-            relativity: (Relativity::Abs, Relativity::Abs),
+            intervals: (NumInterval::default().into(), NumInterval::default().into()),
+            relativity: (Relativity::Abs.into(), Relativity::Abs.into()),
             #[cfg(feature = "gui")]
             gui_trace_graph_opened: Default::default(),
             trace_channel: None,
             last_in: Default::default(),
             last_out: Default::default(),
-            last_time: Instant::now().into(),
         }
     }
 }
@@ -202,6 +201,7 @@ impl WithRuntimeId for TfmStepCommonState {
     fn get_id(&self) -> ObjId {
         self.id
     }
+
     fn assign_new_id(&mut self) {
         self.id = Default::default()
     }
@@ -211,11 +211,11 @@ impl WithRuntimeId for TfmStepCommonState {
 impl TfmStepCommonState {
     #[allow(unused)]
     pub(crate) fn is_in_relative(&self) -> bool {
-        self.relativity.0.into()
+        self.relativity.0.is_relative()
     }
 
     pub(crate) fn is_out_relative(&self) -> bool {
-        self.relativity.1.into()
+        self.relativity.1.is_relative()
     }
 
     pub(crate) fn set_input_relativity(&mut self, is_relative: Relativity) -> &mut Self {
@@ -260,7 +260,7 @@ impl TfmStepCommonState {
         out_interval: NumInterval<BaseNumT>,
     ) -> Self {
         Self {
-            intervals: (in_interval, out_interval),
+            intervals: (in_interval.into(), out_interval.into()),
             ..Default::default()
         }
     }
@@ -364,9 +364,7 @@ impl TfmCfgDuplicateWithNewState for SumCfg {
     }
 }
 
-#[derive(
-    JsonSchema, PartialEq, Debug, Default, Clone, Serialize, Deserialize, Validate, Traversable, TraversableMut,
-)]
+#[derive(JsonSchema, PartialEq, Debug, Clone, Serialize, Deserialize, Validate, Traversable, TraversableMut)]
 #[serde(deny_unknown_fields)]
 #[with_doc_str]
 /// Given input as speed vector scales it based on dt and a custom multiplier
@@ -376,6 +374,13 @@ pub(crate) struct VelocityToDisplacementCfg {
     #[serde(skip)]
     #[garde(skip)]
     common_state: TfmStepCommonState,
+    /// ...
+    #[traverse(skip)]
+    #[garde(skip)]
+    #[schemars(skip)]
+    #[serde(skip)]
+    #[serde(default = "default_cell_instant_now")]
+    pub(crate) last_time: Cell<std::time::Instant>,
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -403,6 +408,23 @@ pub(crate) struct VelocityToDisplacementCfg {
     )]
     #[garde(skip)]
     pub(crate) out_interval: NumInterval<BaseNumT>,
+}
+
+fn default_cell_instant_now() -> Cell<std::time::Instant> {
+    std::time::Instant::now().into()
+}
+
+impl Default for VelocityToDisplacementCfg {
+    fn default() -> Self {
+        Self {
+            common_state: Default::default(),
+            last_time: Instant::now().into(),
+            desc: Default::default(),
+            enabled: Default::default(),
+            multiplier: Default::default(),
+            out_interval: Default::default(),
+        }
+    }
 }
 
 impl WithSelfSanitize for VelocityToDisplacementCfg {
@@ -612,7 +634,7 @@ pub(crate) struct ForceFeedbackCfg {
     #[garde(skip)]
     #[sanitize_inplace(skip)]
     /// Internal state
-    pub common_state: TfmStepCommonState,
+    common_state: TfmStepCommonState,
 
     /// Optional human-readable description.
     #[traverse(skip)]
@@ -736,7 +758,7 @@ pub(crate) struct ClampCfg {
     #[serde(default)]
     #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
     pub(crate) enabled: StepEnabledCfg,
-    #[serde(default)]
+    #[serde(default, alias = "interval", rename = "range")]
     pub(crate) range: NumInterval<BaseNumT>,
     #[serde(default = "default_clamp_transform_override_interval")]
     pub(crate) override_range: bool,
@@ -770,7 +792,7 @@ impl From<ClampCfgCompat__> for ClampCfg {
 impl WithSelfSanitize for ClampCfg {
     fn sanitize_inplace(&mut self, _input: Self::SanInputT) {
         let mut clamping_interval = self.get_clamping_interval();
-        let in_interval = self.get_in_interval();
+        let in_interval = self.common_state_ref().get_in_interval();
         let clamping_interval_saved = clamping_interval;
         clamping_interval.from = in_interval.clamp(clamping_interval.from);
         clamping_interval.to = in_interval.clamp(clamping_interval.to);
@@ -793,16 +815,6 @@ impl WithSelfSanitize for ClampCfg {
 impl ClampCfg {
     pub(crate) fn get_clamping_interval(&self) -> NumInterval<BaseNumT> {
         self.range
-    }
-    pub(crate) fn get_out_interval(&self) -> NumInterval<BaseNumT> {
-        if self.override_range {
-            self.get_clamping_interval()
-        } else {
-            self.get_in_interval()
-        }
-    }
-    pub(crate) fn get_in_interval(&self) -> NumInterval<BaseNumT> {
-        self.common_state_ref().intervals.0
     }
 }
 
@@ -2648,8 +2660,9 @@ impl WithRuntimeId for TfmStepCfg {
     fn get_id(&self) -> ObjId {
         self.common_state_ref().get_id()
     }
+
     fn assign_new_id(&mut self) {
-        self.common_state_mut().id = Default::default();
+        self.common_state_mut().assign_new_id();
     }
 }
 
