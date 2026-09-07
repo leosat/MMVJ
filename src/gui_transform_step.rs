@@ -22,6 +22,7 @@ use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_transform::*;
 use crate::schemas_value::AutoOrManual;
 use crate::schemas_value::TfmValue;
+use crate::schemas_value::WithLastKnownIO;
 use crate::schemas_value_port::ValuePortIface;
 use crate::tracing::GraphDisplayStyle;
 use egui::RichText;
@@ -253,8 +254,7 @@ impl<'g> GuiInCommon<'g> {
 }
 
 fn get_step_io_text(_ui: &mut egui::Ui, state: &TfmStepCommonState) -> RichText {
-    let last_in = state.last_in.load(std::sync::atomic::Ordering::Relaxed);
-    let last_out = state.last_out.load(std::sync::atomic::Ordering::Relaxed);
+    let (last_in, last_out) = state.get_last_known_io();
     let in_label = if state.is_in_relative() { "rel" } else { "abs" };
     let out_label = if state.is_out_relative() { "rel" } else { "abs" };
     egui::RichText::new(format!(
@@ -746,7 +746,7 @@ impl<'s> DrawEgui<'s> for IntegrateCfg {
 
         ui.label(egui_phosphor::bold::PLUS);
 
-        let current_input = self.common_state_ref().last_in.load(Relaxed);
+        let current_input = self.common_state_ref().get_last_known_io().0;
 
         ui.horizontal(|ui| {
             ui.label("Input gain(");
@@ -997,7 +997,7 @@ impl<'s> DrawEgui<'s> for SumCfg {
             let step_id = self.common_state_ref().get_id();
             let mut source_to_remove = None;
 
-            ui.label(format!("( {} ", self.common_state_ref().last_in.load(Relaxed)));
+            ui.label(format!("( {} ", self.common_state_ref().get_last_known_io().0));
 
             for (src_idx, src) in self.sources.iter_mut().enumerate() {
                 ui.push_id((step_id, src_idx), |ui| {
@@ -1041,7 +1041,7 @@ impl<'s> DrawEgui<'s> for SumCfg {
                 ui.label(egui::RichText::new(format!(
                     ") {} {}",
                     egui_phosphor::bold::EQUALS,
-                    self.common_state_ref().last_out.load(Relaxed)
+                    self.common_state_ref().get_last_known_io().1
                 )));
             });
 
@@ -1079,8 +1079,8 @@ impl<'s> DrawEgui<'s> for VelocityToDisplacementCfg {
             if self.out_interval.egui(
                 GuiInInterval::Edit {
                     max_range: MAX_SPAN_INTERVAL.make_range_inclusive(),
-                    from_label: "From",
-                    to_label: "To",
+                    from_label: "",
+                    to_label: "",
                     sanitize_and_sort: true,
                     truncate: false,
                 },
