@@ -36,9 +36,11 @@ mod default_config_tests {
 
     const TESTED_JOYSTICK_AXIS_CTL_MATCHER_KEY: &str = "ABS_X";
     const TESTED_JOYSTICK_DEVICE_NAME: &str = "Virtual steering wheel";
+
     // ---------------
     const MOCKED_HID_MICE_NAME: &str = "Mock Mouse";
     const MOCKED_HID_KBD_NAME: &str = "Mock Keyboard";
+
     // ---------------
     const AUTOCENTERING_TOLERANCE: BaseNumT = 0.07;
     const MAPPING_ENGINE_IDLE_RATE: u32 = 60;
@@ -252,6 +254,19 @@ mod default_config_tests {
     pub(crate) struct Period(pub(crate) u64);
     pub(crate) struct Count(pub(crate) usize);
 
+    fn get_tested_ctl_value(
+        outputs: &Arc<Mutex<HashMap<(String, String), BaseNumT>>>,
+        device_name: &str,
+        ctl_name: &str,
+    ) -> BaseNumT {
+        outputs
+            .lock()
+            .unwrap()
+            .get(&(device_name.to_string(), ctl_name.to_string()))
+            .copied()
+            .unwrap_or(0.0)
+    }
+
     async fn send_rel(
         tx: &mpsc::UnboundedSender<HidDeviceEvent>,
         mouse_id: ObjId,
@@ -411,15 +426,11 @@ mod default_config_tests {
                     send_rel(&event_tx, mouse_id, MappedCtls::RelX, 50.0, Count(50), Period(10)).await;
                     // tokio::time::sleep(Duration::from_millis(100)).await;
 
-                    let val_right = outputs
-                        .lock()
-                        .unwrap()
-                        .get(&(
-                            TESTED_JOYSTICK_DEVICE_NAME.to_string(),
-                            TESTED_JOYSTICK_AXIS_CTL_MATCHER_KEY.to_string(),
-                        ))
-                        .copied()
-                        .unwrap_or(0.0);
+                    let val_right = get_tested_ctl_value(
+                        &outputs,
+                        TESTED_JOYSTICK_DEVICE_NAME,
+                        TESTED_JOYSTICK_AXIS_CTL_MATCHER_KEY,
+                    );
 
                     assert!(
                         val_right > joystick_abs_x_range.midpoint(),
@@ -429,18 +440,15 @@ mod default_config_tests {
                     pause_for_gui_watching(PAUSE_FOR_GUI_WATCHING_MS).await;
 
                     // -----------------------------------------------------------------
-
                     send_rel(&event_tx, mouse_id, MappedCtls::RelX, -50.0, Count(50), Period(10)).await;
                     tokio::time::sleep(Duration::from_millis(100)).await;
-                    let val_left = outputs
-                        .lock()
-                        .unwrap()
-                        .get(&(
-                            TESTED_JOYSTICK_DEVICE_NAME.to_string(),
-                            TESTED_JOYSTICK_AXIS_CTL_MATCHER_KEY.to_string(),
-                        ))
-                        .copied()
-                        .unwrap_or(0.0);
+
+                    let val_left = get_tested_ctl_value(
+                        &outputs,
+                        TESTED_JOYSTICK_DEVICE_NAME,
+                        TESTED_JOYSTICK_AXIS_CTL_MATCHER_KEY,
+                    );
+
                     assert!(
                         val_left < (joystick_abs_x_range.midpoint() - joystick_abs_x_range.span() * 0.05),
                         "0) Expected left turn, got {}",
@@ -455,19 +463,15 @@ mod default_config_tests {
                     pause_for_gui_watching(PAUSE_FOR_GUI_WATCHING_MS).await;
 
                     // -----------------------------------------------------------------
-
                     // 1) Autocentering (as configured)
                     set_hold_factor_max(&event_tx, mouse_id).await;
                     send_rel(&event_tx, mouse_id, MappedCtls::RelX, 50.0, Count(50), Period(10)).await;
-                    let val_before = outputs
-                        .lock()
-                        .unwrap()
-                        .get(&(
-                            TESTED_JOYSTICK_DEVICE_NAME.to_string(),
-                            TESTED_JOYSTICK_AXIS_CTL_MATCHER_KEY.to_string(),
-                        ))
-                        .copied()
-                        .unwrap_or(0.0);
+                    let val_before = get_tested_ctl_value(
+                        &outputs,
+                        TESTED_JOYSTICK_DEVICE_NAME,
+                        TESTED_JOYSTICK_AXIS_CTL_MATCHER_KEY,
+                    );
+
                     assert!(
                         val_before > (joystick_abs_x_range.midpoint() + joystick_abs_x_range.span() * 0.05),
                         "1) Wheel must be turned right, got {}. Midpoint is {}",
@@ -478,15 +482,12 @@ mod default_config_tests {
 
                     set_hold_factor_zero(&event_tx, mouse_id).await;
                     tokio::time::sleep(Duration::from_millis(2000)).await;
-                    let val_after = outputs
-                        .lock()
-                        .unwrap()
-                        .get(&(
-                            TESTED_JOYSTICK_DEVICE_NAME.to_string(),
-                            TESTED_JOYSTICK_AXIS_CTL_MATCHER_KEY.to_string(),
-                        ))
-                        .copied()
-                        .unwrap_or(0.0);
+                    let val_after = get_tested_ctl_value(
+                        &outputs,
+                        TESTED_JOYSTICK_DEVICE_NAME,
+                        TESTED_JOYSTICK_AXIS_CTL_MATCHER_KEY,
+                    );
+
                     assert!(
                         val_after.trunc() == joystick_abs_x_range.midpoint().trunc(),
                         "1) Wheel must have autocentered. Expected Midpoint {:.3}, Before: {:.3}, After: {:.3}",
@@ -505,15 +506,12 @@ mod default_config_tests {
 
                     set_hold_factor_max(&event_tx, mouse_id).await;
                     send_rel(&event_tx, mouse_id, MappedCtls::RelX, 50.0, Count(50), Period(10)).await;
-                    let val_before = outputs
-                        .lock()
-                        .unwrap()
-                        .get(&(
-                            TESTED_JOYSTICK_DEVICE_NAME.to_string(),
-                            TESTED_JOYSTICK_AXIS_CTL_MATCHER_KEY.to_string(),
-                        ))
-                        .copied()
-                        .unwrap_or(0.0);
+                    let val_before = get_tested_ctl_value(
+                        &outputs,
+                        TESTED_JOYSTICK_DEVICE_NAME,
+                        TESTED_JOYSTICK_AXIS_CTL_MATCHER_KEY,
+                    );
+
                     assert!(
                         val_before > joystick_abs_x_range.midpoint(),
                         "2) Wheel must be turned right, got {}",
@@ -525,15 +523,12 @@ mod default_config_tests {
 
                     set_hold_factor_zero(&event_tx, mouse_id).await;
                     tokio::time::sleep(Duration::from_millis(2000)).await;
-                    let val_after = outputs
-                        .lock()
-                        .unwrap()
-                        .get(&(
-                            TESTED_JOYSTICK_DEVICE_NAME.to_string(),
-                            TESTED_JOYSTICK_AXIS_CTL_MATCHER_KEY.to_string(),
-                        ))
-                        .copied()
-                        .unwrap_or(0.0);
+                    let val_after = get_tested_ctl_value(
+                        &outputs,
+                        TESTED_JOYSTICK_DEVICE_NAME,
+                        TESTED_JOYSTICK_AXIS_CTL_MATCHER_KEY,
+                    );
+
                     assert!(
                         (val_after.abs() - joystick_abs_x_range.midpoint().abs()).abs()
                             < joystick_abs_x_range.span() * AUTOCENTERING_TOLERANCE,
@@ -568,15 +563,12 @@ mod default_config_tests {
 
                     set_hold_factor_max(&event_tx, mouse_id).await;
                     send_rel(&event_tx, mouse_id, MappedCtls::RelX, 50.0, Count(50), Period(10)).await;
-                    let val_before = outputs
-                        .lock()
-                        .unwrap()
-                        .get(&(
-                            TESTED_JOYSTICK_DEVICE_NAME.to_string(),
-                            TESTED_JOYSTICK_AXIS_CTL_MATCHER_KEY.to_string(),
-                        ))
-                        .copied()
-                        .unwrap_or(0.0);
+                    let val_before = get_tested_ctl_value(
+                        &outputs,
+                        TESTED_JOYSTICK_DEVICE_NAME,
+                        TESTED_JOYSTICK_AXIS_CTL_MATCHER_KEY,
+                    );
+
                     assert!(
                         val_before > joystick_abs_x_range.midpoint(),
                         "3) Wheel must be turned right, got {}",
@@ -586,15 +578,12 @@ mod default_config_tests {
 
                     set_hold_factor_zero(&event_tx, mouse_id).await;
                     tokio::time::sleep(Duration::from_millis(1000)).await;
-                    let val_after = outputs
-                        .lock()
-                        .unwrap()
-                        .get(&(
-                            TESTED_JOYSTICK_DEVICE_NAME.to_string(),
-                            TESTED_JOYSTICK_AXIS_CTL_MATCHER_KEY.to_string(),
-                        ))
-                        .copied()
-                        .unwrap_or(0.0);
+                    let val_after = get_tested_ctl_value(
+                        &outputs,
+                        TESTED_JOYSTICK_DEVICE_NAME,
+                        TESTED_JOYSTICK_AXIS_CTL_MATCHER_KEY,
+                    );
+
                     assert!(
                         (val_after.abs() - joystick_abs_x_range.midpoint().abs()).abs()
                             < joystick_abs_x_range.span() * AUTOCENTERING_TOLERANCE,
