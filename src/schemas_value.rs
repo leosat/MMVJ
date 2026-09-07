@@ -126,13 +126,15 @@ impl<ValueT: NumIntervalValue> WithNumInterval for TfmValue<ValueT> {
 /// whereas last memorized input or output may be != 0. In other cases both traits if implemented
 /// may return the same value.
 #[enum_dispatch]
-pub(crate) trait WithLastKnownIO<T> {
-    fn get_last_known_io(&self) -> T;
+pub(crate) trait WithLastKnownIO {
+    type LastKnownIOValueT;
+    fn get_last_known_io(&self) -> Self::LastKnownIOValueT;
 }
 
 #[enum_dispatch]
-pub(crate) trait WithLastKnownIOSettable<T> {
-    fn set_last_known_io(&self, value: T);
+pub(crate) trait WithLastKnownIOSettable: WithLastKnownIO {
+    type LastKnownIOSettableValueT;
+    fn set_last_known_io(&self, value: Self::LastKnownIOSettableValueT);
 }
 
 #[enum_dispatch]
@@ -860,7 +862,8 @@ impl WithNumericValue for DeviceControlMatcherRef {
     }
 }
 
-impl WithLastKnownIO<BaseNumT> for ValueSrcs {
+impl WithLastKnownIO for ValueSrcs {
+    type LastKnownIOValueT = BaseNumT;
     fn get_last_known_io(&self) -> BaseNumT {
         match self {
             ValueSrcs::Static(v) => v.value.get(),
@@ -869,7 +872,8 @@ impl WithLastKnownIO<BaseNumT> for ValueSrcs {
     }
 }
 
-impl WithLastKnownIO<BaseNumT> for DynValueRefs {
+impl WithLastKnownIO for DynValueRefs {
+    type LastKnownIOValueT = BaseNumT;
     fn get_last_known_io(&self) -> BaseNumT {
         match self {
             DynValueRefs::DeviceControlMatcher(cm) => cm.get_last_known_io(),
@@ -878,7 +882,8 @@ impl WithLastKnownIO<BaseNumT> for DynValueRefs {
     }
 }
 
-impl WithLastKnownIO<BaseNumT> for DeviceControlMatcherRef {
+impl WithLastKnownIO for DeviceControlMatcherRef {
+    type LastKnownIOValueT = BaseNumT;
     fn get_last_known_io(&self) -> BaseNumT {
         self.control_matcher.get_last_known_io()
     }

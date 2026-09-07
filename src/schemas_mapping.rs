@@ -86,14 +86,16 @@ pub(crate) struct Mapping {
     pub(crate) requires_idle_tick: bool,
 }
 
-impl WithLastKnownIO<(BaseNumT, BaseNumT)> for Mapping {
-    fn get_last_known_io(&self) -> (BaseNumT, BaseNumT) {
+impl WithLastKnownIO for Mapping {
+    type LastKnownIOValueT = (BaseNumT, BaseNumT);
+    fn get_last_known_io(&self) -> Self::LastKnownIOValueT {
         (self.last_in.load(Relaxed), self.last_out.load(Relaxed))
     }
 }
 
-impl WithLastKnownIOSettable<(Option<BaseNumT>, Option<BaseNumT>)> for Mapping {
-    fn set_last_known_io(&self, v: (Option<BaseNumT>, Option<BaseNumT>)) {
+impl WithLastKnownIOSettable for Mapping {
+    type LastKnownIOSettableValueT = (Option<BaseNumT>, Option<BaseNumT>);
+    fn set_last_known_io(&self, v: Self::LastKnownIOSettableValueT) {
         v.0.inspect(|v| self.last_in.store(*v, Relaxed));
         v.1.inspect(|v| self.last_out.store(*v, Relaxed));
     }

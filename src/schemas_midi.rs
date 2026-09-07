@@ -286,13 +286,16 @@ impl WithNumericValueSettable for MidiControlMatcherCfg {
     }
 }
 
-impl WithLastKnownIO<BaseNumT> for MidiControlMatcherCfg {
+impl WithLastKnownIO for MidiControlMatcherCfg {
+    type LastKnownIOValueT = BaseNumT;
     fn get_last_known_io(&self) -> BaseNumT {
         self.current_value.load(Relaxed) as BaseNumT
     }
 }
 
-impl WithLastKnownIOSettable<BaseNumT> for MidiControlMatcherCfg {
+impl WithLastKnownIOSettable for MidiControlMatcherCfg {
+    type LastKnownIOSettableValueT = <Self as WithLastKnownIO>::LastKnownIOValueT;
+
     fn set_last_known_io(&self, v: BaseNumT) {
         self.current_value.store(v, Relaxed);
     }

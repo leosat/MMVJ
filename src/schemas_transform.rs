@@ -1,4 +1,4 @@
-use deserialize_untagged_verbose_error::DeserializeUntaggedVerboseError;
+use serde::de::IntoDeserializer;
 use with_doc_str::with_doc_str;
 
 use crate::base_num::{BaseAtomicT, BaseNumT};
@@ -159,11 +159,27 @@ pub(crate) struct TfmStepCommonState {
     intervals: (NumInterval<BaseNumT>, NumInterval<BaseNumT>),
     relativity: (Relativity, Relativity),
     pub(crate) last_time: std::cell::Cell<std::time::Instant>,
+    last_in: Arc<CachePadded<BaseAtomicT>>,
+    last_out: Arc<CachePadded<BaseAtomicT>>,
     #[cfg(feature = "gui")]
     pub(crate) gui_trace_graph_opened: Arc<AtomicBool>,
-    pub(crate) last_in: Arc<CachePadded<BaseAtomicT>>,
-    pub(crate) last_out: Arc<CachePadded<BaseAtomicT>>,
     pub(crate) trace_channel: Option<Arc<TraceChannel>>,
+}
+
+impl WithLastKnownIO for TfmStepCommonState {
+    type LastKnownIOValueT = (BaseNumT, BaseNumT);
+    fn get_last_known_io(&self) -> Self::LastKnownIOValueT {
+        (self.last_in.load(Relaxed), self.last_out.load(Relaxed))
+    }
+}
+
+impl WithLastKnownIOSettable for TfmStepCommonState {
+    type LastKnownIOSettableValueT = (Option<BaseNumT>, Option<BaseNumT>);
+
+    fn set_last_known_io(&self, value: Self::LastKnownIOSettableValueT) {
+        value.0.map(|v| self.last_in.store(v, Relaxed));
+        value.1.map(|v| self.last_in.store(v, Relaxed));
+    }
 }
 
 impl Default for TfmStepCommonState {
@@ -272,12 +288,7 @@ impl Default for TfmStepCfg {
     }
 }
 
-// #[derive(Debug, Clone, Default)]
-// pub(crate) struct TfmStepCommonStateShared(pub(crate) Arc<RwLock<TfmStepCommonState>>);
-
-pub type TfmStepCommonStateShared = TfmStepCommonState;
-
-impl PartialEq for TfmStepCommonStateShared {
+impl PartialEq for TfmStepCommonState {
     fn eq(&self, other: &Self) -> bool {
         self.get_id() == other.get_id()
     }
@@ -306,7 +317,7 @@ pub(crate) struct SumCfg {
     #[serde(skip)]
     #[garde(skip)]
     #[sanitize_inplace(skip)]
-    common_state: TfmStepCommonStateShared,
+    common_state: TfmStepCommonState,
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -364,7 +375,7 @@ pub(crate) struct VelocityToDisplacementCfg {
     #[traverse(skip)]
     #[serde(skip)]
     #[garde(skip)]
-    common_state: TfmStepCommonStateShared,
+    common_state: TfmStepCommonState,
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -601,7 +612,7 @@ pub(crate) struct ForceFeedbackCfg {
     #[garde(skip)]
     #[sanitize_inplace(skip)]
     /// Internal state
-    pub common_state: TfmStepCommonStateShared,
+    pub common_state: TfmStepCommonState,
 
     /// Optional human-readable description.
     #[traverse(skip)]
@@ -693,7 +704,7 @@ impl ForceFeedbackCfg {
 pub(crate) struct ClampCfgCompat__ {
     #[serde(skip)]
     #[garde(skip)]
-    common_state: TfmStepCommonStateShared,
+    common_state: TfmStepCommonState,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) desc: DescriptionCfg,
@@ -718,7 +729,7 @@ pub(crate) struct ClampCfgCompat__ {
 pub(crate) struct ClampCfg {
     #[serde(skip)]
     #[garde(skip)]
-    common_state: TfmStepCommonStateShared,
+    common_state: TfmStepCommonState,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) desc: DescriptionCfg,
@@ -801,7 +812,7 @@ impl ClampCfg {
 pub(crate) struct NopCfg {
     #[serde(skip)]
     #[garde(skip)]
-    common_state: TfmStepCommonStateShared,
+    common_state: TfmStepCommonState,
     #[garde(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
@@ -882,7 +893,7 @@ pub(crate) enum InvertModeCfg {
 pub(crate) struct InvertCfg {
     #[serde(skip)]
     #[garde(skip)]
-    common_state: TfmStepCommonStateShared,
+    common_state: TfmStepCommonState,
     #[garde(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
@@ -921,7 +932,7 @@ pub(crate) struct EmaCfg {
     #[serde(skip)]
     #[garde(skip)]
     #[sanitize_inplace(skip)]
-    common_state: TfmStepCommonStateShared,
+    common_state: TfmStepCommonState,
     #[traverse(skip)]
     #[serde(skip)]
     #[garde(skip)]
@@ -1028,7 +1039,7 @@ pub(crate) struct OneEuroFilterCfg {
     #[garde(skip)]
     #[traverse(skip)]
     #[sanitize_inplace(skip)]
-    common_state: TfmStepCommonStateShared,
+    common_state: TfmStepCommonState,
 
     #[serde(skip)]
     #[garde(skip)]
@@ -1196,7 +1207,7 @@ pub(crate) struct LinearCfg {
     #[serde(skip)]
     #[garde(skip)]
     #[sanitize_inplace(skip)]
-    common_state: TfmStepCommonStateShared,
+    common_state: TfmStepCommonState,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[sanitize_inplace(skip)]
@@ -1250,7 +1261,7 @@ impl Default for LinearCfg {
 pub(crate) struct SmoothstepCfg {
     #[serde(skip)]
     #[sanitize_inplace(skip)]
-    common_state: TfmStepCommonStateShared,
+    common_state: TfmStepCommonState,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[sanitize_inplace(skip)]
@@ -1290,7 +1301,7 @@ pub(crate) struct SCurveCfg {
     #[serde(skip)]
     #[garde(skip)]
     #[sanitize_inplace(skip)]
-    common_state: TfmStepCommonStateShared,
+    common_state: TfmStepCommonState,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -1342,7 +1353,7 @@ pub(crate) struct NormExpCfg {
     #[serde(skip)]
     #[garde(skip)]
     #[sanitize_inplace(skip)]
-    common_state: TfmStepCommonStateShared,
+    common_state: TfmStepCommonState,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -1396,7 +1407,7 @@ pub(crate) struct SignedPowerCfg {
     #[serde(skip)]
     #[garde(skip)]
     #[sanitize_inplace(skip)]
-    common_state: TfmStepCommonStateShared,
+    common_state: TfmStepCommonState,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -1449,7 +1460,7 @@ impl Default for SignedPowerCfg {
 pub(crate) struct _HighPassCfg {
     #[serde(skip)]
     #[garde(skip)]
-    common_state: TfmStepCommonStateShared,
+    common_state: TfmStepCommonState,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -1472,7 +1483,7 @@ pub(crate) struct IntegrateCfg {
     #[serde(skip)]
     #[garde(skip)]
     #[traverse(skip)]
-    common_state: TfmStepCommonStateShared,
+    common_state: TfmStepCommonState,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
     #[garde(skip)]
@@ -1716,34 +1727,32 @@ pub(crate) fn collect_dynamic_value_matchers(
 }
 
 // ==================================================================
-#[derive(
-    Debug, Clone, Traversable, TraversableMut, JsonSchema, PartialEq, Serialize, DeserializeUntaggedVerboseError,
-)]
+#[derive(Debug, Clone, Traversable, TraversableMut, JsonSchema, PartialEq, Serialize)]
 #[serde(untagged)]
 enum TfmSeqVariants {
     Short(Vec<TfmStepCfg>),
     Full(TfmSeqFull),
 }
 
-// impl<'de> Deserialize<'de> for TfmSeqVariants {
-//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-//     where
-//         D: Deserializer<'de>,
-//     {
-//         use serde::de::Error;
-//         let vv: serde_value::Value = Deserialize::deserialize(deserializer)?;
-//         match Vec::<_>::deserialize(vv.clone().into_deserializer()) {
-//             Ok(v) => Ok(Self::Short(v)),
-//             Err(e1) => match TfmSeqFull::deserialize(vv.into_deserializer()) {
-//                 Ok(v) => Ok(Self::Full(v)),
-//                 Err(e2) => Err(D::Error::custom(format!(
-//                     "Configuration parse error.\nIf using steps list only: {}\nIf using steps + input spec: {}\n",
-//                     e1, e2
-//                 ))),
-//             },
-//         }
-//     }
-// }
+impl<'de> Deserialize<'de> for TfmSeqVariants {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::Error;
+        let vv: serde_value::Value = Deserialize::deserialize(deserializer)?;
+        match Vec::<_>::deserialize(vv.clone().into_deserializer()) {
+            Ok(v) => Ok(Self::Short(v)),
+            Err(e1) => match TfmSeqFull::deserialize(vv.into_deserializer()) {
+                Ok(v) => Ok(Self::Full(v)),
+                Err(e2) => Err(D::Error::custom(format!(
+                    "Configuration parse error.\nIf using steps list only: {}\nIf using steps + input spec: {}\n",
+                    e1, e2
+                ))),
+            },
+        }
+    }
+}
 
 impl Default for TfmSeqVariants {
     fn default() -> Self {
@@ -1875,8 +1884,9 @@ impl WithRelativityRef for TfmSeqCfg {
     }
 }
 
-impl WithLastKnownIOSettable<(Option<BaseNumT>, Option<BaseNumT>)> for TfmSeqCfg {
-    fn set_last_known_io(&self, value: (Option<BaseNumT>, Option<BaseNumT>)) {
+impl WithLastKnownIOSettable for TfmSeqCfg {
+    type LastKnownIOSettableValueT = (Option<BaseNumT>, Option<BaseNumT>);
+    fn set_last_known_io(&self, value: Self::LastKnownIOSettableValueT) {
         if let Some(v) = value.0 {
             self.last_io.0.store(v, Relaxed)
         }
@@ -1886,7 +1896,8 @@ impl WithLastKnownIOSettable<(Option<BaseNumT>, Option<BaseNumT>)> for TfmSeqCfg
     }
 }
 
-impl WithLastKnownIO<(BaseNumT, BaseNumT)> for TfmSeqCfg {
+impl WithLastKnownIO for TfmSeqCfg {
+    type LastKnownIOValueT = (BaseNumT, BaseNumT);
     fn get_last_known_io(&self) -> (BaseNumT, BaseNumT) {
         (self.last_io.0.load(Relaxed), self.last_io.1.load(Relaxed))
     }
@@ -2009,7 +2020,7 @@ pub(crate) struct SteeringCfg {
     #[garde(skip)]
     #[sanitize_inplace(skip)]
     /// Internal state
-    common_state: TfmStepCommonStateShared,
+    common_state: TfmStepCommonState,
 
     #[serde(skip)]
     #[traverse(skip)]
@@ -2259,7 +2270,7 @@ pub(crate) struct RaiseFallCfg {
     #[traverse(skip)]
     #[garde(skip)]
     #[sanitize_inplace(skip)]
-    common_state: TfmStepCommonStateShared,
+    common_state: TfmStepCommonState,
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
@@ -2411,7 +2422,7 @@ pub(crate) struct ScriptCfg {
     #[garde(skip)]
     #[sanitize_inplace(skip)]
     /// Internal state
-    common_state: TfmStepCommonStateShared,
+    common_state: TfmStepCommonState,
 
     #[serde(skip)]
     #[traverse(skip)]

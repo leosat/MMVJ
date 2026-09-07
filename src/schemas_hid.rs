@@ -601,7 +601,9 @@ pub(crate) struct HidControlMatcherCfg {
     _dst_refs_count: Arc<CachePadded<AtomicUsize>>,
 }
 
-impl WithLastKnownIOSettable<BaseNumT> for HidControlMatcherCfg {
+impl WithLastKnownIOSettable for HidControlMatcherCfg {
+    type LastKnownIOSettableValueT = <Self as WithLastKnownIO>::LastKnownIOValueT;
+
     fn set_last_known_io(&self, v: BaseNumT) {
         self.last_known_io_value.store(v, Relaxed);
     }
@@ -621,7 +623,8 @@ impl WithNumericValueSettable for HidControlMatcherCfg {
     }
 }
 
-impl WithLastKnownIO<BaseNumT> for HidControlMatcherCfg {
+impl WithLastKnownIO for HidControlMatcherCfg {
+    type LastKnownIOValueT = BaseNumT;
     fn get_last_known_io(&self) -> BaseNumT {
         self.last_known_io_value.load(Relaxed) as BaseNumT
     }

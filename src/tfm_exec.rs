@@ -37,7 +37,6 @@ use log::debug;
 use mlua::ErrorContext;
 use mlua::{FromLua, Lua};
 use std::ops::Add;
-use std::sync::atomic::Ordering::Relaxed;
 use std::time::Instant;
 
 pub(crate) trait TfmExeState {
@@ -123,7 +122,7 @@ impl WithTfmExec for TfmSeqCfg {
 
 impl WithTfmExec for TfmStepCfg {
     fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
-        self.common_state_ref().last_in.store(input.value, Relaxed);
+        self.common_state_ref().set_last_known_io((Some(input.value), None));
         #[cfg(feature = "gui")]
         self.common_state_ref()
             .gui_trace(TfmStepTraceStage::In, &input, Instant::now());
@@ -165,7 +164,7 @@ impl WithTfmExec for TfmStepCfg {
             input.value = input.interval.clamp(input.value);
         }
 
-        self.common_state_ref().last_out.store(input.value, Relaxed);
+        self.common_state_ref().set_last_known_io((None, Some(input.value)));
         #[cfg(feature = "gui")]
         self.common_state_ref()
             .gui_trace(TfmStepTraceStage::Out, &input, Instant::now());

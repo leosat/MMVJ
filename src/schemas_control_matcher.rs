@@ -45,7 +45,8 @@ impl WithNumericValue for ControlMatchers {
     }
 }
 
-impl WithLastKnownIO<BaseNumT> for ControlMatchers {
+impl WithLastKnownIO for ControlMatchers {
+    type LastKnownIOValueT = BaseNumT;
     fn get_last_known_io(&self) -> BaseNumT {
         match self {
             #[cfg(feature = "midi")]
@@ -55,7 +56,8 @@ impl WithLastKnownIO<BaseNumT> for ControlMatchers {
     }
 }
 
-impl WithLastKnownIOSettable<BaseNumT> for ControlMatchers {
+impl WithLastKnownIOSettable for ControlMatchers {
+    type LastKnownIOSettableValueT = <Self as WithLastKnownIO>::LastKnownIOValueT;
     fn set_last_known_io(&self, v: BaseNumT) {
         match self {
             #[cfg(feature = "midi")]
