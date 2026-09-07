@@ -10,6 +10,17 @@ pub(crate) enum Relativity {
     Abs,
 }
 
+impl Relativity {
+    pub(crate) fn is_relative(&self) -> bool {
+        matches!(self, Self::Rel)
+    }
+
+    #[allow(unused)]
+    pub(crate) fn is_absolute(&self) -> bool {
+        matches!(self, Self::Abs)
+    }
+}
+
 impl Display for Relativity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {

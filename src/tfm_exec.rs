@@ -194,13 +194,13 @@ impl WithTfmExec for VelocityToDisplacementCfg {
         input.value = self.out_interval.map_from(
             input.value
                 * self.multiplier
-                * (std::time::Instant::now() - self.common_state_ref().last_time.get()).as_secs_f32() as BaseNumT,
+                * (std::time::Instant::now() - self.last_time.get()).as_secs_f32() as BaseNumT,
             &input.interval,
             OutOfRangePolicy::Clamp,
         );
         input.interval = self.out_interval;
         input.relativity = self.common_state_ref().is_out_relative().into();
-        self.common_state_ref().last_time.set(std::time::Instant::now());
+        self.last_time.set(std::time::Instant::now());
         input
     }
 }
@@ -211,7 +211,7 @@ impl WithTfmExec for ClampCfg {
             return input;
         }
         input.value = self.get_clamping_interval().clamp(input.value);
-        input.interval = self.get_out_interval();
+        input.interval = self.common_state_ref().get_out_interval();
         // NB: clamping interval is ensured to be contained wihin input interval,
         // NB: so no more need for input.value = input.interval.clamp(input.value);
         input
