@@ -664,8 +664,8 @@ fn test_virtual_joystick_internal(with_ff: bool) {
         "TestVJ",
         HidVirtualDeviceCreationSpec {
             cfg_spec: HidDeviceCfg {
-                enabled: true,
-                description: "Use with caution.".to_string(),
+                enabled: Default::default(),
+                description: "Use with caution.".to_string().into(),
                 controls: {
                     let mut controls = BTreeMap::new();
                     controls.insert(String::from("X"), {
@@ -685,7 +685,7 @@ fn test_virtual_joystick_internal(with_ff: bool) {
                     force_feedback: if with_ff {
                         Some(HIDDeviceForceFeedbackCfg {
                             state_xy: Default::default(),
-                            enabled: true,
+                            enabled: Default::default(),
                             effects: vec![HidFfEffect::Constant],
                             max_effects: 16,
                             gain: 0.1,

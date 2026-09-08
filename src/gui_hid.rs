@@ -208,7 +208,7 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                             self.add_special_force_feedback_controls();
                             if let Some(ff) = &mut self.virtual_device_force_feedback_info_mut() {
                                 ff.effects.push(crate::schemas_hid::HidFfEffect::Constant);
-                                ff.enabled = true;
+                                *ff.enabled = true;
                                 ff.gain = 1.0;
                                 ff.max_effects = 16;
                             } else {

@@ -8,7 +8,7 @@ use crate::schemas_common::WithRuntimeId;
 use crate::schemas_mapping::Mapping;
 use crate::schemas_transform::{DynValFilter, TfmCfgDuplicateTreeWithNewState, collect_dynamic_value_matchers};
 use crate::schemas_transform::{TfmSeqCfg, TfmStepCfg};
-use crate::schemas_value::{DynValueRefs, ValueDsts};
+use crate::schemas_value::{DynValueRefs, ValueDsts, WithLastKnownIO};
 use std::any::Any;
 use std::sync::atomic::Ordering::Relaxed;
 
@@ -113,7 +113,6 @@ impl<'s> DrawEgui<'s> for Mapping {
                         // ----------------------------------
                         /*Last mapping in*/
                         {
-                            let last_in = self.last_in.load(Relaxed);
                             gui_out = gui_out.or(ui
                                 .horizontal(|ui| {
                                     // ui.label(
@@ -132,7 +131,9 @@ impl<'s> DrawEgui<'s> for Mapping {
                                     );
                                     ui.separator();
                                     ui.label(
-                                        egui::RichText::new(format!("<= {:+08.2}", last_in)).size(12.0).strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
+                                        egui::RichText::new(format!("<= {:+08.2}", self.get_last_known_io().0))
+                                            .size(12.0)
+                                            .strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
                                     );
                                     ui.separator();
                                     gui_out
@@ -159,7 +160,6 @@ impl<'s> DrawEgui<'s> for Mapping {
                         //---------------------------------------------
                         /*Last mapping out*/
                         {
-                            let last_out = self.last_out.load(Relaxed);
                             gui_out = gui_out.or(ui
                                 .horizontal(|ui| {
                                     // ui.label(
@@ -178,7 +178,7 @@ impl<'s> DrawEgui<'s> for Mapping {
                                     );
                                     ui.separator();
                                     ui.label(
-                                        egui::RichText::new(format!("=> {:+08.2}", last_out))
+                                        egui::RichText::new(format!("=> {:+08.2}", self.get_last_known_io().1))
                                             .size(12.0)
                                             .strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
                                     );
@@ -244,25 +244,25 @@ impl crate::gui_main::GuiMain {
             )),
             |ui| {
                 ui.horizontal(|ui| {
-                    if self.cfg.mappings.iter().any(|v| v.enabled)
+                    if self.cfg.mappings.iter().any(|v| *v.enabled)
                         && ui
                             .button(egui_phosphor::bold::STOP.to_string())
                             .on_hover_text("Disable all mappings")
                             .clicked()
                     {
                         for m in &mut *self.cfg.mappings {
-                            m.enabled = false;
+                            *m.enabled = false;
                             *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
                         }
                     };
-                    if !self.cfg.mappings.iter().all(|v| v.enabled)
+                    if !self.cfg.mappings.iter().all(|v| *v.enabled)
                         && ui
                             .button(egui_phosphor::bold::PLAY.to_string())
                             .on_hover_text("Enable all mappings")
                             .clicked()
                     {
                         for m in &mut *self.cfg.mappings {
-                            m.enabled = true;
+                            *m.enabled = true;
                             *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
                         }
                     };
@@ -285,13 +285,13 @@ impl crate::gui_main::GuiMain {
                 ui.push_id(mapping_idx, |ui| {
                     ui.horizontal(|ui| {
                         {
-                            let (label, on_hover_text) = if mapping.enabled {
+                            let (label, on_hover_text) = if *mapping.enabled {
                                 (egui_phosphor::bold::STOP.to_string(), "Disable")
                             } else {
                                 (egui_phosphor::bold::PLAY.to_string(), "Enable")
                             };
                             if ui.button(label).on_hover_text(on_hover_text).clicked() {
-                                mapping.enabled = !mapping.enabled;
+                                *mapping.enabled = !*mapping.enabled;
                                 *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
                             }
                         }

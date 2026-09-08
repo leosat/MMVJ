@@ -1,6 +1,9 @@
 #[cfg(feature = "midi")]
 use crate::schemas_midi::MidiMessageCfg;
-use crate::{base_num::BaseNumT, mapped_controls::MappedCtls, num_interval::NumInterval, schemas_hid::AxisProperties};
+use crate::{
+    base_num::BaseNumT, mapped_controls::MappedCtls, num_interval::NumInterval, schemas_cfg::DescriptionCfg,
+    schemas_hid::AxisProperties,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -25,8 +28,14 @@ pub(crate) struct HidControlPredefined {
     pub(crate) properties: Option<AxisProperties>,
     #[serde(default)]
     pub(crate) initial_value: BaseNumT,
-    #[serde(default)]
-    pub(crate) description: String,
+    #[serde(
+        default,
+        rename = "desc",
+        alias = "description",
+        skip_serializing_if = "DescriptionCfg::is_empty"
+    )]
+    #[schemars(default)]
+    pub(crate) description: DescriptionCfg,
 }
 
 #[cfg(feature = "midi")]
@@ -35,5 +44,12 @@ pub(crate) struct HidControlPredefined {
 pub(crate) struct MidiControlPredefined {
     pub(crate) midi_message: MidiMessageCfg,
     pub(crate) range: NumInterval<BaseNumT>,
-    pub(crate) description: String,
+    #[serde(
+        default,
+        rename = "desc",
+        alias = "description",
+        skip_serializing_if = "DescriptionCfg::is_empty"
+    )]
+    #[schemars(default)]
+    pub(crate) description: DescriptionCfg,
 }

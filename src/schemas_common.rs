@@ -159,3 +159,38 @@ pub(crate) trait WithRuntimeId {
     fn get_id(&self) -> ObjId;
     fn assign_new_id(&mut self);
 }
+
+// ----------------------------
+
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct EnabledFlagCfg(pub(crate) bool);
+
+impl EnabledFlagCfg {
+    pub(crate) fn is_default(&self) -> bool {
+        self.0 == default_enabled_flag_inner()
+    }
+}
+
+impl DerefMut for EnabledFlagCfg {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Deref for EnabledFlagCfg {
+    type Target = bool;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Default for EnabledFlagCfg {
+    fn default() -> Self {
+        Self(default_enabled_flag_inner())
+    }
+}
+
+const fn default_enabled_flag_inner() -> bool {
+    true
+}

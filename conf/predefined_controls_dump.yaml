@@ -7,7 +7,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Channel aftertouch
+    desc: Channel aftertouch
   ATTACK_TIME:
     midi_message:
       type: control_change
@@ -16,7 +16,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Attack time (CC73)
+    desc: Attack time (CC73)
   BREATH:
     midi_message:
       type: control_change
@@ -25,7 +25,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Breath Controller (CC2)
+    desc: Breath Controller (CC2)
   DECAY_TIME:
     midi_message:
       type: control_change
@@ -34,7 +34,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Decay time (CC75)
+    desc: Decay time (CC75)
   EXPRESSION_PEDAL:
     midi_message:
       type: control_change
@@ -43,7 +43,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Expression pedal (CC11)
+    desc: Expression pedal (CC11)
   FILTER_CUTOFF:
     midi_message:
       type: control_change
@@ -52,7 +52,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Filter cutoff (CC74)
+    desc: Filter cutoff (CC74)
   FILTER_RESPONSE:
     midi_message:
       type: control_change
@@ -61,7 +61,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Filter response (CC71)
+    desc: Filter response (CC71)
   MODULATION_WHEEL:
     midi_message:
       type: control_change
@@ -70,7 +70,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Modulation wheel (CC1)
+    desc: Modulation wheel (CC1)
   NOTE_A:
     midi_message:
       type: note
@@ -89,7 +89,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Note A (all octaves)
+    desc: Note A (all octaves)
   "NOTE_A#":
     midi_message:
       type: note
@@ -108,7 +108,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: "Note A# (all octaves)"
+    desc: "Note A# (all octaves)"
   NOTE_B:
     midi_message:
       type: note
@@ -127,7 +127,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Note B (all octaves)
+    desc: Note B (all octaves)
   NOTE_C:
     midi_message:
       type: note
@@ -147,7 +147,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Note C (all octaves)
+    desc: Note C (all octaves)
   "NOTE_C#":
     midi_message:
       type: note
@@ -167,7 +167,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: "Note C# (all octaves)"
+    desc: "Note C# (all octaves)"
   NOTE_D:
     midi_message:
       type: note
@@ -187,7 +187,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Note D (all octaves)
+    desc: Note D (all octaves)
   "NOTE_D#":
     midi_message:
       type: note
@@ -207,7 +207,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: "Note D# (all octaves)"
+    desc: "Note D# (all octaves)"
   NOTE_E:
     midi_message:
       type: note
@@ -227,7 +227,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Note E (all octaves)
+    desc: Note E (all octaves)
   NOTE_F:
     midi_message:
       type: note
@@ -247,7 +247,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Note F (all octaves)
+    desc: Note F (all octaves)
   "NOTE_F#":
     midi_message:
       type: note
@@ -267,7 +267,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: "Note F# (all octaves)"
+    desc: "Note F# (all octaves)"
   NOTE_G:
     midi_message:
       type: note
@@ -287,7 +287,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Note G (all octaves)
+    desc: Note G (all octaves)
   "NOTE_G#":
     midi_message:
       type: note
@@ -306,7 +306,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: "Note G# (all octaves)"
+    desc: "Note G# (all octaves)"
   PAN:
     midi_message:
       type: control_change
@@ -315,7 +315,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Pan position (CC10)
+    desc: Pan position (CC10)
   PITCH_WHEEL:
     midi_message:
       type: pitch_wheel
@@ -324,7 +324,7 @@ midi_controls:
     range:
     - -8192.0
     - 8191.0
-    description: Pitch bend wheel
+    desc: Pitch bend wheel
   PORTAMENTO_PEDAL:
     midi_message:
       type: control_change
@@ -333,7 +333,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Portamento (CC65)
+    desc: Portamento (CC65)
   RELEASE_TIME:
     midi_message:
       type: control_change
@@ -342,7 +342,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Release time (CC72)
+    desc: Release time (CC72)
   SOFT_PEDAL:
     midi_message:
       type: control_change
@@ -351,7 +351,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Soft (CC67)
+    desc: Soft (CC67)
   SUSTAIN_PEDAL:
     midi_message:
       type: control_change
@@ -360,7 +360,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Sustain pedal (CC64)
+    desc: Sustain pedal (CC64)
   SUSTENUDO_PEDAL:
     midi_message:
       type: control_change
@@ -369,7 +369,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Sostenudo (CC66)
+    desc: Sostenudo (CC66)
   VOLUME:
     midi_message:
       type: control_change
@@ -378,7 +378,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    description: Main volume (CC7)
+    desc: Main volume (CC7)
 hid_controls:
   ABS_BRAKE:
     type: ABS_BRAKE
@@ -390,7 +390,7 @@ hid_controls:
       fuzz: 0.0
       flat: 0.0
     initial_value: 0.0
-    description: Brake pedal
+    desc: Brake pedal
   ABS_GAS:
     type: ABS_GAS
     range:
@@ -401,7 +401,7 @@ hid_controls:
       fuzz: 0.0
       flat: 0.0
     initial_value: 0.0
-    description: Gas/throttle pedal
+    desc: Gas/throttle pedal
   ABS_HAT0X:
     type: ABS_HAT0_X
     range:
@@ -409,7 +409,7 @@ hid_controls:
     - 1.0
     properties: null
     initial_value: 0.0
-    description: D-pad horizontal
+    desc: D-pad horizontal
   ABS_HAT0Y:
     type: ABS_HAT0_Y
     range:
@@ -417,7 +417,7 @@ hid_controls:
     - 1.0
     properties: null
     initial_value: 0.0
-    description: D-pad vertical
+    desc: D-pad vertical
   ABS_RX:
     type: ABS_RX
     range:
@@ -428,7 +428,7 @@ hid_controls:
       fuzz: 0.0
       flat: 0.0
     initial_value: 0.0
-    description: Right X-axis (right stick horizontal)
+    desc: Right X-axis (right stick horizontal)
   ABS_RY:
     type: ABS_RY
     range:
@@ -439,7 +439,7 @@ hid_controls:
       fuzz: 0.0
       flat: 0.0
     initial_value: 0.0
-    description: Right Y-axis (right stick vertical)
+    desc: Right Y-axis (right stick vertical)
   ABS_RZ:
     type: ABS_RZ
     range:
@@ -450,7 +450,7 @@ hid_controls:
       fuzz: 0.0
       flat: 0.0
     initial_value: 0.0
-    description: Right Z-axis (right trigger analog)
+    desc: Right Z-axis (right trigger analog)
   ABS_WHEEL:
     type: ABS_WHEEL
     range:
@@ -461,7 +461,7 @@ hid_controls:
       fuzz: 0.0
       flat: 0.0
     initial_value: 0.0
-    description: Steering wheel axis
+    desc: Steering wheel axis
   ABS_X:
     type: ABS_X
     range:
@@ -472,7 +472,7 @@ hid_controls:
       fuzz: 0.0
       flat: 0.0
     initial_value: 0.0
-    description: Primary X-axis (left stick horizontal), positive range.
+    desc: Primary X-axis (left stick horizontal), positive range.
   ABS_Y:
     type: ABS_Y
     range:
@@ -483,7 +483,7 @@ hid_controls:
       fuzz: 0.0
       flat: 0.0
     initial_value: 0.0
-    description: Primary Y-axis (left stick vertical)
+    desc: Primary Y-axis (left stick vertical)
   ABS_Z:
     type: ABS_Z
     range:
@@ -494,7 +494,7 @@ hid_controls:
       fuzz: 0.0
       flat: 0.0
     initial_value: 0.0
-    description: Z-axis (left trigger analog)
+    desc: Z-axis (left trigger analog)
   BTN_A:
     type: BTN_SOUTH
     range:
@@ -502,7 +502,7 @@ hid_controls:
     - 1.0
     properties: null
     initial_value: 0.0
-    description: A button (Xbox) / Cross (PlayStation)
+    desc: A button (Xbox) / Cross (PlayStation)
   BTN_B:
     type: BTN_EAST
     range:
@@ -510,7 +510,7 @@ hid_controls:
     - 1.0
     properties: null
     initial_value: 0.0
-    description: B button (Xbox) / Circle (PlayStation)
+    desc: B button (Xbox) / Circle (PlayStation)
   BTN_EAST:
     type: BTN_EAST
     range:
@@ -518,7 +518,7 @@ hid_controls:
     - 1.0
     properties: null
     initial_value: 0.0
-    description: East button (B on Xbox)
+    desc: East button (B on Xbox)
   BTN_EXTRA:
     type: BTN_EXTRA
     range:
@@ -526,7 +526,7 @@ hid_controls:
     - 1.0
     properties: null
     initial_value: 0.0
-    description: Extra button (forward)
+    desc: Extra button (forward)
   BTN_LEFT:
     type: BTN_LEFT
     range:
@@ -534,7 +534,7 @@ hid_controls:
     - 1.0
     properties: null
     initial_value: 0.0
-    description: Left mouse button
+    desc: Left mouse button
   BTN_MIDDLE:
     type: BTN_MIDDLE
     range:
@@ -542,7 +542,7 @@ hid_controls:
     - 1.0
     properties: null
     initial_value: 0.0
-    description: Middle mouse button
+    desc: Middle mouse button
   BTN_NORTH:
     type: BTN_NORTH
     range:
@@ -550,7 +550,7 @@ hid_controls:
     - 1.0
     properties: null
     initial_value: 0.0
-    description: North button (X on Xbox)
+    desc: North button (X on Xbox)
   BTN_RIGHT:
     type: BTN_RIGHT
     range:
@@ -558,7 +558,7 @@ hid_controls:
     - 1.0
     properties: null
     initial_value: 0.0
-    description: Right mouse button
+    desc: Right mouse button
   BTN_SELECT:
     type: BTN_SELECT
     range:
@@ -566,7 +566,7 @@ hid_controls:
     - 1.0
     properties: null
     initial_value: 0.0
-    description: Select/Back button
+    desc: Select/Back button
   BTN_SIDE:
     type: BTN_SIDE
     range:
@@ -574,7 +574,7 @@ hid_controls:
     - 1.0
     properties: null
     initial_value: 0.0
-    description: Side button (back)
+    desc: Side button (back)
   BTN_SOUTH:
     type: BTN_SOUTH
     range:
@@ -582,7 +582,7 @@ hid_controls:
     - 1.0
     properties: null
     initial_value: 0.0
-    description: South button (A on Xbox)
+    desc: South button (A on Xbox)
   BTN_START:
     type: BTN_START
     range:
@@ -590,7 +590,7 @@ hid_controls:
     - 1.0
     properties: null
     initial_value: 0.0
-    description: Start/Menu button
+    desc: Start/Menu button
   BTN_TRIGGER:
     type: BTN_TRIGGER
     range:
@@ -598,7 +598,6 @@ hid_controls:
     - 1.0
     properties: null
     initial_value: 0.0
-    description: ""
   BTN_WEST:
     type: BTN_WEST
     range:
@@ -606,7 +605,7 @@ hid_controls:
     - 1.0
     properties: null
     initial_value: 0.0
-    description: West button (Y on Xbox)
+    desc: West button (Y on Xbox)
   BTN_X:
     type: BTN_NORTH
     range:
@@ -614,7 +613,7 @@ hid_controls:
     - 1.0
     properties: null
     initial_value: 0.0
-    description: X button (Xbox) / Square (PlayStation)
+    desc: X button (Xbox) / Square (PlayStation)
   BTN_Y:
     type: BTN_WEST
     range:
@@ -622,7 +621,7 @@ hid_controls:
     - 1.0
     properties: null
     initial_value: 0.0
-    description: Y button (Xbox) / Triangle (PlayStation)
+    desc: Y button (Xbox) / Triangle (PlayStation)
   FORCE_FEEDBACK_X:
     type: FORCE_FEEDBACK_X
     range:
@@ -633,7 +632,7 @@ hid_controls:
       fuzz: 0.0
       flat: 0.0
     initial_value: 0.0
-    description: >-
+    desc: >-
       Special, fake, control to expose force feedback X component coming from device.
       Currently R/O, write ignored (could reuse it to inject Constant force on unowned
       HID though).
@@ -647,7 +646,7 @@ hid_controls:
       fuzz: 0.0
       flat: 0.0
     initial_value: 0.0
-    description: >-
+    desc: >-
       Special, fake, control to expose force feedback Y component coming from device.
       Currently R/O, write ignored (could reuse it to inject Constant force on unowned
       HID though).
@@ -658,7 +657,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Number 0 key
+    desc: Number 0 key
   KEY_1:
     type: KEY_1
     range:
@@ -666,7 +665,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Number 1 key
+    desc: Number 1 key
   KEY_2:
     type: KEY_2
     range:
@@ -674,7 +673,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Number 2 key
+    desc: Number 2 key
   KEY_3:
     type: KEY_3
     range:
@@ -682,7 +681,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Number 3 key
+    desc: Number 3 key
   KEY_4:
     type: KEY_4
     range:
@@ -690,7 +689,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Number 4 key
+    desc: Number 4 key
   KEY_5:
     type: KEY_5
     range:
@@ -698,7 +697,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Number 5 key
+    desc: Number 5 key
   KEY_6:
     type: KEY_6
     range:
@@ -706,7 +705,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Number 6 key
+    desc: Number 6 key
   KEY_7:
     type: KEY_7
     range:
@@ -714,7 +713,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Number 7 key
+    desc: Number 7 key
   KEY_8:
     type: KEY_8
     range:
@@ -722,7 +721,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Number 8 key
+    desc: Number 8 key
   KEY_9:
     type: KEY_9
     range:
@@ -730,7 +729,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Number 9 key
+    desc: Number 9 key
   KEY_A:
     type: KEY_A
     range:
@@ -738,7 +737,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: A key
+    desc: A key
   KEY_APOSTROPHE:
     type: KEY_APOSTROPHE
     range:
@@ -746,7 +745,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Apostrophe/Quote key
+    desc: Apostrophe/Quote key
   KEY_B:
     type: KEY_B
     range:
@@ -754,7 +753,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: B key
+    desc: B key
   KEY_BACK:
     type: KEY_BACK
     range:
@@ -762,7 +761,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Browser back button
+    desc: Browser back button
   KEY_BACKSLASH:
     type: KEY_BACKSLASH
     range:
@@ -770,7 +769,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Backslash/Pipe key
+    desc: Backslash/Pipe key
   KEY_BACKSPACE:
     type: KEY_BACKSPACE
     range:
@@ -778,7 +777,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Backspace key
+    desc: Backspace key
   KEY_C:
     type: KEY_C
     range:
@@ -786,7 +785,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: C key
+    desc: C key
   KEY_CAPSLOCK:
     type: KEY_CAPSLOCK
     range:
@@ -794,7 +793,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Caps Lock toggle key
+    desc: Caps Lock toggle key
   KEY_COMMA:
     type: KEY_COMMA
     range:
@@ -802,7 +801,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Comma/Less-than key
+    desc: Comma/Less-than key
   KEY_COMPOSE:
     type: KEY_COMPOSE
     range:
@@ -810,7 +809,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Compose key for special characters
+    desc: Compose key for special characters
   KEY_D:
     type: KEY_D
     range:
@@ -818,7 +817,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: D key
+    desc: D key
   KEY_DELETE:
     type: KEY_DELETE
     range:
@@ -826,7 +825,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Delete key
+    desc: Delete key
   KEY_DOT:
     type: KEY_DOT
     range:
@@ -834,7 +833,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Period/Greater-than key
+    desc: Period/Greater-than key
   KEY_DOWN:
     type: KEY_DOWN
     range:
@@ -842,7 +841,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Down arrow key
+    desc: Down arrow key
   KEY_E:
     type: KEY_E
     range:
@@ -850,7 +849,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: E key
+    desc: E key
   KEY_EJECTCD:
     type: KEY_EJECTCD
     range:
@@ -858,7 +857,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Eject CD/DVD button
+    desc: Eject CD/DVD button
   KEY_END:
     type: KEY_END
     range:
@@ -866,7 +865,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: End key
+    desc: End key
   KEY_ENTER:
     type: KEY_ENTER
     range:
@@ -874,7 +873,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Enter/Return key
+    desc: Enter/Return key
   KEY_EQUAL:
     type: KEY_EQUAL
     range:
@@ -882,7 +881,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Equals key
+    desc: Equals key
   KEY_ESC:
     type: KEY_ESC
     range:
@@ -890,7 +889,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Escape key
+    desc: Escape key
   KEY_F:
     type: KEY_F
     range:
@@ -898,7 +897,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: F key
+    desc: F key
   KEY_F1:
     type: KEY_F1
     range:
@@ -906,7 +905,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F1
+    desc: Function key F1
   KEY_F10:
     type: KEY_F10
     range:
@@ -914,7 +913,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F10
+    desc: Function key F10
   KEY_F11:
     type: KEY_F11
     range:
@@ -922,7 +921,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F11
+    desc: Function key F11
   KEY_F12:
     type: KEY_F12
     range:
@@ -930,7 +929,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F12
+    desc: Function key F12
   KEY_F13:
     type: KEY_F13
     range:
@@ -938,7 +937,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F13
+    desc: Function key F13
   KEY_F14:
     type: KEY_F14
     range:
@@ -946,7 +945,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F14
+    desc: Function key F14
   KEY_F15:
     type: KEY_F15
     range:
@@ -954,7 +953,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F15
+    desc: Function key F15
   KEY_F16:
     type: KEY_F16
     range:
@@ -962,7 +961,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F16
+    desc: Function key F16
   KEY_F17:
     type: KEY_F17
     range:
@@ -970,7 +969,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F17
+    desc: Function key F17
   KEY_F18:
     type: KEY_F18
     range:
@@ -978,7 +977,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F18
+    desc: Function key F18
   KEY_F19:
     type: KEY_F19
     range:
@@ -986,7 +985,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F19
+    desc: Function key F19
   KEY_F2:
     type: KEY_F2
     range:
@@ -994,7 +993,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F2
+    desc: Function key F2
   KEY_F20:
     type: KEY_F20
     range:
@@ -1002,7 +1001,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F20
+    desc: Function key F20
   KEY_F21:
     type: KEY_F21
     range:
@@ -1010,7 +1009,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F21
+    desc: Function key F21
   KEY_F22:
     type: KEY_F22
     range:
@@ -1018,7 +1017,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F22
+    desc: Function key F22
   KEY_F23:
     type: KEY_F23
     range:
@@ -1026,7 +1025,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F23
+    desc: Function key F23
   KEY_F24:
     type: KEY_F24
     range:
@@ -1034,7 +1033,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F24
+    desc: Function key F24
   KEY_F3:
     type: KEY_F3
     range:
@@ -1042,7 +1041,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F3
+    desc: Function key F3
   KEY_F4:
     type: KEY_F4
     range:
@@ -1050,7 +1049,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F4
+    desc: Function key F4
   KEY_F5:
     type: KEY_F5
     range:
@@ -1058,7 +1057,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F5
+    desc: Function key F5
   KEY_F6:
     type: KEY_F6
     range:
@@ -1066,7 +1065,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F6
+    desc: Function key F6
   KEY_F7:
     type: KEY_F7
     range:
@@ -1074,7 +1073,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F7
+    desc: Function key F7
   KEY_F8:
     type: KEY_F8
     range:
@@ -1082,7 +1081,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F8
+    desc: Function key F8
   KEY_F9:
     type: KEY_F9
     range:
@@ -1090,7 +1089,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Function key F9
+    desc: Function key F9
   KEY_FORWARD:
     type: KEY_FORWARD
     range:
@@ -1098,7 +1097,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Browser forward button
+    desc: Browser forward button
   KEY_G:
     type: KEY_G
     range:
@@ -1106,7 +1105,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: G key
+    desc: G key
   KEY_GRAVE:
     type: KEY_GRAVE
     range:
@@ -1114,7 +1113,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Grave/Tilde key
+    desc: Grave/Tilde key
   KEY_H:
     type: KEY_H
     range:
@@ -1122,7 +1121,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: H key
+    desc: H key
   KEY_HOME:
     type: KEY_HOME
     range:
@@ -1130,7 +1129,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Home key
+    desc: Home key
   KEY_HOMEPAGE:
     type: KEY_HOMEPAGE
     range:
@@ -1138,7 +1137,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Open homepage/browser button
+    desc: Open homepage/browser button
   KEY_I:
     type: KEY_I
     range:
@@ -1146,7 +1145,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: I key
+    desc: I key
   KEY_INSERT:
     type: KEY_INSERT
     range:
@@ -1154,7 +1153,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Insert key
+    desc: Insert key
   KEY_J:
     type: KEY_J
     range:
@@ -1162,7 +1161,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: J key
+    desc: J key
   KEY_K:
     type: KEY_K
     range:
@@ -1170,7 +1169,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: K key
+    desc: K key
   KEY_KP0:
     type: KEY_KP0
     range:
@@ -1178,7 +1177,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Keypad 0 key
+    desc: Keypad 0 key
   KEY_KP1:
     type: KEY_KP1
     range:
@@ -1186,7 +1185,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Keypad 1 key
+    desc: Keypad 1 key
   KEY_KP2:
     type: KEY_KP2
     range:
@@ -1194,7 +1193,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Keypad 2 key
+    desc: Keypad 2 key
   KEY_KP3:
     type: KEY_KP3
     range:
@@ -1202,7 +1201,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Keypad 3 key
+    desc: Keypad 3 key
   KEY_KP4:
     type: KEY_KP4
     range:
@@ -1210,7 +1209,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Keypad 4 key
+    desc: Keypad 4 key
   KEY_KP5:
     type: KEY_KP5
     range:
@@ -1218,7 +1217,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Keypad 5 key
+    desc: Keypad 5 key
   KEY_KP6:
     type: KEY_KP6
     range:
@@ -1226,7 +1225,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Keypad 6 key
+    desc: Keypad 6 key
   KEY_KP7:
     type: KEY_KP7
     range:
@@ -1234,7 +1233,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Keypad 7 key
+    desc: Keypad 7 key
   KEY_KP8:
     type: KEY_KP8
     range:
@@ -1242,7 +1241,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Keypad 8 key
+    desc: Keypad 8 key
   KEY_KP9:
     type: KEY_KP9
     range:
@@ -1250,7 +1249,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Keypad 9 key
+    desc: Keypad 9 key
   KEY_KPASTERISK:
     type: KEY_KPASTERISK
     range:
@@ -1258,7 +1257,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Keypad multiply key
+    desc: Keypad multiply key
   KEY_KPDOT:
     type: KEY_KPDOT
     range:
@@ -1266,7 +1265,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Keypad decimal point key
+    desc: Keypad decimal point key
   KEY_KPENTER:
     type: KEY_KPENTER
     range:
@@ -1274,7 +1273,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Keypad Enter key
+    desc: Keypad Enter key
   KEY_KPEQUAL:
     type: KEY_KPEQUAL
     range:
@@ -1282,7 +1281,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Keypad equals key
+    desc: Keypad equals key
   KEY_KPMINUS:
     type: KEY_KPMINUS
     range:
@@ -1290,7 +1289,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Keypad subtract key
+    desc: Keypad subtract key
   KEY_KPPLUS:
     type: KEY_KPPLUS
     range:
@@ -1298,7 +1297,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Keypad add key
+    desc: Keypad add key
   KEY_KPSLASH:
     type: KEY_KPSLASH
     range:
@@ -1306,7 +1305,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Keypad divide key
+    desc: Keypad divide key
   KEY_L:
     type: KEY_L
     range:
@@ -1314,7 +1313,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: L key
+    desc: L key
   KEY_LEFT:
     type: KEY_LEFT
     range:
@@ -1322,7 +1321,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Left arrow key
+    desc: Left arrow key
   KEY_LEFTBRACE:
     type: KEY_LEFTBRACE
     range:
@@ -1330,7 +1329,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Left bracket/key
+    desc: Left bracket/key
   KEY_LEFTCTRL:
     type: KEY_LEFTCTRL
     range:
@@ -1338,7 +1337,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Left Control modifier key
+    desc: Left Control modifier key
   KEY_LEFTMETA:
     type: KEY_LEFTMETA
     range:
@@ -1346,7 +1345,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Left Meta/Windows/Super key
+    desc: Left Meta/Windows/Super key
   KEY_LEFTSHIFT:
     type: KEY_LEFTSHIFT
     range:
@@ -1354,7 +1353,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Left Shift modifier key
+    desc: Left Shift modifier key
   KEY_M:
     type: KEY_M
     range:
@@ -1362,7 +1361,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: M key
+    desc: M key
   KEY_MAIL:
     type: KEY_MAIL
     range:
@@ -1370,7 +1369,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Open email client button
+    desc: Open email client button
   KEY_MENU:
     type: KEY_MENU
     range:
@@ -1378,7 +1377,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Context menu key
+    desc: Context menu key
   KEY_MINUS:
     type: KEY_MINUS
     range:
@@ -1386,7 +1385,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Minus/Dash key
+    desc: Minus/Dash key
   KEY_MUTE:
     type: KEY_MUTE
     range:
@@ -1394,7 +1393,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Audio mute toggle
+    desc: Audio mute toggle
   KEY_N:
     type: KEY_N
     range:
@@ -1402,7 +1401,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: N key
+    desc: N key
   KEY_NEXTSONG:
     type: KEY_NEXTSONG
     range:
@@ -1410,7 +1409,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Next track button
+    desc: Next track button
   KEY_NUMLOCK:
     type: KEY_NUMLOCK
     range:
@@ -1418,7 +1417,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Num Lock toggle key
+    desc: Num Lock toggle key
   KEY_O:
     type: KEY_O
     range:
@@ -1426,7 +1425,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: O key
+    desc: O key
   KEY_P:
     type: KEY_P
     range:
@@ -1434,7 +1433,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: P key
+    desc: P key
   KEY_PAGEDOWN:
     type: KEY_PAGEDOWN
     range:
@@ -1442,7 +1441,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Page Down key
+    desc: Page Down key
   KEY_PAGEUP:
     type: KEY_PAGEUP
     range:
@@ -1450,7 +1449,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Page Up key
+    desc: Page Up key
   KEY_PAUSE:
     type: KEY_PAUSE
     range:
@@ -1458,7 +1457,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Pause/Break key
+    desc: Pause/Break key
   KEY_PLAYPAUSE:
     type: KEY_PLAYPAUSE
     range:
@@ -1466,7 +1465,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Play/Pause toggle button
+    desc: Play/Pause toggle button
   KEY_POWER:
     type: KEY_POWER
     range:
@@ -1474,7 +1473,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Power button
+    desc: Power button
   KEY_PREVIOUSSONG:
     type: KEY_PREVIOUSSONG
     range:
@@ -1482,7 +1481,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Previous track button
+    desc: Previous track button
   KEY_PRINT:
     type: KEY_PRINT
     range:
@@ -1490,7 +1489,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Print Screen key
+    desc: Print Screen key
   KEY_Q:
     type: KEY_Q
     range:
@@ -1498,7 +1497,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Q key
+    desc: Q key
   KEY_R:
     type: KEY_R
     range:
@@ -1506,7 +1505,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: R key
+    desc: R key
   KEY_RIGHT:
     type: KEY_RIGHT
     range:
@@ -1514,7 +1513,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Right arrow key
+    desc: Right arrow key
   KEY_RIGHTALT:
     type: KEY_RIGHTALT
     range:
@@ -1522,7 +1521,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Right Alt/AltGr modifier key
+    desc: Right Alt/AltGr modifier key
   KEY_RIGHTBRACE:
     type: KEY_RIGHTBRACE
     range:
@@ -1530,7 +1529,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Right bracket/key
+    desc: Right bracket/key
   KEY_RIGHTCTRL:
     type: KEY_RIGHTCTRL
     range:
@@ -1538,7 +1537,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Right Control modifier key
+    desc: Right Control modifier key
   KEY_RIGHTMETA:
     type: KEY_RIGHTMETA
     range:
@@ -1546,7 +1545,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Right Meta/Windows/Super key
+    desc: Right Meta/Windows/Super key
   KEY_RIGHTSHIFT:
     type: KEY_RIGHTSHIFT
     range:
@@ -1554,7 +1553,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Right Shift modifier key
+    desc: Right Shift modifier key
   KEY_S:
     type: KEY_S
     range:
@@ -1562,7 +1561,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: S key
+    desc: S key
   KEY_SCROLLLOCK:
     type: KEY_SCROLLLOCK
     range:
@@ -1570,7 +1569,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Scroll Lock toggle key
+    desc: Scroll Lock toggle key
   KEY_SEARCH:
     type: KEY_SEARCH
     range:
@@ -1578,7 +1577,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Search button
+    desc: Search button
   KEY_SEMICOLON:
     type: KEY_SEMICOLON
     range:
@@ -1586,7 +1585,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Semicolon key
+    desc: Semicolon key
   KEY_SLASH:
     type: KEY_SLASH
     range:
@@ -1594,7 +1593,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Slash/Question-mark key
+    desc: Slash/Question-mark key
   KEY_SLEEP:
     type: KEY_SLEEP
     range:
@@ -1602,7 +1601,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Sleep/Suspend button
+    desc: Sleep/Suspend button
   KEY_SPACE:
     type: KEY_SPACE
     range:
@@ -1610,7 +1609,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Spacebar
+    desc: Spacebar
   KEY_STOPCD:
     type: KEY_STOPCD
     range:
@@ -1618,7 +1617,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Stop media playback button
+    desc: Stop media playback button
   KEY_SYSRQ:
     type: KEY_SYSRQ
     range:
@@ -1626,7 +1625,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: System Request/Print Screen key
+    desc: System Request/Print Screen key
   KEY_T:
     type: KEY_T
     range:
@@ -1634,7 +1633,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: T key
+    desc: T key
   KEY_TAB:
     type: KEY_TAB
     range:
@@ -1642,7 +1641,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Tab key
+    desc: Tab key
   KEY_U:
     type: KEY_U
     range:
@@ -1650,7 +1649,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: U key
+    desc: U key
   KEY_UP:
     type: KEY_UP
     range:
@@ -1658,7 +1657,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Up arrow key
+    desc: Up arrow key
   KEY_V:
     type: KEY_V
     range:
@@ -1666,7 +1665,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: V key
+    desc: V key
   KEY_VOLUMEDOWN:
     type: KEY_VOLUMEDOWN
     range:
@@ -1674,7 +1673,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Volume decrease button
+    desc: Volume decrease button
   KEY_VOLUMEUP:
     type: KEY_VOLUMEUP
     range:
@@ -1682,7 +1681,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Volume increase button
+    desc: Volume increase button
   KEY_W:
     type: KEY_W
     range:
@@ -1690,7 +1689,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: W key
+    desc: W key
   KEY_WAKEUP:
     type: KEY_WAKEUP
     range:
@@ -1698,7 +1697,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Wake-up event button
+    desc: Wake-up event button
   KEY_X:
     type: KEY_X
     range:
@@ -1706,7 +1705,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: X key
+    desc: X key
   KEY_Y:
     type: KEY_Y
     range:
@@ -1714,7 +1713,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Y key
+    desc: Y key
   KEY_Z:
     type: KEY_Z
     range:
@@ -1722,7 +1721,7 @@ hid_controls:
     - 2.0
     properties: null
     initial_value: 0.0
-    description: Z key
+    desc: Z key
   REL_HWHEEL:
     type: REL_HWHEEL
     range:
@@ -1730,7 +1729,7 @@ hid_controls:
     - 10.0
     properties: null
     initial_value: 0.0
-    description: Horizontal scroll wheel (steps)
+    desc: Horizontal scroll wheel (steps)
   REL_HWHEEL_HI_RES:
     type: REL_HWHEEL_HI_RES
     range:
@@ -1738,7 +1737,7 @@ hid_controls:
     - 120.0
     properties: null
     initial_value: 0.0
-    description: High-resolution vertical wheel
+    desc: High-resolution vertical wheel
   REL_WHEEL:
     type: REL_WHEEL
     range:
@@ -1746,7 +1745,7 @@ hid_controls:
     - 10.0
     properties: null
     initial_value: 0.0
-    description: Vertical scroll wheel (steps)
+    desc: Vertical scroll wheel (steps)
   REL_WHEEL_HI_RES:
     type: REL_WHEEL_HI_RES
     range:
@@ -1754,7 +1753,7 @@ hid_controls:
     - 120.0
     properties: null
     initial_value: 0.0
-    description: High-resolution vertical wheel
+    desc: High-resolution vertical wheel
   REL_X:
     type: REL_X
     range:
@@ -1762,7 +1761,7 @@ hid_controls:
     - 127.0
     properties: null
     initial_value: 0.0
-    description: Relative X movement (counts per tick)
+    desc: Relative X movement (counts per tick)
   REL_Y:
     type: REL_Y
     range:
@@ -1770,4 +1769,4 @@ hid_controls:
     - 127.0
     properties: null
     initial_value: 0.0
-    description: Relative Y movement (counts per tick)
+    desc: Relative Y movement (counts per tick)

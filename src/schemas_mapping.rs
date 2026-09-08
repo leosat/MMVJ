@@ -1,15 +1,9 @@
-use std::ops::Not;
-use std::sync::Arc;
-#[cfg(feature = "gui")]
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering::Relaxed;
-
 use crate::base_num::BaseAtomicT;
 use crate::base_num::BaseNumT;
 use crate::config::WithSelfSanitize;
+use crate::schemas_common::EnabledFlagCfg;
 use crate::schemas_common::ObjId;
 use crate::schemas_common::WithRuntimeId;
-use crate::schemas_common::default_true;
 use crate::schemas_transform::DynValFilter;
 use crate::schemas_transform::TfmSeqCfg;
 use crate::schemas_transform::TfmStepCfg;
@@ -23,6 +17,9 @@ use crate::schemas_value::{ValueDsts, ValueSrcs};
 use crossbeam_utils::CachePadded;
 use garde::Validate;
 use serde::{Deserialize, Serialize};
+use std::ops::Not;
+use std::sync::Arc;
+use std::sync::atomic::Ordering::Relaxed;
 
 use schemars::JsonSchema;
 use traversable::{Traversable, TraversableMut};
@@ -45,40 +42,31 @@ pub(crate) struct Mapping {
     #[traverse(skip)]
     #[allow(unused)]
     #[garde(skip)]
-    pub(crate) id: ObjId,
+    id: ObjId,
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    pub(crate) last_in: Arc<CachePadded<BaseAtomicT>>,
+    last_in: Arc<CachePadded<BaseAtomicT>>,
     #[serde(skip)]
     #[traverse(skip)]
     #[garde(skip)]
-    pub(crate) last_out: Arc<CachePadded<BaseAtomicT>>,
-    #[cfg(feature = "gui")]
-    #[serde(skip)]
-    #[traverse(skip)]
-    #[garde(skip)]
-    pub(crate) _gui_in_override: Arc<CachePadded<AtomicBool>>,
-    #[cfg(feature = "gui")]
-    #[serde(skip)]
-    #[traverse(skip)]
-    #[garde(skip)]
-    pub(crate) _gui_out_override: Arc<CachePadded<AtomicBool>>,
+    last_out: Arc<CachePadded<BaseAtomicT>>,
     // -----------------------
     #[serde(default)]
     #[garde(skip)]
     pub(crate) name: String,
-    #[serde(default = "default_true")]
     #[garde(skip)]
-    pub(crate) enabled: bool,
-    #[serde(rename = "source")]
+    #[traverse(skip)]
+    #[serde(default, skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
+    #[serde(rename = "src", alias = "source")]
     #[garde(skip)]
     pub(crate) src: ValueSrcs,
-    #[serde(rename = "destination")]
+    #[serde(rename = "dst", alias = "destination")]
     #[garde(skip)]
     pub(crate) dst: ValueDsts,
-    #[serde(default)]
-    #[garde(skip)]
+    #[serde(default, rename = "tfm", alias = "transformation")]
+    #[garde(dive)]
     #[serde(skip_serializing_if = "TfmSeqCfg::skip_serializing")]
     pub(crate) transformation: TfmSeqCfg,
     #[serde(skip)]
@@ -107,12 +95,8 @@ impl Default for Mapping {
             id: Default::default(),
             last_in: Default::default(),
             last_out: Default::default(),
-            #[cfg(feature = "gui")]
-            _gui_in_override: Default::default(),
-            #[cfg(feature = "gui")]
-            _gui_out_override: Default::default(),
             name: "New mapping".to_string(),
-            enabled: true,
+            enabled: Default::default(),
             src: Default::default(),
             dst: Default::default(),
             transformation: Default::default(),

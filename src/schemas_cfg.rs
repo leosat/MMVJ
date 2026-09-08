@@ -21,8 +21,26 @@ use with_doc_str::with_doc_str;
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub(crate) struct DescriptionCfg(pub(crate) String);
 
+impl DescriptionCfg {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 pub(crate) trait _WithDescriptionMut {
     fn description_mut(&mut self) -> Option<&mut DescriptionCfg>;
+}
+
+impl From<&str> for DescriptionCfg {
+    fn from(value: &str) -> Self {
+        Self(value.to_string())
+    }
+}
+
+impl From<String> for DescriptionCfg {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
 }
 
 impl Deref for DescriptionCfg {
@@ -161,20 +179,27 @@ macro_rules! config_struct_tpl {
         #[serde(skip)]
         #[garde(skip)]
         pub(crate) cfg_file: PathBuf,
-        #[serde(default)]
         #[garde(skip)]
-        pub(crate) description: String,
+        #[serde(
+            default,
+            rename = "desc",
+            alias = "description",
+            skip_serializing_if = "DescriptionCfg::is_empty"
+        )]
         #[traverse(skip)]
-        #[garde(skip)]
+        #[schemars(default)]
+        pub(crate) description: DescriptionCfg,
+        #[traverse(skip)]
+        #[garde(dive)]
         pub(crate) global: GlobalSettingsCfg,
         $( #[ $devices_meta ] ) ?
-        #[garde(skip)]
+        #[garde(dive)]
         pub(crate) devices: $devices,
         #[serde(default)]
         #[garde(skip)]
         pub(crate) variables: VariablesCfg,
-        #[serde(default)]
-        #[garde(skip)]
+        #[serde(default, rename = "map", alias = "mappings")]
+        #[garde(dive)]
         pub(crate) mappings: Vec<Mapping>,
         #[serde(default)]
         #[garde(skip)]

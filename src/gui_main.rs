@@ -539,7 +539,7 @@ impl eframe::App for GuiMain {
                             egui::ScrollArea::vertical().show(ui, |ui| {
                                 if ui
                                     .add(
-                                        egui::TextEdit::multiline(&mut self.cfg.description)
+                                        egui::TextEdit::multiline(&mut self.cfg.description.0)
                                             .font(egui::TextStyle::Monospace)
                                             .interactive(true)
                                             // .background_color(Color32::DARK_BLUE)

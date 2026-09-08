@@ -987,7 +987,7 @@ impl<'s> DrawEgui<'s> for SignedPowerCfg {
     }
 }
 
-impl<'s> DrawEgui<'s> for SumCfg {
+impl<'s> DrawEgui<'s> for ArithCfg {
     type In = GuiInCommon<'s>;
     type Out = Option<GuiCmd>;
 
