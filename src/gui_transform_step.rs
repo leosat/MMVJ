@@ -1182,7 +1182,11 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
                         .on_hover_text(self.custom_source_doc_str())
                         .changed();
                 });
+
+                ui.separator();
+
                 if !use_custom {
+                    ui.horizontal(|ui| {
                     ui.label("Use force feedback component from mapping destination HID device: ")
                         .on_hover_text(
                             "Force feedback is received in 2d space with direction (Const force effect) or bound to X or Y \
@@ -1197,6 +1201,8 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
                         .selectable_value(&mut self.component, ForceFeedbackComponent::Y, "Y")
                         .on_hover_text("Use Y component of FFB")
                         .changed();
+
+                        });
                 } else if let Some(ref mut custom_src) = self.custom_source {
                     ui.horizontal(|ui| {
                         ui.set_max_width(200.0);
@@ -1301,6 +1307,7 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                 })
                 .response
                 .on_hover_text(self.in_gain_doc_str());
+
                 ui.separator();
                 ui.horizontal(|ui| {
                     let param_name = "Auto-center halflife";
@@ -1323,8 +1330,72 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                 });
 
                 ui.separator();
+                ui.collapsing("Hold factor", |ui| {
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        self.hold_factor
+                            .egui(
+                                GuiInValue::Edit(GuiInValueEditParams {
+                                    allow_interval_edit: false,
+                                    slider_log_scale: false,
+                                    name: "Choose hold factor source",
+                                    choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                                    gui_common_ctx: &gui_in,
+                                }),
+                                ui,
+                            )
+                            .inspect(|out| *gui_out_mut = Some(out.clone()));
+                    });
+                })
+                .header_response
+                .on_hover_text(self.hold_factor_doc_str());
+
+                ui.separator();
+                ui.collapsing("Accumulator", |ui| {
+                    ui.horizontal(|ui| {
+                        if let Some(acc) = &mut self.accumulator {
+                            if ui.button("Use built-in accumulator").clicked() {
+                                self.accumulator = None;
+                            } else {
+                                ui.separator();
+                                acc.egui(
+                                    GuiInValue::Edit(GuiInValueEditParams {
+                                        allow_interval_edit: false,
+                                        slider_log_scale: false,
+                                        name: "Accumulator",
+                                        choice_case: ValueUsageContext::TfmStepAuxXrc.into(),
+                                        gui_common_ctx: &gui_in,
+                                    }),
+                                    ui,
+                                )
+                                .inspect(|out| *gui_out_mut = Some(out.clone()));
+                                ui.separator();
+                            }
+                        } else {
+                            if ui.button("Use custom accumulator").clicked() {
+                                self.accumulator = Some(Default::default());
+                                *gui_out_mut = bool_to_simple_change_gui_cmd(true);
+                            }
+                        }
+                    });
+
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        ui.collapsing("Transformation", |ui| {
+                            self.integrated_user_input_transform
+                                .egui(gui_in.clone_and_push_hier(self.integrated_user_input_transform.id), ui)
+                                .inspect(|out| *gui_out_mut = Some(out.clone()))
+                        })
+                        .header_response
+                        .on_hover_text(self.integrated_user_input_transform_doc_str());
+                    })
+                })
+                .header_response
+                .on_hover_text(self.accumulator_doc_str());
+
                 if let Some(ff) = &mut self.force_feedback {
                     if self.auto_center_halflife.port_get_numeric_value(None::<&()>) > 0.0 {
+                        ui.separator();
                         ui.horizontal(|ui| {
                             let param_name = "Auto-center + force feedback";
                             ui.label(param_name)
@@ -1360,70 +1431,7 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                     }
                 }
 
-                ui.separator();
-                ui.collapsing("Hold factor", |ui| {
-                    ui.separator();
-                    ui.horizontal(|ui| {
-                        self.hold_factor
-                            .egui(
-                                GuiInValue::Edit(GuiInValueEditParams {
-                                    allow_interval_edit: false,
-                                    slider_log_scale: false,
-                                    name: "Choose hold factor source",
-                                    choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
-                                    gui_common_ctx: &gui_in,
-                                }),
-                                ui,
-                            )
-                            .inspect(|out| *gui_out_mut = Some(out.clone()));
-                    });
-                })
-                .header_response
-                .on_hover_text(self.hold_factor_doc_str());
-
                 bool_to_simple_change_gui_cmd(changed_simple).inspect(|out| *gui_out_mut = Some(out.clone()));
-
-                ui.separator();
-                ui.collapsing("Accumulator", |ui| {
-                    ui.horizontal(|ui| {
-                        if let Some(acc) = &mut self.accumulator {
-                            if ui.button("Use built-in accumulator").clicked() {
-                                self.accumulator = None;
-                            } else {
-                                ui.separator();
-                                acc.egui(
-                                    GuiInValue::Edit(GuiInValueEditParams {
-                                        allow_interval_edit: false,
-                                        slider_log_scale: false,
-                                        name: "Accumulator",
-                                        choice_case: ValueUsageContext::TfmStepAuxXrc.into(),
-                                        gui_common_ctx: &gui_in,
-                                    }),
-                                    ui,
-                                )
-                                .inspect(|out| *gui_out_mut = Some(out.clone()));
-                                ui.separator();
-                            }
-                        } else {
-                            if ui.button("Use custom accumulator").clicked() {
-                                self.accumulator = Some(Default::default());
-                                *gui_out_mut = bool_to_simple_change_gui_cmd(true);
-                            }
-                        }
-                    });
-                    ui.separator();
-                    ui.horizontal(|ui| {
-                        ui.collapsing("Transformation", |ui| {
-                            self.integrated_user_input_transform
-                                .egui(gui_in.clone_and_push_hier(self.integrated_user_input_transform.id), ui)
-                                .inspect(|out| *gui_out_mut = Some(out.clone()))
-                        })
-                        .header_response
-                        .on_hover_text(self.integrated_user_input_transform_doc_str());
-                    })
-                })
-                .header_response
-                .on_hover_text(self.accumulator_doc_str());
             }
             GuiInCommon::_Display { .. } => {}
         }
