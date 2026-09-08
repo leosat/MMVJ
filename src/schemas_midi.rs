@@ -4,8 +4,10 @@ use crate::{
     base_num::{BaseAtomicT, BaseNumT},
     mapped_controls::{MappedCtls, MappedCtlsMidi},
     num_interval::NumInterval,
+    schemas_cfg::DescriptionCfg,
     schemas_common::{
-        IdleTickEnabledFlag, MarkedAsFromPredefinedControl, ObjId, WithRuntimeId, deserialize_device_controls,
+        EnabledFlagCfg, IdleTickEnabledFlag, MarkedAsFromPredefinedControl, ObjId, WithRuntimeId,
+        deserialize_device_controls,
     },
     schemas_predefined::MidiControlPredefined,
     schemas_value::{_WithDstRefCount, WithNumericValue},
@@ -216,7 +218,10 @@ pub(crate) fn deserialize_midi_device_controls<'de, D: Deserializer<'de>>(
 
 #[derive(Debug, Clone, Serialize, Deserialize, TraversableMut, Traversable, JsonSchema)]
 pub(crate) struct MidiMatcherCfg {
-    pub(crate) enabled: bool,
+    #[garde(skip)]
+    #[traverse(skip)]
+    #[serde(default, skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
     #[serde(with = "serde_regex")]
     #[schemars(with = "Option<String>")]
     #[traverse(skip)]
@@ -224,6 +229,12 @@ pub(crate) struct MidiMatcherCfg {
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_midi_device_controls")]
     pub(crate) controls: BTreeMap<String, MidiControlMatcherCfg>,
+}
+
+impl MidiMatcherCfg {
+    pub(crate) fn is_enabled(&self) -> bool {
+        *self.enabled
+    }
 }
 
 impl PartialEq for MidiMatcherCfg {
@@ -237,7 +248,7 @@ impl PartialEq for MidiMatcherCfg {
 impl Default for MidiMatcherCfg {
     fn default() -> Self {
         Self {
-            enabled: true,
+            enabled: Default::default(),
             match_name_regex: regex::Regex::new(".+").unwrap(),
             controls: Default::default(),
         }
@@ -263,7 +274,17 @@ pub(crate) struct MidiControlMatcherCfg {
     pub(crate) midi_message: MidiMessageCfg,
     #[traverse(skip)]
     pub(crate) range: NumInterval<BaseNumT>,
-    pub(crate) description: Option<String>,
+    // #[traverse(skip)]
+    // pub(crate) enabled: EnabledFlagCfg,
+    #[serde(
+        default,
+        rename = "desc",
+        alias = "description",
+        skip_serializing_if = "DescriptionCfg::is_empty"
+    )]
+    #[traverse(skip)]
+    #[schemars(default)]
+    pub(crate) description: DescriptionCfg,
     #[serde(skip)]
     #[traverse(skip)]
     #[allow(unused)]
@@ -320,7 +341,7 @@ impl From<MidiControlPredefined> for MidiControlMatcherCfg {
         Self {
             midi_message: value.midi_message,
             range: value.range,
-            description: Some(value.description), // TODO: remove Option.
+            description: value.description,
             id: Default::default(),
             idle_tick_enabled: Default::default(),
             current_value: Default::default(),

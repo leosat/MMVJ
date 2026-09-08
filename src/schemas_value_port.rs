@@ -101,7 +101,7 @@ enum ValuePortSerdeHelper<InnerT: ValueIface> {
         //#[serde(flatten)] // Fails when inner is serialized to a single number.
         #[serde(alias = "source", alias = "destination", alias = "target")]
         value: InnerT,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "Option::is_none", rename = "tfm", alias = "transformation")]
         transformation: Option<TfmSeqCfg>,
         #[serde(skip_serializing_if = "Option::is_none")]
         #[serde(alias = "remap_from_interval", alias = "remap_to_interval")]

@@ -11,6 +11,7 @@ use crate::schemas_predefined::ControlsPredefinedCfg;
 use crate::schemas_value::{DeviceControlMatcherRef, DynValueRefs};
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
+use garde::Validate;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -170,7 +171,7 @@ impl Config {
                     .devices
                     .midi
                     .get(device_matcher_key)
-                    .map(|device_matcher| device_matcher.enabled);
+                    .map(|device_matcher| device_matcher.is_enabled());
                 #[cfg(not(feature = "midi"))]
                 Some(false)
             })
@@ -286,7 +287,7 @@ impl Config {
                     entry.range = predefined_control.range;
                 }
                 if entry.description == Default::default() {
-                    entry.description = Some(predefined_control.description.clone());
+                    entry.description = predefined_control.description.clone();
                 }
                 entry.midi_message.r#type = predefined_control.midi_message.r#type;
             } else {
@@ -574,8 +575,7 @@ impl ConfigManager {
 
         self.cfg.cfg_file = self.cfg_file_path_canon.clone();
         self.cfg.resolve()?;
-
-        // TODO: !!! sanitizer pass: WithRuntimeId get_id() != 0 and WithMappedCtls get_control_type() != Unhandled
+        self.cfg.validate()?;
 
         /* Dumping predefined controls templates for reference. */
         {

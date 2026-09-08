@@ -178,7 +178,7 @@ impl<
     }
 
     fn active_mappings_count(&self) -> usize {
-        self.cfg.mappings.iter().filter(|m| m.enabled).count()
+        self.cfg.mappings.iter().filter(|m| *m.enabled).count()
     }
 
     // In order to provide shorter names for variables, the following acronims are used:
@@ -205,7 +205,7 @@ impl<
 
         let mut collect_enabled_mappings_for_dmk_and_cm =
             |dmk: &str, cm_id: ObjId, cm_idx, mappings: &mut Vec<Vec<usize>>, opened_device_id: ObjId| {
-                for (mapping_idx, mapping) in self.cfg.mappings.iter().enumerate().filter(|(_, m)| m.enabled) {
+                for (mapping_idx, mapping) in self.cfg.mappings.iter().enumerate().filter(|(_, m)| *m.enabled) {
                     for source in collect_dynamic_value_matchers(mapping, |ctx| {
                         ctx.contains(DynValFilter::Control | DynValFilter::Src)
                     })
@@ -284,7 +284,7 @@ impl<
                 .devices
                 .midi
                 .iter()
-                .filter(|(_, v)| v.enabled && v.match_name_regex.is_match(available_midi_device_info.get_name()))
+                .filter(|(_, v)| v.is_enabled() && v.match_name_regex.is_match(available_midi_device_info.get_name()))
                 .collect::<Vec<(_, _)>>()
             {
                 let opened_device_id = self
@@ -333,7 +333,7 @@ impl<
                 .mappings
                 .iter()
                 .enumerate()
-                .filter(|(_, m)| m.enabled)
+                .filter(|(_, m)| *m.enabled)
                 .map(|(i, _)| i)
                 .collect::<Vec<_>>(),
         );
@@ -349,7 +349,7 @@ impl<
             .mappings
             .iter()
             .enumerate()
-            .filter(|(_, mapping)| mapping.enabled && mapping.requires_idle_tick)
+            .filter(|(_, mapping)| *mapping.enabled && mapping.requires_idle_tick)
             .for_each(|(idx, _)| self.idle_tick_mappings.push(idx));
     }
 

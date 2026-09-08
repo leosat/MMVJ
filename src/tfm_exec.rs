@@ -14,7 +14,7 @@ use crate::relativity::Relativity;
 
 use crate::schemas_common::WithRuntimeId;
 
-use crate::schemas_transform::SumCfg;
+use crate::schemas_transform::ArithCfg;
 use crate::schemas_transform::TfmCfgDuplicateWithNewState;
 use crate::schemas_transform::VelocityToDisplacementCfg;
 use crate::schemas_transform::WithCommonState;
@@ -173,7 +173,7 @@ impl WithTfmExec for TfmStepCfg {
     }
 }
 
-impl WithTfmExec for SumCfg {
+impl WithTfmExec for ArithCfg {
     fn exec(&self, mut input: TfmValue<BaseNumT>, ctx: &impl TfmExecCtx) -> TfmValue<BaseNumT> {
         if branches::unlikely(!*self.enabled) {
             return input;

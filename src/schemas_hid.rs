@@ -4,9 +4,10 @@ use crate::{
     hid_device::HID_AXIS_MAX_INTERVAL,
     mapped_controls::MappedCtls,
     num_interval::NumInterval,
+    schemas_cfg::DescriptionCfg,
     schemas_common::{
-        IdleTickEnabledFlag, MarkedAsFromPredefinedControl, ObjId, WithRuntimeId, deserialize_device_controls,
-        is_false, is_none_or_default, is_zero,
+        EnabledFlagCfg, IdleTickEnabledFlag, MarkedAsFromPredefinedControl, ObjId, WithRuntimeId,
+        deserialize_device_controls, is_false, is_none_or_default, is_zero,
     },
     schemas_predefined::HidControlPredefined,
     schemas_value::{
@@ -127,18 +128,27 @@ impl Default for HidVirtualOrMatcherParamsCfg {
 pub(crate) struct HidDeviceClassificationCfg(pub(crate) DeviceClassification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TraversableMut, Traversable, JsonSchema, Default, PartialEq)]
-// NB/TODO?: this will not work along with variable params__ deserialization... find out, why #[serde(deny_unknown_fields)]
+// #[serde(deny_unknown_fields)]
 pub(crate) struct HidDeviceCfg {
-    pub(crate) enabled: bool,
-    #[serde(default)]
+    #[garde(skip)]
+    #[traverse(skip)]
+    #[serde(default, skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
+    #[serde(
+        default,
+        rename = "desc",
+        alias = "description",
+        skip_serializing_if = "DescriptionCfg::is_empty"
+    )]
+    #[traverse(skip)]
     #[schemars(default)]
-    pub(crate) description: String,
-    #[serde(flatten)]
-    pub(crate) params__: HidVirtualOrMatcherParamsCfg,
+    pub(crate) description: DescriptionCfg,
     #[schemars(skip)]
     #[traverse(skip)]
     #[serde(skip)]
     pub(crate) classification: Option<HidDeviceClassificationCfg>,
+    #[serde(flatten)]
+    pub(crate) params__: HidVirtualOrMatcherParamsCfg,
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_jk_device_controls")]
     pub(crate) controls: BTreeMap<String, HidControlMatcherCfg>,
@@ -164,9 +174,8 @@ impl HidDeviceCfg {
         }
     }
 
-    #[allow(unused)]
     pub(crate) fn is_enabled(&self) -> bool {
-        self.enabled
+        *self.enabled
     }
 
     pub(crate) fn is_persistent(&self) -> bool {
@@ -333,7 +342,7 @@ impl HidDeviceCfg {
         }
         self.virtual_device_force_feedback_info_ref()
             .as_ref()
-            .map(|c| c.enabled)
+            .map(|c| *c.enabled)
             .unwrap_or(false)
     }
 
@@ -522,9 +531,10 @@ pub(crate) struct HIDDeviceForceFeedbackCfg {
     #[serde(skip)]
     #[garde(skip)]
     pub(crate) state_xy: Arc<[CachePadded<BaseAtomicT>; 2]>,
-    #[serde(default)]
     #[garde(skip)]
-    pub(crate) enabled: bool,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
     #[serde(default)]
     #[garde(skip)]
     pub(crate) effects: Vec<HidFfEffect>,
@@ -552,7 +562,7 @@ impl Default for HIDDeviceForceFeedbackCfg {
     fn default() -> Self {
         Self {
             state_xy: Default::default(),
-            enabled: true,
+            enabled: Default::default(),
             effects: Default::default(),
             max_effects: 16,
             gain: 1.0,

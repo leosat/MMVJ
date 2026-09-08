@@ -36,7 +36,6 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::cell::Cell;
 use std::collections::BTreeMap;
-use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 #[cfg(feature = "gui")]
 use std::sync::atomic::AtomicBool;
@@ -53,9 +52,6 @@ fn skip_serializing_value_port(port: &impl ValuePortIface) -> bool {
 }
 
 // =================================================
-const fn default_step_enabled() -> bool {
-    true
-}
 
 const fn default_on_idle() -> bool {
     true
@@ -311,7 +307,7 @@ impl PartialEq for TfmStepCommonState {
 #[sanitize_inplace_with_epilogue]
 #[with_doc_str]
 /// Summation
-pub(crate) struct SumCfg {
+pub(crate) struct ArithCfg {
     /// ...
     #[traverse(skip)]
     #[serde(skip)]
@@ -331,9 +327,9 @@ pub(crate) struct SumCfg {
     /// ...
     #[traverse(skip)]
     #[sanitize_inplace(skip)]
-    #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
-    pub(crate) enabled: StepEnabledCfg,
-    #[serde(default)]
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
+    #[serde(default, rename = "srcs", alias = "sources")]
     #[garde(skip)]
     pub(crate) sources: Vec<ValuePort<ValueSrcs>>,
     #[traverse(skip)]
@@ -349,14 +345,14 @@ pub(crate) struct SumCfg {
     pub(crate) out_interval: NumInterval<BaseNumT>,
 }
 
-impl SumCfg {
+impl ArithCfg {
     fn sanitize_inplace_epilogue(&mut self) {
         let out_interval = self.out_interval;
         self.common_state_mut().set_out_interval(out_interval);
     }
 }
 
-impl TfmCfgDuplicateWithNewState for SumCfg {
+impl TfmCfgDuplicateWithNewState for ArithCfg {
     fn duplicate_with_new_state(&self) -> Self {
         let mut s = self.clone();
         s.common_state = Default::default();
@@ -392,8 +388,8 @@ pub(crate) struct VelocityToDisplacementCfg {
     #[garde(skip)]
     /// ...
     #[traverse(skip)]
-    #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
-    pub(crate) enabled: StepEnabledCfg,
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
     #[traverse(skip)]
     #[serde(default = "default_one")]
     #[garde(skip)]
@@ -467,7 +463,7 @@ impl TfmCfgDuplicateWithNewState for VelocityToDisplacementCfg {
 #[serde(rename_all = "snake_case")]
 #[enum_dispatch]
 pub(crate) enum TfmStepCfg {
-    Sum(#[garde(skip)] SumCfg),
+    Sum(#[garde(skip)] ArithCfg),
     VelocityToDisplacement(#[garde(skip)] VelocityToDisplacementCfg),
     #[traverse(skip)]
     Nop(#[garde(skip)] NopCfg),
@@ -478,7 +474,7 @@ pub(crate) enum TfmStepCfg {
     #[traverse(skip)]
     Clamp(#[garde(skip)] ClampCfg),
     RaiseFall(#[garde(skip)] Box<RaiseFallCfg>),
-    Ema(#[garde(skip)] EmaCfg),
+    Ema(#[garde(dive)] EmaCfg),
     #[traverse(skip)]
     Linear(#[garde(skip)] LinearCfg),
     #[traverse(skip)]
@@ -490,7 +486,7 @@ pub(crate) enum TfmStepCfg {
     Exp(#[garde(skip)] NormExpCfg),
     #[traverse(skip)]
     SignedPower(#[garde(skip)] SignedPowerCfg),
-    OneEuro(#[garde(skip)] Box<OneEuroFilterCfg>),
+    OneEuro(#[garde(dive)] Box<OneEuroFilterCfg>),
     Script(#[garde(skip)] ScriptCfg),
     // #[strum(disabled)]
     // #[traverse(skip)]
@@ -649,8 +645,8 @@ pub(crate) struct ForceFeedbackCfg {
     #[garde(skip)]
     #[traverse(skip)]
     #[sanitize_inplace(skip)]
-    #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
-    pub(crate) enabled: StepEnabledCfg,
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
 
     /// Multiplier applied to the (optionally filtered) FFB force.
     ///
@@ -686,7 +682,7 @@ pub(crate) struct ForceFeedbackCfg {
     /// Receives the force in [-1, +1] with relative semantics.
     /// Typical uses: `ema`/`one_euro` smoothing, `clamp` for peak
     /// limiting, curves for reshaping the force response.
-    #[serde(default)]
+    #[serde(default, rename = "tfm", alias = "transformation")]
     #[garde(skip)]
     #[serde(skip_serializing_if = "TfmSeqCfg::skip_serializing")]
     pub(crate) transformation: TfmSeqCfg,
@@ -731,8 +727,8 @@ pub(crate) struct ClampCfgCompat__ {
     #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) desc: DescriptionCfg,
     #[serde(default)]
-    #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
-    pub(crate) enabled: StepEnabledCfg,
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
     #[serde(default)]
     pub(crate) range: Option<NumInterval<BaseNumT>>,
     #[serde(skip_serializing)]
@@ -756,8 +752,8 @@ pub(crate) struct ClampCfg {
     #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) desc: DescriptionCfg,
     #[serde(default)]
-    #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
-    pub(crate) enabled: StepEnabledCfg,
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
     #[serde(default, alias = "interval", rename = "range")]
     pub(crate) range: NumInterval<BaseNumT>,
     #[serde(default = "default_clamp_transform_override_interval")]
@@ -827,8 +823,8 @@ pub(crate) struct NopCfg {
     common_state: TfmStepCommonState,
     #[garde(skip)]
     #[serde(default)]
-    #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
-    pub(crate) enabled: StepEnabledCfg,
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
 }
 
 impl WithSelfSanitize for NopCfg {
@@ -854,39 +850,8 @@ impl From<bool> for NopCfg {
     fn from(value: bool) -> Self {
         Self {
             common_state: Default::default(),
-            enabled: StepEnabledCfg(value),
+            enabled: EnabledFlagCfg(value),
         }
-    }
-}
-
-// ----------------------------
-
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub(crate) struct StepEnabledCfg(pub(crate) bool);
-
-impl StepEnabledCfg {
-    fn is_default(&self) -> bool {
-        self.0 == default_step_enabled()
-    }
-}
-
-impl DerefMut for StepEnabledCfg {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl Deref for StepEnabledCfg {
-    type Target = bool;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl Default for StepEnabledCfg {
-    fn default() -> Self {
-        Self(default_step_enabled())
     }
 }
 
@@ -908,8 +873,8 @@ pub(crate) struct InvertCfg {
     common_state: TfmStepCommonState,
     #[garde(skip)]
     #[serde(default)]
-    #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
-    pub(crate) enabled: StepEnabledCfg,
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
     #[serde(skip)]
     #[garde(skip)]
     pub(crate) mode: InvertModeCfg,
@@ -964,8 +929,8 @@ pub(crate) struct EmaCfg {
     #[sanitize_inplace(skip)]
     /// ...
     #[traverse(skip)]
-    #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
-    pub(crate) enabled: StepEnabledCfg,
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
     #[traverse(skip)]
     #[serde(default = "default_false")]
     #[serde(skip_serializing_if = "is_false")]
@@ -980,7 +945,7 @@ pub(crate) struct EmaCfg {
     #[sanitize_inplace(skip)]
     pub(crate) on_relative_input_reset_on_idle: bool,
     #[serde(default)]
-    #[garde(skip)]
+    #[garde(range(min = BaseNumT::EPSILON))]
     /// The time constant
     /// Defines the duration required for the filter's step response
     /// to reach about 63.2% (1 - 1/e) of its final steady-state value.
@@ -1074,8 +1039,8 @@ pub(crate) struct OneEuroFilterCfg {
     #[traverse(skip)]
     #[traverse(skip)]
     #[sanitize_inplace(skip)]
-    #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
-    pub(crate) enabled: StepEnabledCfg,
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
 
     /// When `true` and the input has **relative** semantics, the last
     /// known value is re-fed into the filter on idle ticks so the
@@ -1226,8 +1191,8 @@ pub(crate) struct LinearCfg {
     pub(crate) desc: DescriptionCfg,
     #[serde(default)]
     #[sanitize_inplace(skip)]
-    #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
-    pub(crate) enabled: StepEnabledCfg,
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
     #[serde(default = "default_linear_slope")]
     #[sanitize_inplace(skip)]
     pub(crate) slope: BaseNumT,
@@ -1280,8 +1245,8 @@ pub(crate) struct SmoothstepCfg {
     pub(crate) desc: DescriptionCfg,
     #[serde(default)]
     #[sanitize_inplace(skip)]
-    #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
-    pub(crate) enabled: StepEnabledCfg,
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
     #[serde(default = "default_on_idle")]
     #[serde(skip_serializing_if = "is_true")]
     #[sanitize_inplace(skip)]
@@ -1322,8 +1287,8 @@ pub(crate) struct SCurveCfg {
     #[serde(default)]
     #[garde(skip)]
     #[sanitize_inplace(skip)]
-    #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
-    pub(crate) enabled: StepEnabledCfg,
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
     #[serde(default = "default_scurve_steepness")]
     #[garde(range(min = 0.0))]
     #[sanitize_inplace(skip)]
@@ -1374,8 +1339,8 @@ pub(crate) struct NormExpCfg {
     #[serde(default)]
     #[garde(skip)]
     #[sanitize_inplace(skip)]
-    #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
-    pub(crate) enabled: StepEnabledCfg,
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
     #[serde(default = "default_norm_exp_base")]
     /// Base must be positive
     #[garde(range(min = 0.0))]
@@ -1428,8 +1393,8 @@ pub(crate) struct SignedPowerCfg {
     #[serde(default)]
     #[garde(skip)]
     #[sanitize_inplace(skip)]
-    #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
-    pub(crate) enabled: StepEnabledCfg,
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
     #[serde(default = "default_one")]
     #[garde(range(min = 0.0))]
     /// Power must be positive
@@ -1479,8 +1444,8 @@ pub(crate) struct _HighPassCfg {
     pub(crate) desc: DescriptionCfg,
     #[serde(default)]
     #[garde(skip)]
-    #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
-    pub(crate) enabled: StepEnabledCfg,
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
     #[garde(range(min = 0.0))]
     pub(crate) cutoff: BaseNumT,
     #[serde(default = "default_on_idle")]
@@ -1504,8 +1469,8 @@ pub(crate) struct IntegrateCfg {
     #[serde(default)]
     #[garde(skip)]
     #[traverse(skip)]
-    #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
-    pub(crate) enabled: StepEnabledCfg,
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
     #[garde(skip)]
     #[serde(
         alias = "range",
@@ -1844,7 +1809,7 @@ macro_rules! tfm_seq_tpl {
             #[serde(flatten)]
             #[garde(skip)]
             in_meta: AutoOrManual<InputValueMetadata<BaseNumT>>,
-            #[garde(skip)]
+            #[garde(dive)]
             pub(crate) steps: Vec<TfmStepCfg>,
         }
     };
@@ -1995,7 +1960,7 @@ macro_rules! impl_with_common_state {
 }
 
 impl_with_common_state!(
-    SumCfg,
+    ArithCfg,
     VelocityToDisplacementCfg,
     ForceFeedbackCfg,
     ClampCfg,
@@ -2054,8 +2019,8 @@ pub(crate) struct SteeringCfg {
     #[garde(skip)]
     #[traverse(skip)]
     #[sanitize_inplace(skip)]
-    #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
-    pub(crate) enabled: StepEnabledCfg,
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
 
     /// Optional external variable (or device control) that persists the raw
     /// accumulated wheel angle (`pre_filter`) across ticks.
@@ -2090,6 +2055,19 @@ pub(crate) struct SteeringCfg {
     #[serde(alias = "smoothing_alpha", alias = "input_sensitivity", alias = "input_gain")]
     pub(crate) in_gain: ValuePort<SteeringInputGainCfg, SanPolicyUseFromPortInner, RemapPolicyUserDefined>,
 
+    /// Simulated grip strength in [0, 1]. Scales both FFB displacement
+    /// and autocentering by `(1 - hold_factor)`.
+    ///
+    /// - `0.0` (default): hands off — FFB and autocentering act freely.
+    /// - `0.5`: moderate grip — half effect.
+    /// - `1.0`: locked grip — wheel immovable except by direct input.
+    ///
+    /// Commonly mapped to mouse Y via a separate `integrate` + `clamp`
+    /// mapping for dynamic grip control.
+    #[serde(default)]
+    #[garde(skip)]
+    pub(crate) hold_factor: ValuePort<SteeringHoldFactorCfg, SanPolicyNone, RemapPolicyUnit>,
+
     /// Half-life (in seconds) of the exponential autocentering decay.
     ///
     /// - `0`: autocentering disabled.
@@ -2117,18 +2095,26 @@ pub(crate) struct SteeringCfg {
     pub(crate) auto_center_along_force_feedback:
         ValuePort<SteeringAutocenterAlongFfbCfg, SanPolicyNone, RemapPolicyUnit>,
 
-    /// Simulated grip strength in [0, 1]. Scales both FFB displacement
-    /// and autocentering by `(1 - hold_factor)`.
+    /// Sub-pipeline applied to the accumulated user input **after**
+    /// integration but **before** FFB and autocentering.
     ///
-    /// - `0.0` (default): hands off — FFB and autocentering act freely.
-    /// - `0.5`: moderate grip — half effect.
-    /// - `1.0`: locked grip — wheel immovable except by direct input.
+    /// Receives the wheel angle in [-1, +1] (absolute). Use this to
+    /// reshape the steering response curve:
     ///
-    /// Commonly mapped to mouse Y via a separate `integrate` + `clamp`
-    /// mapping for dynamic grip control.
-    #[serde(default)]
+    /// - `exp` with `base > 1, center_symmetric: true` — progressive
+    ///   ratio (less sensitive in center).
+    /// - `exp` with `base < 1` — inverted progressive (more sensitive
+    ///   in center).
+    /// - Empty (default) — linear 1:1 passthrough.
+    #[serde(
+        default,
+        rename = "tfm",
+        alias = "transformation",
+        alias = "integrated_user_input_transform"
+    )]
     #[garde(skip)]
-    pub(crate) hold_factor: ValuePort<SteeringHoldFactorCfg, SanPolicyNone, RemapPolicyUnit>,
+    #[serde(skip_serializing_if = "TfmSeqCfg::skip_serializing")]
+    pub(crate) integrated_user_input_transform: TfmSeqCfg,
 
     /// Force-feedback sub-configuration.
     ///
@@ -2142,22 +2128,6 @@ pub(crate) struct SteeringCfg {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[garde(skip)]
     pub(crate) force_feedback: Option<ForceFeedbackCfg>,
-
-    /// Sub-pipeline applied to the accumulated user input **after**
-    /// integration but **before** FFB and autocentering.
-    ///
-    /// Receives the wheel angle in [-1, +1] (absolute). Use this to
-    /// reshape the steering response curve:
-    ///
-    /// - `exp` with `base > 1, center_symmetric: true` — progressive
-    ///   ratio (less sensitive in center).
-    /// - `exp` with `base < 1` — inverted progressive (more sensitive
-    ///   in center).
-    /// - Empty (default) — linear 1:1 passthrough.
-    #[serde(default)]
-    #[garde(skip)]
-    #[serde(skip_serializing_if = "TfmSeqCfg::skip_serializing")]
-    pub(crate) integrated_user_input_transform: TfmSeqCfg,
 }
 
 impl SteeringCfg {
@@ -2298,8 +2268,8 @@ pub(crate) struct RaiseFallCfg {
     #[garde(skip)]
     #[traverse(skip)]
     #[sanitize_inplace(skip)]
-    #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
-    pub(crate) enabled: StepEnabledCfg,
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
     #[garde(range(min = 0.0))] // Rate limits must be positive
     #[sanitize_inplace(skip)]
     pub(crate) raise_rate: BaseNumT,
@@ -2463,8 +2433,8 @@ pub(crate) struct ScriptCfg {
     #[serde(default)]
     #[traverse(skip)]
     #[sanitize_inplace(skip)]
-    #[serde(skip_serializing_if = "StepEnabledCfg::is_default")]
-    pub(crate) enabled: StepEnabledCfg,
+    #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
+    pub(crate) enabled: EnabledFlagCfg,
 
     /// Scripting language to use. Currently only `Luau` is supported.
     ///
