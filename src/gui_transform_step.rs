@@ -21,7 +21,6 @@ use crate::schemas_cfg::{DevicesCfgNew, VariablesCfg};
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_transform::*;
 use crate::schemas_value::AutoOrManual;
-use crate::schemas_value::TfmValue;
 use crate::schemas_value::WithLastKnownIO;
 use crate::schemas_value_port::ValuePortIface;
 use crate::tracing::GraphDisplayStyle;
@@ -608,7 +607,18 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                         let label = self.to_string();
                                         let in_interval = self.common_state_ref().get_in_interval();
                                         match self {
-                                            Self::Sum(s) => s.egui(gui_in.2.clone_and_push_hier(step_id), ui),
+                                            Self::Sum(s) => {
+                                                s.egui((ArithOpType::Sum, gui_in.2.clone_and_push_hier(step_id)), ui)
+                                            }
+                                            Self::Sub(s) => {
+                                                s.egui((ArithOpType::Sub, gui_in.2.clone_and_push_hier(step_id)), ui)
+                                            }
+                                            Self::Mul(s) => {
+                                                s.egui((ArithOpType::Mul, gui_in.2.clone_and_push_hier(step_id)), ui)
+                                            }
+                                            Self::Div(s) => {
+                                                s.egui((ArithOpType::Div, gui_in.2.clone_and_push_hier(step_id)), ui)
+                                            }
                                             Self::VelocityToDisplacement(s) => s.egui((), ui),
                                             Self::Script(s) => s.egui(
                                                 (
@@ -762,11 +772,7 @@ impl<'s> DrawEgui<'s> for IntegrateCfg {
                     current_input,
                     current_input * self.in_gain,
                     self.accumulator.port_get_interval(),
-                    self.get_delta_acc_norm(TfmValue {
-                        value: current_input * self.in_gain,
-                        interval: self.common_state_ref().get_in_interval(),
-                        relativity: self.common_state_ref().is_in_relative().into(),
-                    })
+                    self.get_delta_acc_norm(current_input * self.in_gain)
                 ))
                 .monospace(),
             );
@@ -988,12 +994,12 @@ impl<'s> DrawEgui<'s> for SignedPowerCfg {
 }
 
 impl<'s> DrawEgui<'s> for ArithCfg {
-    type In = GuiInCommon<'s>;
+    type In = (ArithOpType, GuiInCommon<'s>);
     type Out = Option<GuiCmd>;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut gui_out = None;
-        if let GuiInCommon::Edit { .. } = gui_in {
+        if let GuiInCommon::Edit { .. } = gui_in.1 {
             let step_id = self.common_state_ref().get_id();
             let mut source_to_remove = None;
 
@@ -1002,14 +1008,22 @@ impl<'s> DrawEgui<'s> for ArithCfg {
             for (src_idx, src) in self.sources.iter_mut().enumerate() {
                 ui.push_id((step_id, src_idx), |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new(egui_phosphor::bold::PLUS).size(16.0));
+                        ui.label(
+                            egui::RichText::new(match gui_in.0 {
+                                ArithOpType::Sum => egui_phosphor::bold::PLUS,
+                                ArithOpType::Sub => egui_phosphor::bold::MINUS,
+                                ArithOpType::Mul => egui_phosphor::bold::ASTERISK,
+                                ArithOpType::Div => egui_phosphor::bold::DIVIDE,
+                            })
+                            .size(16.0),
+                        );
                         src.egui(
                             GuiInValue::Edit(GuiInValueEditParams {
-                                name: "Summation source",
+                                name: "Operand source",
                                 choice_case: Some(ValueUsageContext::TfmStepAuxSrc),
                                 allow_interval_edit: true,
                                 slider_log_scale: false,
-                                gui_common_ctx: &gui_in,
+                                gui_common_ctx: &gui_in.1,
                             }),
                             ui,
                         )
@@ -1020,6 +1034,11 @@ impl<'s> DrawEgui<'s> for ArithCfg {
                         }
                     });
                 });
+            }
+
+            ui.separator();
+            if ui.button("add source").clicked() {
+                self.sources.push(Default::default());
             }
 
             ui.horizontal(|ui| {
@@ -1044,11 +1063,6 @@ impl<'s> DrawEgui<'s> for ArithCfg {
                     self.common_state_ref().get_last_known_io().1
                 )));
             });
-
-            ui.separator();
-            if ui.button("Add summation source").clicked() {
-                self.sources.push(Default::default());
-            }
 
             if let Some(src_to_remove) = source_to_remove {
                 self.sources.remove(src_to_remove);
@@ -1454,7 +1468,13 @@ impl TfmStepCommonState {
         self.gui_trace_graph_opened.load(Relaxed)
     }
 
-    pub(crate) fn gui_trace(&self, stage: TfmStepTraceStage, vd: &TfmValue<BaseNumT>, timestamp: std::time::Instant) {
+    pub(crate) fn gui_trace(
+        &self,
+        stage: TfmStepTraceStage,
+        value: BaseNumT,
+        interval: NumInterval<BaseNumT>,
+        timestamp: std::time::Instant,
+    ) {
         if self.is_gui_tracing_enabled() {
             use egui::Color32;
 
@@ -1473,8 +1493,8 @@ impl TfmStepCommonState {
             if let Some(tc) = self.trace_channel.as_ref() {
                 tc.trace(
                     SYMM_UNIT_INTERVAL.map_from(
-                        vd.value,
-                        &vd.interval,
+                        value,
+                        &interval,
                         crate::num_interval::OutOfRangePolicy::WarnIfDebugAndClamp,
                     ),
                     SYMM_UNIT_INTERVAL,

@@ -29,7 +29,6 @@ use crate::{
 };
 use bitflags::bitflags;
 use crossbeam_utils::CachePadded;
-use enum_dispatch::enum_dispatch;
 use garde::Validate;
 use mmvj_derive::WithSelfSanitize;
 use schemars::JsonSchema;
@@ -108,7 +107,6 @@ pub(crate) fn default_filter_tau() -> ValueSrcs {
 /// This trait ensures that we do not forget to
 /// handle creation of separate state when
 /// tfm steps are duplicated interactively.
-#[enum_dispatch(TfmStepCfg)]
 pub(crate) trait TfmCfgDuplicateWithNewState
 where
     Self: Clone,
@@ -214,7 +212,7 @@ impl TfmStepCommonState {
         self.relativity.1.is_relative()
     }
 
-    pub(crate) fn set_input_relativity(&mut self, is_relative: Relativity) -> &mut Self {
+    pub(crate) fn set_in_relativity(&mut self, is_relative: Relativity) -> &mut Self {
         self.relativity.0 = is_relative;
         self
     }
@@ -224,7 +222,7 @@ impl TfmStepCommonState {
         self
     }
 
-    pub(crate) fn set_input_interval(&mut self, interval: NumInterval<BaseNumT>) -> &mut Self {
+    pub(crate) fn set_in_interval(&mut self, interval: NumInterval<BaseNumT>) -> &mut Self {
         self.intervals.0 = interval;
         self
     }
@@ -290,6 +288,21 @@ impl PartialEq for TfmStepCommonState {
     }
 }
 
+// enum ArithCfg {
+//     Sum(),
+//     Sum(),
+//     Sum(),
+// }
+
+#[derive(JsonSchema, PartialEq, Default, Debug, Clone, Serialize, Deserialize)]
+pub(crate) enum ArithOpType {
+    #[default]
+    Sum,
+    Sub,
+    Mul,
+    Div,
+}
+
 #[derive(
     JsonSchema,
     PartialEq,
@@ -306,7 +319,7 @@ impl PartialEq for TfmStepCommonState {
 #[serde(deny_unknown_fields)]
 #[sanitize_inplace_with_epilogue]
 #[with_doc_str]
-/// Summation
+/// An arithmetic operation (operands are evaluated with left-to-right associativity)
 pub(crate) struct ArithCfg {
     /// ...
     #[traverse(skip)]
@@ -314,6 +327,11 @@ pub(crate) struct ArithCfg {
     #[garde(skip)]
     #[sanitize_inplace(skip)]
     common_state: TfmStepCommonState,
+    // #[traverse(skip)]
+    // #[serde(skip)]
+    // #[garde(skip)]
+    // #[sanitize_inplace(skip)]
+    // opcode: ArithOpType,
     #[traverse(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -461,9 +479,11 @@ impl TfmCfgDuplicateWithNewState for VelocityToDisplacementCfg {
 )]
 #[strum(serialize_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
-#[enum_dispatch]
 pub(crate) enum TfmStepCfg {
-    Sum(#[garde(skip)] ArithCfg),
+    Sum(#[garde(dive)] ArithCfg),
+    Sub(#[garde(dive)] ArithCfg),
+    Mul(#[garde(dive)] ArithCfg),
+    Div(#[garde(dive)] ArithCfg),
     VelocityToDisplacement(#[garde(skip)] VelocityToDisplacementCfg),
     #[traverse(skip)]
     Nop(#[garde(skip)] NopCfg),
@@ -501,7 +521,9 @@ impl WithSelfSanitize for TfmStepCfg {
 
     fn sanitize_inplace(&mut self, input: Self::SanInputT) {
         match self {
-            TfmStepCfg::Sum(s) => s.sanitize_inplace(input),
+            TfmStepCfg::Sum(s) | TfmStepCfg::Sub(s) | TfmStepCfg::Div(s) | TfmStepCfg::Mul(s) => {
+                s.sanitize_inplace(input)
+            }
             TfmStepCfg::VelocityToDisplacement(s) => s.sanitize_inplace(input),
             TfmStepCfg::Nop(s) => s.sanitize_inplace(input),
             TfmStepCfg::Invert(s) => s.sanitize_inplace(input),
@@ -521,6 +543,78 @@ impl WithSelfSanitize for TfmStepCfg {
     }
 }
 
+impl WithCommonState for TfmStepCfg {
+    fn common_state_ref(&self) -> &TfmStepCommonState {
+        match self {
+            TfmStepCfg::Sum(s) | TfmStepCfg::Sub(s) | TfmStepCfg::Mul(s) | TfmStepCfg::Div(s) => s.common_state_ref(),
+            TfmStepCfg::VelocityToDisplacement(s) => s.common_state_ref(),
+            TfmStepCfg::Nop(s) => s.common_state_ref(),
+            TfmStepCfg::Invert(s) => s.common_state_ref(),
+            TfmStepCfg::Integrate(s) => s.common_state_ref(),
+            TfmStepCfg::Steering(s) => s.common_state_ref(),
+            TfmStepCfg::Clamp(s) => s.common_state_ref(),
+            TfmStepCfg::RaiseFall(s) => s.common_state_ref(),
+            TfmStepCfg::Ema(s) => s.common_state_ref(),
+            TfmStepCfg::Linear(s) => s.common_state_ref(),
+            TfmStepCfg::Smoothstep(s) => s.common_state_ref(),
+            TfmStepCfg::SCurve(s) => s.common_state_ref(),
+            TfmStepCfg::Exp(s) => s.common_state_ref(),
+            TfmStepCfg::SignedPower(s) => s.common_state_ref(),
+            TfmStepCfg::OneEuro(s) => s.common_state_ref(),
+            TfmStepCfg::Script(s) => s.common_state_ref(),
+        }
+    }
+}
+
+impl WithCommonStateMut for TfmStepCfg {
+    fn common_state_mut(&mut self) -> &mut TfmStepCommonState {
+        match self {
+            TfmStepCfg::Sum(s) | TfmStepCfg::Sub(s) | TfmStepCfg::Mul(s) | TfmStepCfg::Div(s) => s.common_state_mut(),
+            TfmStepCfg::VelocityToDisplacement(s) => s.common_state_mut(),
+            TfmStepCfg::Nop(s) => s.common_state_mut(),
+            TfmStepCfg::Invert(s) => s.common_state_mut(),
+            TfmStepCfg::Integrate(s) => s.common_state_mut(),
+            TfmStepCfg::Steering(s) => s.common_state_mut(),
+            TfmStepCfg::Clamp(s) => s.common_state_mut(),
+            TfmStepCfg::RaiseFall(s) => s.common_state_mut(),
+            TfmStepCfg::Ema(s) => s.common_state_mut(),
+            TfmStepCfg::Linear(s) => s.common_state_mut(),
+            TfmStepCfg::Smoothstep(s) => s.common_state_mut(),
+            TfmStepCfg::SCurve(s) => s.common_state_mut(),
+            TfmStepCfg::Exp(s) => s.common_state_mut(),
+            TfmStepCfg::SignedPower(s) => s.common_state_mut(),
+            TfmStepCfg::OneEuro(s) => s.common_state_mut(),
+            TfmStepCfg::Script(s) => s.common_state_mut(),
+        }
+    }
+}
+
+impl TfmCfgDuplicateWithNewState for TfmStepCfg {
+    fn duplicate_with_new_state(&self) -> Self {
+        match self {
+            TfmStepCfg::Sub(s) => TfmStepCfg::Sub(s.duplicate_with_new_state()),
+            TfmStepCfg::Sum(s) => TfmStepCfg::Sum(s.duplicate_with_new_state()),
+            TfmStepCfg::Mul(s) => TfmStepCfg::Mul(s.duplicate_with_new_state()),
+            TfmStepCfg::Div(s) => TfmStepCfg::Div(s.duplicate_with_new_state()),
+            TfmStepCfg::VelocityToDisplacement(s) => TfmStepCfg::VelocityToDisplacement(s.duplicate_with_new_state()),
+            TfmStepCfg::Nop(s) => TfmStepCfg::Nop(s.duplicate_with_new_state()),
+            TfmStepCfg::Invert(s) => TfmStepCfg::Invert(s.duplicate_with_new_state()),
+            TfmStepCfg::Integrate(s) => TfmStepCfg::Integrate(s.duplicate_with_new_state()),
+            TfmStepCfg::Steering(s) => TfmStepCfg::Steering(s.duplicate_with_new_state()),
+            TfmStepCfg::Clamp(s) => TfmStepCfg::Clamp(s.duplicate_with_new_state()),
+            TfmStepCfg::RaiseFall(s) => TfmStepCfg::RaiseFall(s.duplicate_with_new_state()),
+            TfmStepCfg::Ema(s) => TfmStepCfg::Ema(s.duplicate_with_new_state()),
+            TfmStepCfg::Linear(s) => TfmStepCfg::Linear(s.duplicate_with_new_state()),
+            TfmStepCfg::Smoothstep(s) => TfmStepCfg::Smoothstep(s.duplicate_with_new_state()),
+            TfmStepCfg::SCurve(s) => TfmStepCfg::SCurve(s.duplicate_with_new_state()),
+            TfmStepCfg::Exp(s) => TfmStepCfg::Exp(s.duplicate_with_new_state()),
+            TfmStepCfg::SignedPower(s) => TfmStepCfg::SignedPower(s.duplicate_with_new_state()),
+            TfmStepCfg::OneEuro(s) => TfmStepCfg::OneEuro(s.duplicate_with_new_state()),
+            TfmStepCfg::Script(s) => TfmStepCfg::Script(s.duplicate_with_new_state()),
+        }
+    }
+}
+
 pub(crate) const DEFAULT_TRANSFORM_DESCRIPTION: &str = "No transform description available... yet.";
 
 impl TfmStepCfg {
@@ -530,11 +624,14 @@ impl TfmStepCfg {
 
     pub(crate) const fn doc_str(&self) -> &'static str {
         match self {
+            TfmStepCfg::Sum(s) |
+            TfmStepCfg::Sub(s) |
+            TfmStepCfg::Mul(s) |
+            TfmStepCfg::Div(s) => s.doc_str(),
             TfmStepCfg::Steering(s) => s.doc_str(),
             TfmStepCfg::Script(s) => s.doc_str(),
             TfmStepCfg::OneEuro(s) => s.doc_str(),
             TfmStepCfg::Ema(s) => s.doc_str(),
-            TfmStepCfg::Sum(s) => s.doc_str(),
             TfmStepCfg::VelocityToDisplacement(s) => s.doc_str(),
             TfmStepCfg::Nop(_)
             | TfmStepCfg::Invert(_)
@@ -554,26 +651,72 @@ impl TfmStepCfg {
 }
 
 impl TfmStepCfg {
+    pub(crate) fn is_enabled(&self) -> bool {
+        *(match self {
+            TfmStepCfg::Sum(s) | TfmStepCfg::Sub(s) | TfmStepCfg::Mul(s) | TfmStepCfg::Div(s) => s.enabled,
+            TfmStepCfg::VelocityToDisplacement(s) => s.enabled,
+            TfmStepCfg::Nop(s) => s.enabled,
+            TfmStepCfg::Invert(s) => s.enabled,
+            TfmStepCfg::Integrate(s) => s.enabled,
+            TfmStepCfg::Steering(s) => s.enabled,
+            TfmStepCfg::Clamp(s) => s.enabled,
+            TfmStepCfg::RaiseFall(s) => s.enabled,
+            TfmStepCfg::Ema(s) => s.enabled,
+            TfmStepCfg::Linear(s) => s.enabled,
+            TfmStepCfg::Smoothstep(s) => s.enabled,
+            TfmStepCfg::SCurve(s) => s.enabled,
+            TfmStepCfg::Exp(s) => s.enabled,
+            TfmStepCfg::SignedPower(s) => s.enabled,
+            TfmStepCfg::OneEuro(s) => s.enabled,
+            TfmStepCfg::Script(s) => s.enabled,
+        })
+    }
+
     pub(crate) fn get_enabled_ref_mut(&mut self) -> &mut bool {
         match self {
-            Self::VelocityToDisplacement(s) => &mut s.enabled,
-            Self::Sum(s) => &mut s.enabled,
-            Self::Nop(s) => &mut s.enabled,
-            Self::Invert(s) => &mut s.enabled,
-            Self::Integrate(s) => &mut s.enabled,
-            Self::Steering(s) => &mut s.enabled,
-            Self::Clamp(s) => &mut s.enabled,
-            Self::RaiseFall(s) => &mut s.enabled,
-            Self::Ema(s) => &mut s.enabled,
-            Self::Linear(s) => &mut s.enabled,
-            Self::Smoothstep(s) => &mut s.enabled,
-            Self::SCurve(s) => &mut s.enabled,
-            Self::Exp(s) => &mut s.enabled,
-            Self::SignedPower(s) => &mut s.enabled,
-            Self::OneEuro(s) => &mut s.enabled,
-            Self::Script(s) => &mut s.enabled,
-            // Self::_HighPass(s) => &mut s.enabled,
-            // Self::_ForceFeedback(s) => &mut s.enabled,
+            TfmStepCfg::Sum(s) | TfmStepCfg::Sub(s) | TfmStepCfg::Mul(s) | TfmStepCfg::Div(s) => &mut s.enabled,
+            TfmStepCfg::VelocityToDisplacement(s) => &mut s.enabled,
+            TfmStepCfg::Nop(s) => &mut s.enabled,
+            TfmStepCfg::Invert(s) => &mut s.enabled,
+            TfmStepCfg::Integrate(s) => &mut s.enabled,
+            TfmStepCfg::Steering(s) => &mut s.enabled,
+            TfmStepCfg::Clamp(s) => &mut s.enabled,
+            TfmStepCfg::RaiseFall(s) => &mut s.enabled,
+            TfmStepCfg::Ema(s) => &mut s.enabled,
+            TfmStepCfg::Linear(s) => &mut s.enabled,
+            TfmStepCfg::Smoothstep(s) => &mut s.enabled,
+            TfmStepCfg::SCurve(s) => &mut s.enabled,
+            TfmStepCfg::Exp(s) => &mut s.enabled,
+            TfmStepCfg::SignedPower(s) => &mut s.enabled,
+            TfmStepCfg::OneEuro(s) => &mut s.enabled,
+            TfmStepCfg::Script(s) => &mut s.enabled,
+            // TfmStepCfg::_HighPass(s) => &mut s.enabled,
+            // TfmStepCfg::_ForceFeedback(s) => &mut s.enabled,
+        }
+    }
+}
+
+impl _WithDescriptionMut for TfmStepCfg {
+    fn description_mut(&mut self) -> Option<&mut DescriptionCfg> {
+        match self {
+            TfmStepCfg::Sum(_s) | TfmStepCfg::Sub(_s) | TfmStepCfg::Mul(_s) | TfmStepCfg::Div(_s) => None,
+            TfmStepCfg::Nop(_) => None,
+            TfmStepCfg::Invert(_) => None,
+            TfmStepCfg::VelocityToDisplacement(s) => Some(&mut s.desc),
+            TfmStepCfg::Integrate(s) => Some(&mut s.desc),
+            TfmStepCfg::Steering(s) => Some(&mut s.desc),
+            TfmStepCfg::Clamp(s) => Some(&mut s.desc),
+            TfmStepCfg::RaiseFall(s) => Some(&mut s.desc),
+            TfmStepCfg::Ema(s) => Some(&mut s.desc),
+            TfmStepCfg::Linear(s) => Some(&mut s.desc),
+            TfmStepCfg::Smoothstep(s) => Some(&mut s.desc),
+            TfmStepCfg::SCurve(s) => Some(&mut s.desc),
+            TfmStepCfg::Exp(s) => Some(&mut s.desc),
+            TfmStepCfg::SignedPower(s) => Some(&mut s.desc),
+            TfmStepCfg::OneEuro(s) => Some(&mut s.desc),
+            TfmStepCfg::Script(s) => Some(&mut s.desc),
+            // TfmStepCfg::_HighPass(highpass) => Some(&mut highpass.desc),
+            // TfmStepCfg::_ForceFeedback(force_feedback) => Some(&mut force_feedback.desc),
         }
     }
 }
@@ -708,12 +851,13 @@ make_input_port_inner_nutype!(
 
 impl ForceFeedbackCfg {
     fn sanitize_inplace_epilogue(&mut self) {
-        let (_, _) = self
-            .transformation
-            .recompute_steps_metadata_get_out_interval_and_relativity(AutoOrManual::Auto(InputValueMetadata {
+        self.transformation.recompute_metadata_and_sanitize_recursive(
+            AutoOrManual::Auto(InputValueMetadata {
                 interval: SYMM_UNIT_INTERVAL,
                 relativity: Relativity::Rel,
-            }));
+            })
+            .into(),
+        );
     }
 }
 
@@ -1591,49 +1735,57 @@ impl TfmSeqCfg {
         let _ = self.steps.traverse(&mut DisableGuiTracingVisitor {});
     }
 
+    pub(crate) fn _set_in_interval(&mut self, interval: NumInterval<BaseNumT>) {
+        self.recompute_metadata_and_sanitize_recursive(Some(AutoOrManual::Manual(InputValueMetadata {
+            interval,
+            relativity: self.get_in_relativity(),
+        })));
+    }
+
+    pub(crate) fn _set_in_relativity(&mut self, relativity: Relativity) {
+        self.recompute_metadata_and_sanitize_recursive(Some(AutoOrManual::Manual(InputValueMetadata {
+            interval: self.get_in_interval(),
+            relativity,
+        })));
+    }
+
     pub(crate) fn recompute_metadata_and_sanitize_recursive(
         &mut self,
         input: Option<AutoOrManual<InputValueMetadata<BaseNumT>>>,
     ) {
-        self.out_meta = self.recompute_steps_metadata_get_out_interval_and_relativity(input.unwrap_or(self.in_meta));
+        self.out_meta = {
+            self.in_meta = input.unwrap_or(self.in_meta);
+            let mut cur_relativity = self.in_meta.relativity;
+            let mut cur_interval = self.in_meta.interval;
 
-        let _ = self
-            .steps
-            .traverse_mut(&mut traversable::function::visitor_mut::<TfmSeqCfg, (), _, _>(
-                |tfm_seq| {
-                    tfm_seq.recompute_metadata_and_sanitize_recursive(Some(tfm_seq.in_meta));
-                    std::ops::ControlFlow::Break(())
-                },
-                |_| std::ops::ControlFlow::Continue(()),
-            ));
-    }
+            for step in &mut self.steps {
+                step.common_state_mut()
+                    .set_in_relativity(cur_relativity)
+                    .set_in_interval(cur_interval);
 
-    #[must_use]
-    pub(crate) fn recompute_steps_metadata_get_out_interval_and_relativity(
-        &mut self,
-        input: AutoOrManual<InputValueMetadata<BaseNumT>>,
-    ) -> (NumInterval<BaseNumT>, Relativity) {
-        self.in_meta = input;
-        let mut cur_relativity = self.in_meta.relativity;
-        let mut cur_interval = self.in_meta.interval;
+                step.common_state_mut()
+                    .set_out_relativity(cur_relativity)
+                    .set_out_interval(cur_interval);
 
-        for step in &mut self.steps {
-            step.common_state_mut()
-                .set_input_relativity(cur_relativity)
-                .set_input_interval(cur_interval);
-            step.common_state_mut()
-                .set_out_relativity(cur_relativity)
-                .set_out_interval(cur_interval);
-
-            step.sanitize_inplace(());
-
-            if *step.get_enabled_ref_mut() {
-                cur_interval = step.common_state_ref().get_out_interval();
-                cur_relativity = step.common_state_ref().get_out_relativity();
+                if step.is_enabled() {
+                    step.sanitize_inplace(());
+                    cur_interval = step.common_state_ref().get_out_interval();
+                    cur_relativity = step.common_state_ref().get_out_relativity();
+                }
             }
-        }
 
-        (cur_interval, cur_relativity)
+            (cur_interval, cur_relativity)
+        };
+
+        // let _ = self
+        //     .steps
+        //     .traverse_mut(&mut traversable::function::visitor_mut::<TfmSeqCfg, (), _, _>(
+        //         |tfm_seq| {
+        //             tfm_seq.recompute_metadata_and_sanitize_recursive(Some(tfm_seq.in_meta));
+        //             std::ops::ControlFlow::Break(())
+        //         },
+        //         |_| std::ops::ControlFlow::Continue(()),
+        //     ));
     }
 }
 
@@ -1830,8 +1982,8 @@ impl TfmSeqCfg {
 
 impl WithSelfSanitize for TfmSeqCfg {
     type SanInputT = ();
-    fn sanitize_inplace(&mut self, input: Self::SanInputT) {
-        self.steps.iter_mut().for_each(|tfm| tfm.sanitize_inplace(input));
+    fn sanitize_inplace(&mut self, _input: Self::SanInputT) {
+        self.recompute_metadata_and_sanitize_recursive(None);
     }
 }
 
@@ -1920,7 +2072,6 @@ impl PartialEq for SteeringCfg {
     }
 }
 
-#[enum_dispatch(TfmStepCfg)]
 pub(crate) trait WithCommonState {
     fn common_state_ref(&self) -> &TfmStepCommonState;
 }
@@ -1931,7 +2082,6 @@ impl<T: WithCommonState> WithCommonState for Box<T> {
     }
 }
 
-#[enum_dispatch(TfmStepCfg)]
 pub(crate) trait WithCommonStateMut {
     fn common_state_mut(&mut self) -> &mut TfmStepCommonState;
 }
@@ -2132,15 +2282,19 @@ pub(crate) struct SteeringCfg {
 
 impl SteeringCfg {
     fn sanitize_inplace_epilogue(&mut self) {
-        let (_, _) = self
-            .integrated_user_input_transform
-            .recompute_steps_metadata_get_out_interval_and_relativity(AutoOrManual::Auto(InputValueMetadata {
-                interval: SYMM_UNIT_INTERVAL,
-                relativity: Relativity::Abs,
-            }));
+        self.integrated_user_input_transform
+            .recompute_metadata_and_sanitize_recursive(
+                AutoOrManual::Auto(InputValueMetadata {
+                    interval: SYMM_UNIT_INTERVAL,
+                    relativity: Relativity::Abs,
+                })
+                .into(),
+            );
 
+        //if *self.enabled {
         self.common_state.set_out_interval(SYMM_UNIT_INTERVAL);
         self.common_state.set_out_relativity(Relativity::Abs);
+        //  }
     }
 }
 
@@ -2636,31 +2790,6 @@ impl WithRuntimeId for TfmStepCfg {
     }
 }
 
-impl _WithDescriptionMut for TfmStepCfg {
-    fn description_mut(&mut self) -> Option<&mut DescriptionCfg> {
-        match self {
-            TfmStepCfg::Nop(_) => None,
-            TfmStepCfg::Invert(_) => None,
-            TfmStepCfg::VelocityToDisplacement(s) => Some(&mut s.desc),
-            TfmStepCfg::Sum(s) => Some(&mut s.desc),
-            TfmStepCfg::Integrate(s) => Some(&mut s.desc),
-            TfmStepCfg::Steering(s) => Some(&mut s.desc),
-            TfmStepCfg::Clamp(s) => Some(&mut s.desc),
-            TfmStepCfg::RaiseFall(s) => Some(&mut s.desc),
-            TfmStepCfg::Ema(s) => Some(&mut s.desc),
-            TfmStepCfg::Linear(s) => Some(&mut s.desc),
-            TfmStepCfg::Smoothstep(s) => Some(&mut s.desc),
-            TfmStepCfg::SCurve(s) => Some(&mut s.desc),
-            TfmStepCfg::Exp(s) => Some(&mut s.desc),
-            TfmStepCfg::SignedPower(s) => Some(&mut s.desc),
-            TfmStepCfg::OneEuro(s) => Some(&mut s.desc),
-            TfmStepCfg::Script(s) => Some(&mut s.desc),
-            // TfmStepCfg::_HighPass(highpass) => Some(&mut highpass.desc),
-            // TfmStepCfg::_ForceFeedback(force_feedback) => Some(&mut force_feedback.desc),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     #[allow(unused)]
@@ -2669,7 +2798,7 @@ mod tests {
     #[test]
     fn clamp_cfg_sanitize() {
         let mut clamp_cfg = ClampCfg::default();
-        clamp_cfg.common_state_mut().set_input_interval((3.0..4.0).into());
+        clamp_cfg.common_state_mut().set_in_interval((3.0..4.0).into());
 
         clamp_cfg.range = (-100.0..-100.0).into();
         clamp_cfg.sanitize_inplace(());

@@ -96,10 +96,10 @@ mod steering_tfm_deserialization_and_exec_tests {
     /// Set up pipeline metadata the same way `Mapping::recompute_metadata`
     /// does for a mouse REL_X source.
     fn setup_mouse_metadata(tfm: &mut TfmSeqCfg) {
-        let _ = tfm.recompute_steps_metadata_get_out_interval_and_relativity(AutoOrManual::Auto(InputValueMetadata {
+        let _ = tfm.recompute_metadata_and_sanitize_recursive(Some(AutoOrManual::Auto(InputValueMetadata {
             interval: NumInterval::new(-127.0, 127.0),
             relativity: Relativity::Rel,
-        }));
+        })));
     }
 
     /// Rewind the steering step's internal clock by `dt` so the next
@@ -454,12 +454,11 @@ mod steering_tfm_deserialization_and_exec_tests {
     enabled: false
     input_gain: 0.5
 "#;
-        let mut tfm: TfmSeqCfg = serde_saphyr::from_str(yaml).unwrap();
-        setup_mouse_metadata(&mut tfm);
-
-        let out = tfm.exec(mouse_rel_x(42.0), &MockCtx::active());
-        assert!(approx(out.value, 42.0), "disabled → passthrough");
-        println!("Disabled: 42.0 → {:.6}", out.value);
+        let mut tfm_seq: TfmSeqCfg = serde_saphyr::from_str(yaml).unwrap();
+        setup_mouse_metadata(&mut tfm_seq);
+        assert_eq!(tfm_seq.steps.first_mut().unwrap().is_enabled(), false);
+        let out = tfm_seq.exec(mouse_rel_x(42.0), &MockCtx::active());
+        assert_eq!(out.value, 42.0, "Disabled transformation passes the value through");
     }
 
     #[test]
