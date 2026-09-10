@@ -162,7 +162,7 @@ pub(crate) trait WithRuntimeId {
 
 // ----------------------------
 
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(JsonSchema, Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub(crate) struct EnabledFlagCfg(pub(crate) bool);
 
 impl EnabledFlagCfg {

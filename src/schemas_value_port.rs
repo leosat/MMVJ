@@ -445,12 +445,13 @@ where
             let inner_rel = self.port_inner_ref().get_relativity();
 
             if let Some(ref mut tfm) = self.port_transformation_mut() {
-                let (_, _) = tfm.recompute_steps_metadata_get_out_interval_and_relativity(AutoOrManual::Auto(
-                    InputValueMetadata {
+                tfm.recompute_metadata_and_sanitize_recursive(
+                    AutoOrManual::Auto(InputValueMetadata {
                         interval: inner_interval.cast().unwrap(),
                         relativity: inner_rel,
-                    },
-                ));
+                    })
+                    .into(),
+                );
             }
 
             self._port_effective_interval = self

@@ -55,7 +55,6 @@ pub const MIDI_ENABLED_CONST: bool = false;
 pub const MIDI_ENABLED_CONST: bool = true;
 
 //-----------------------------------------------------------------
-// #[enum_dispatch(TfmStepCfg)]
 pub(crate) trait WithSelfSanitize {
     type SanInputT;
 

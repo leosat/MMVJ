@@ -23,7 +23,6 @@ use crate::{
 };
 use crossbeam_utils::CachePadded;
 use deserialize_untagged_verbose_error::DeserializeUntaggedVerboseError;
-use enum_dispatch::enum_dispatch;
 use garde::{Validate, rules::range::Bounds};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -125,24 +124,20 @@ impl<ValueT: NumIntervalValue> WithNumInterval for TfmValue<ValueT> {
 /// The difference takes place for relative values, where current (in-the-moment) value may be 0,
 /// whereas last memorized input or output may be != 0. In other cases both traits if implemented
 /// may return the same value.
-#[enum_dispatch]
 pub(crate) trait WithLastKnownIO {
     type LastKnownIOValueT;
     fn get_last_known_io(&self) -> Self::LastKnownIOValueT;
 }
 
-#[enum_dispatch]
 pub(crate) trait WithLastKnownIOSettable: WithLastKnownIO {
     type LastKnownIOSettableValueT;
     fn set_last_known_io(&self, value: Self::LastKnownIOSettableValueT);
 }
 
-#[enum_dispatch]
 pub(crate) trait WithRelativity {
     fn get_relativity(&self) -> Relativity;
 }
 
-#[enum_dispatch]
 pub(crate) trait WithRelativityRef {
     fn relativity_ref(&self) -> &Relativity;
 }
@@ -172,7 +167,6 @@ pub(crate) trait _WithRelativityMut {
     fn relativity_mut(&mut self) -> &mut Relativity;
 }
 
-#[enum_dispatch]
 pub(crate) trait WithNumericValue {
     type ValueT: NumIntervalValue;
     fn get_numeric_value(&self) -> Self::ValueT;
@@ -194,23 +188,19 @@ pub(crate) trait WithNumericValue {
 
 /// This trait sets a numeric value within configuration tree/transformation state cache.
 /// NB: It does not actually write to any devices!
-#[enum_dispatch]
 pub(crate) trait WithNumericValueSettable: WithNumericValue {
     fn set_numeric_value(&self, value: Self::ValueT);
 }
 
-#[enum_dispatch]
 pub(crate) trait WithNumInterval: WithNumericValue {
     fn get_interval(&self) -> NumInterval<Self::ValueT>;
 }
 
-#[enum_dispatch]
 pub(crate) trait WithNumIntervalMut: WithNumericValue {
     fn interval_mut(&mut self) -> &mut NumInterval<Self::ValueT>;
 }
 
 //--------------------------------------------------
-#[enum_dispatch]
 pub(crate) trait WithNumIntervalSettable: WithNumInterval {
     fn set_interval(&mut self, interval: NumInterval<Self::ValueT>);
 }

@@ -1283,6 +1283,42 @@
         {
           "type": "object",
           "properties": {
+            "sub": {
+              "$ref": "#/$defs/ArithCfg"
+            }
+          },
+          "required": [
+            "sub"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mul": {
+              "$ref": "#/$defs/ArithCfg"
+            }
+          },
+          "required": [
+            "mul"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "div": {
+              "$ref": "#/$defs/ArithCfg"
+            }
+          },
+          "required": [
+            "div"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
             "velocity_to_displacement": {
               "$ref": "#/$defs/VelocityToDisplacementCfg"
             }
@@ -1463,7 +1499,7 @@
       ]
     },
     "ArithCfg": {
-      "description": "Summation",
+      "description": "An arithmetic operation (operands are evaluated with left-to-right associativity)",
       "type": "object",
       "properties": {
         "desc": {
