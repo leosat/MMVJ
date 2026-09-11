@@ -132,10 +132,10 @@ where
                 remap,
                 triggers_mapping,
                 inner: value,
-                _san_policy: PhantomData,
-                _remap_policy: PhantomData,
+                san_policy: PhantomData,
+                remap_policy: PhantomData,
                 _port_effective_interval: Default::default(),
-                _tfm_policy: {
+                tfm_policy: {
                     let mut tfm_pol: TfmT = Default::default();
                     if let Some(tfm_cfg) = transformation {
                         tfm_pol.transformation_on();
@@ -165,7 +165,7 @@ where
                 remap: port.remap,
                 triggers_mapping: port.triggers_mapping,
                 value: port.inner,
-                transformation: port._tfm_policy.transformation_ref().cloned(),
+                transformation: port.tfm_policy.transformation_ref().cloned(),
             }
         } else {
             ValuePortSerdeHelper::AsInner(port.inner)
@@ -335,11 +335,11 @@ pub(crate) struct ValuePort<
     remap: Option<NumInterval<<InnerT as WithNumericValue>::ValueT>>,
     #[serde(skip)]
     #[traverse(skip)]
-    _san_policy: PhantomData<SanT>,
+    san_policy: PhantomData<SanT>,
     #[serde(skip)]
     #[traverse(skip)]
-    _remap_policy: PhantomData<RemapT>,
-    _tfm_policy: Box<TfmT>,
+    remap_policy: PhantomData<RemapT>,
+    tfm_policy: Box<TfmT>,
     #[traverse(skip)]
     triggers_mapping: bool,
     #[serde(skip)]
@@ -360,10 +360,10 @@ where
             remap: Default::default(),
             triggers_mapping: Default::default(),
             inner: Default::default(),
-            _san_policy: PhantomData,
-            _remap_policy: PhantomData,
+            san_policy: PhantomData,
+            remap_policy: PhantomData,
             _port_effective_interval: Default::default(),
-            _tfm_policy: Default::default(),
+            tfm_policy: Default::default(),
         };
         tmp.sanitize_inplace(());
         tmp
@@ -384,10 +384,10 @@ where
             remap: None,
             triggers_mapping: false,
             inner: value,
-            _san_policy: PhantomData,
-            _remap_policy: PhantomData,
+            san_policy: PhantomData,
+            remap_policy: PhantomData,
             _port_effective_interval: Default::default(),
-            _tfm_policy: Default::default(),
+            tfm_policy: Default::default(),
         }
     }
 }
@@ -586,21 +586,21 @@ where
     }
 
     fn port_transformation_mut(&mut self) -> Option<&mut TfmSeqCfg> {
-        self._tfm_policy.transformation_mut()
+        self.tfm_policy.transformation_mut()
     }
 
     fn port_transformation_on(&mut self) {
-        self._tfm_policy.transformation_on();
+        self.tfm_policy.transformation_on();
         self.sanitize_inplace(());
     }
 
     fn port_transformation_off(&mut self) {
-        self._tfm_policy.transformation_off();
+        self.tfm_policy.transformation_off();
         self.sanitize_inplace(());
     }
 
     fn port_transformation_ref(&self) -> Option<&TfmSeqCfg> {
-        self._tfm_policy.transformation_ref()
+        self.tfm_policy.transformation_ref()
     }
 
     fn port_is_transformable(&self) -> bool {
