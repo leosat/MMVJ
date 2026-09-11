@@ -404,7 +404,7 @@ where
                     .step_by(0.0001),
             );
 
-            if value_slider.changed() && (value_slider.drag_stopped() || value_slider.dragged()) {
+            if value_slider.changed() && !value_slider.dragged() {
                 if !this.get_device_control_matcher_ref().is_some() {
                     this.set_numeric_value(value);
                 }
