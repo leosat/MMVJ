@@ -174,7 +174,7 @@ impl WithLastKnownIOSettable for TfmStepCommonState {
 
     fn set_last_known_io(&self, value: Self::LastKnownIOSettableValueT) {
         value.0.map(|v| self.last_in.store(v, Relaxed));
-        value.1.map(|v| self.last_in.store(v, Relaxed));
+        value.1.map(|v| self.last_out.store(v, Relaxed));
     }
 }
 
