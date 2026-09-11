@@ -1518,11 +1518,7 @@
           "default": []
         },
         "out_range": {
-          "$ref": "#/$defs/NumInterval",
-          "default": [
-            -1.0,
-            1.0
-          ]
+          "$ref": "#/$defs/AutoOrManual"
         }
       },
       "additionalProperties": false
@@ -1566,6 +1562,13 @@
         },
         {
           "$ref": "#/$defs/ValueSrcs"
+        }
+      ]
+    },
+    "AutoOrManual": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NumInterval"
         }
       ]
     },

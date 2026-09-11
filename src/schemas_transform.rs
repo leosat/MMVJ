@@ -352,7 +352,9 @@ pub(crate) struct ArithCfg {
     pub(crate) sources: Vec<ValuePort<ValueSrcs, SanPolicyNone>>,
     #[traverse(skip)]
     #[serde(
-        default = "default_symm_unit_interval",
+        default,
+        // default = "default_symm_unit_interval",
+        skip_serializing_if = "AutoOrManual::is_auto",
         alias = "output_interval",
         alias = "output_range",
         alias = "out_interval",
@@ -360,13 +362,21 @@ pub(crate) struct ArithCfg {
     )]
     #[garde(skip)]
     #[sanitize_inplace(skip)]
-    pub(crate) out_interval: NumInterval<BaseNumT>,
+    pub(crate) out_interval: AutoOrManual<NumInterval<BaseNumT>>,
 }
 
 impl ArithCfg {
     fn sanitize_inplace_epilogue(&mut self) {
         let out_interval = self.out_interval;
-        self.common_state_mut().set_out_interval(out_interval);
+        let in_interval = self.common_state.get_in_interval();
+        self.common_state_mut().set_out_interval(if out_interval.is_manual() {
+            *out_interval
+        } else {
+            in_interval
+        });
+        if out_interval.is_auto() {
+            *self.out_interval = in_interval;
+        }
     }
 }
 
