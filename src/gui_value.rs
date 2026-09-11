@@ -392,7 +392,12 @@ where
                 return Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
             }
 
-            ui.label(this.value_identity());
+            ui.label(
+                params
+                    .gui_common_ctx
+                    .get_style()
+                    .value_identity_decorate(egui::RichText::new(this.value_identity())),
+            );
 
             ui.label("Value:");
             let mut value = this.get_numeric_value();

@@ -483,37 +483,35 @@ where
         BaseNumT: From<<InnerT as WithNumericValue>::ValueT>,
         <InnerT as WithNumericValue>::ValueT: From<BaseNumT>,
     {
-        let mut value = self.inner.get_numeric_value();
-        let post_tfm_value = if let Some(tfm) = self.port_transformation_ref() {
+        let (mut value, interval) = if let Some(tfm) = self.port_transformation_ref() {
             if let Some(ctx) = ctx {
-                tfm.exec(
-                    TfmValue {
-                        value: value.into(),
-                        interval: self.inner.get_interval().cast().unwrap(),
-                        relativity: self.inner.get_relativity(),
-                    },
-                    ctx,
+                (
+                    tfm.exec(
+                        TfmValue {
+                            value: self.inner.get_numeric_value().into(),
+                            interval: self.inner.get_interval().cast().unwrap(),
+                            relativity: self.inner.get_relativity(),
+                        },
+                        ctx,
+                    )
+                    .value,
+                    tfm.get_out_interval(),
                 )
             } else {
-                TfmValue {
-                    value: tfm.get_last_known_io().1,
-                    interval: self.inner.get_interval().cast().unwrap(),
-                    relativity: self.inner.get_relativity(),
-                }
+                (tfm.get_last_known_io().1.into(), tfm.get_out_interval())
             }
         } else {
-            TfmValue {
-                value: value.into(),
-                interval: self.inner.get_interval().cast().unwrap(),
-                relativity: self.inner.get_relativity(),
-            }
+            (
+                self.inner.get_numeric_value().into(),
+                self.inner.get_interval().cast().unwrap(),
+            )
         };
 
         if let Some(remap) = RemapT::get_remap_range().or(self.remap) {
-            value = remap.map_from(post_tfm_value.value, &post_tfm_value.interval, OutOfRangePolicy::Clamp);
+            value = remap.map_from(value, &interval, OutOfRangePolicy::Clamp).into();
         }
 
-        SanT::san_policy_sanitize_numeric_value(value)
+        SanT::san_policy_sanitize_numeric_value(value.into())
     }
 
     fn port_set_numeric_value(&self, mut value: InnerT::ValueT) {
