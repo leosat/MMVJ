@@ -1054,8 +1054,14 @@ impl<'s> DrawEgui<'s> for ArithCfg {
                     },
                     ui,
                 ) {
+                    self.out_interval = self.out_interval.make_manual();
                     gui_out = bool_to_simple_change_gui_cmd(true);
                 };
+
+                if self.out_interval.is_manual() && ui.button(" (reset to input range) ").clicked() {
+                    self.out_interval = self.out_interval.make_auto();
+                    gui_out = bool_to_simple_change_gui_cmd(true);
+                }
 
                 ui.label(egui::RichText::new(format!(
                     ") {} {}",
