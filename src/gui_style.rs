@@ -40,6 +40,12 @@ pub(crate) struct GuiStyle {
 }
 
 impl GuiStyle {
+    pub(crate) fn value_identity_decorate(&self, vi: egui::RichText) -> egui::RichText {
+        vi.color(egui::Color32::BLUE)
+            .background_color(egui::Color32::GREEN.gamma_multiply(0.1))
+            .strong()
+    }
+
     pub(crate) fn tfm_io_info_decorate(&self, t: egui::RichText, is_enabled: bool) -> egui::RichText {
         t.background_color(if is_enabled {
             self.tfm_io_info_bg_color_enabled
