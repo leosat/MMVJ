@@ -349,7 +349,7 @@ pub(crate) struct ArithCfg {
     pub(crate) enabled: EnabledFlagCfg,
     #[serde(default, rename = "srcs", alias = "sources")]
     #[garde(skip)]
-    pub(crate) sources: Vec<ValuePort<ValueSrcs>>,
+    pub(crate) sources: Vec<ValuePort<ValueSrcs, SanPolicyNone>>,
     #[traverse(skip)]
     #[serde(
         default = "default_symm_unit_interval",
