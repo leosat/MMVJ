@@ -328,9 +328,9 @@ pub(crate) fn get_item_name_with_random_suffix(prefix: &str, count: usize) -> St
 }
 
 //------------------------------
-pub(crate) fn draw_collapsing_ui<'a, T>(
+pub(crate) fn draw_collapsing_ui<'a, T, SaltT: std::hash::Hash + std::fmt::Debug>(
     ui: &'a mut Ui,
-    id_salt: Option<impl std::hash::Hash>,
+    id_salt: Option<SaltT>,
     heading: Option<&'a str>,
     header_fn: impl FnOnce(&mut Ui) -> T,
 ) -> HeaderResponse<'a, ()> {

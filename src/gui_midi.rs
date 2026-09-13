@@ -241,7 +241,7 @@ impl<'s> DrawEgui<'s> for MidiMatcherCfg {
                             let mut val = c.get_last_known_io();
                             ui.label(egui::RichText::new(format!("{:+09.2}", val)).monospace());
                             ui.separator();
-                            ui.add(egui::Slider::new(&mut val, c.range.into()).show_value(false));
+                            ui.add(egui::Slider::new(&mut val, c.range.make_range_inclusive()).show_value(false));
                             ui.separator();
                             if ui
                                 .small_button(egui_phosphor::fill::TRASH.to_string())
