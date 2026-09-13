@@ -90,7 +90,7 @@ tokio = { version = "1.52.3", features = [
     "sync",
     "test-util",
 ] }
-traversable = { version = "0.2.0", features = [
+traversable = { version = "0.3.0", features = [
     "derive",
     "std",
     "traverse-std",
