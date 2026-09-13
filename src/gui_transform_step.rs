@@ -1039,6 +1039,7 @@ impl<'s> DrawEgui<'s> for ArithCfg {
             ui.separator();
             if ui.button("add source").clicked() {
                 self.sources.push(Default::default());
+                gui_out = bool_to_simple_change_gui_cmd(true);
             }
 
             ui.horizontal(|ui| {
