@@ -5,7 +5,7 @@ use crate::num_interval::ZERO_INTERVAL;
 use crate::base_num::BaseNumT;
 use crate::num_interval::{NumInterval, OutOfRangePolicy};
 use crate::tracing::{TelemetryEvent, TraceGraphHandle};
-use circular_buffer::CircularBuffer;
+use circular_buffer::HeapCircularBuffer;
 use eframe::egui::{self, Color32, Pos2, Shape, Stroke};
 use tokio::sync::mpsc;
 
@@ -28,7 +28,7 @@ const GRAPH_STATIC_BUF_SIZE: usize = (crate::gui_telemetry_graph::MAX_DATA_POINT
 pub(crate) struct GuiGraphState {
     pub(crate) legend: String,
     pub(crate) receiver: mpsc::Receiver<TelemetryEvent>,
-    pub(crate) data: Box<CircularBuffer<GRAPH_STATIC_BUF_SIZE, TelemetryEvent>>,
+    pub(crate) data: HeapCircularBuffer<TelemetryEvent>,
     pub(crate) y_interval: Option<NumInterval<BaseNumT>>,
     pub(crate) _in_interval: NumInterval<BaseNumT>,
     pub(crate) _out_interval: NumInterval<BaseNumT>,
@@ -58,7 +58,7 @@ pub(crate) fn make_trace_graph_2d(
         GuiGraphState {
             legend: legend.to_string(),
             receiver: rx,
-            data: CircularBuffer::boxed(),
+            data: HeapCircularBuffer::<TelemetryEvent>::with_capacity(GRAPH_STATIC_BUF_SIZE),
             y_interval: interval,
             buckets_per_graph: 0,
             dt_per_bucket: 0.0,
