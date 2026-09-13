@@ -50,7 +50,7 @@ evdev = { version = "0.13.2", features = ["tokio"] }
 lasso = { version = "0.7.3", features = ["multi-threaded"] }
 log = "0.4"
 midir = { version = "0.11.0", optional = true }
-mlua = { version = "0.11.6", features = ["luau", "send"] }   ## async send 
+mlua = { version = "0.12.1", features = ["luau", "send"] }   ## async send 
 nix = { version = "0.31.3", features = ["user", "poll"] }
 notify-debouncer-full = "0.7.0"
 num-traits = "0.2.19"
