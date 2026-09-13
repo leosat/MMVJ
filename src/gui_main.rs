@@ -27,6 +27,8 @@ use crate::schemas_midi::MidiMatcherCfg;
 use crate::schemas_ui::UiMonitorsCfg;
 use crate::schemas_value::VariableState;
 use eframe::egui::{self};
+use eframe::egui_glow;
+use egui::scroll_area::ScrollSource;
 use egui_file_dialog::FileDialog;
 use log::warn;
 use serde::{Deserialize, Serialize};
@@ -69,13 +71,22 @@ pub(crate) fn run(
                     EventLoopBuilderExtWayland::with_any_thread(builder, true);
                 })),
                 renderer: eframe::Renderer::Glow,
-                hardware_acceleration: eframe::HardwareAcceleration::Preferred,
+                // multisampling: 0,
+                // dithering: false,
+                glow_options: egui_glow::GlowConfiguration {
+                    vsync: true,
+                    hardware_acceleration: egui_glow::HardwareAcceleration::Preferred,
+                    shader_version: Default::default(),
+                },
+
                 persist_window: true,
                 // persistence_path: Some({
                 //     let mut p = std::env::temp_dir().to_path_buf(); p.push("mmvj"); p}),
                 ..Default::default()
             },
             Box::new(move |cc| {
+                // let ctx = cc.egui_ctx;
+                // ctx.options_mut(|o| o.input_options.)
                 // -----------------------------------------------------
                 (gui_style.setup_creation_context)(cc);
 
@@ -290,7 +301,7 @@ impl eframe::App for GuiMain {
                     .inner_margin(12)
                     .outer_margin(0),
             )
-            .show_inside(ui, |ui| {
+            .show(ui, |ui| {
                 egui::MenuBar::default().ui(ui, |ui| {
                     match self.file_picking_action_in_progress {
                         FilePickingAction::Load => {
@@ -414,7 +425,7 @@ impl eframe::App for GuiMain {
                     .outer_margin(0)
                     .fill(ui.visuals().window_fill),
             )
-            .show_inside(ui, |ui| {
+            .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.separator();
                     ui.label("Idle tick rate: ");
@@ -437,7 +448,7 @@ impl eframe::App for GuiMain {
                 ui.label(format!(" Config: {}", self.cfg.cfg_file.to_string_lossy()));
             });
 
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.separator();
                 ui.selectable_value(
@@ -472,105 +483,106 @@ impl eframe::App for GuiMain {
                 .on_hover_text("Runtime debug info. User, do not enter :)!");
             });
             ui.separator();
-            egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
-                match self.current_opened_tab {
-                    GuiMainTabs::Mappings => {
-                        ui.separator();
-                        self.draw_mappings_editor_gui(ui);
-                    }
-                    GuiMainTabs::Devices => {
-                        ui.separator();
-                        ui.group(|ui| {
-                            draw_collapsing_ui(
-                                ui,
-                                None::<()>,
-                                Some(&format!(
-                                    "{} HID: {}/{}/{}/{}/...",
-                                    egui_phosphor::bold::DOTS_SIX_VERTICAL,
-                                    egui_phosphor::bold::JOYSTICK,
-                                    egui_phosphor::bold::GAME_CONTROLLER,
-                                    egui_phosphor::bold::MOUSE,
-                                    egui_phosphor::bold::KEYBOARD,
-                                )),
-                                |_| {},
-                            )
-                            .body(|ui| {
-                                self.draw_device_and_matchers_hid(ui);
-                            });
+            egui::ScrollArea::both()
+                .scroll_source(ScrollSource::ALL)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    match self.current_opened_tab {
+                        GuiMainTabs::Mappings => {
                             ui.separator();
-                            #[cfg(feature = "midi")]
-                            draw_collapsing_ui(
-                                ui,
-                                None::<()>,
-                                Some(&format!(
-                                    "{} MIDI: {}/{}/...",
-                                    egui_phosphor::regular::DOTS_SIX_VERTICAL,
-                                    egui_phosphor::regular::PIANO_KEYS,
-                                    egui_phosphor::regular::FADERS,
-                                )),
-                                |_| {},
-                            )
-                            .body(|ui| {
-                                self.draw_device_and_matchers_midi(ui);
-                            });
-                        });
-                    }
-                    GuiMainTabs::ConfigYaml => {
-                        ui.separator();
-                        ui.group(|ui| {
-                            ui.label("Configuration YAML (select text and use Ctrl+C to copy):");
+                            self.draw_mappings_editor_gui(ui);
+                        }
+                        GuiMainTabs::Devices => {
                             ui.separator();
-                            egui::ScrollArea::vertical().show(ui, |ui| {
-                                ui.add(
-                                    egui::TextEdit::multiline(&mut self.cfg_yaml)
-                                        .font(egui::TextStyle::Monospace)
-                                        .interactive(false)
-                                        // .background_color(Color32::DARK_BLUE)
-                                        // .text_color(Color32::GREEN)
-                                        .desired_width(f32::INFINITY)
-                                        .hint_text("Config in YAML format"),
+                            ui.group(|ui| {
+                                draw_collapsing_ui(
+                                    ui,
+                                    None::<()>,
+                                    Some(&format!(
+                                        "{} HID: {}/{}/{}/{}/...",
+                                        egui_phosphor::bold::DOTS_SIX_VERTICAL,
+                                        egui_phosphor::bold::JOYSTICK,
+                                        egui_phosphor::bold::GAME_CONTROLLER,
+                                        egui_phosphor::bold::MOUSE,
+                                        egui_phosphor::bold::KEYBOARD,
+                                    )),
+                                    |_| {},
                                 )
+                                .body(|ui| {
+                                    self.draw_device_and_matchers_hid(ui);
+                                });
+                                ui.separator();
+                                #[cfg(feature = "midi")]
+                                draw_collapsing_ui(
+                                    ui,
+                                    None::<()>,
+                                    Some(&format!(
+                                        "{} MIDI: {}/{}/...",
+                                        egui_phosphor::regular::DOTS_SIX_VERTICAL,
+                                        egui_phosphor::regular::PIANO_KEYS,
+                                        egui_phosphor::regular::FADERS,
+                                    )),
+                                    |_| {},
+                                )
+                                .body(|ui| {
+                                    self.draw_device_and_matchers_midi(ui);
+                                });
                             });
-                        });
-                    }
-                    GuiMainTabs::ConfigDescription => {
-                        ui.separator();
-                        ui.group(|ui| {
-                            egui::ScrollArea::vertical().show(ui, |ui| {
-                                if ui
-                                    .add(
-                                        egui::TextEdit::multiline(&mut self.cfg.description.0)
-                                            .font(egui::TextStyle::Monospace)
-                                            .interactive(true)
-                                            // .background_color(Color32::DARK_BLUE)
-                                            // .text_color(Color32::GREEN)
-                                            .desired_width(f32::INFINITY)
-                                            .hint_text("Please describe the details about this configuration here."),
-                                    )
-                                    .changed()
-                                {
-                                    self.submit_post_draw_cmd(GuiCmd::ConfigChangeSimple);
-                                }
-                            })
-                        });
-                    }
-                    GuiMainTabs::RuntimeConfigState => {
-                        ui.separator();
-                        ui.group(|ui| {
-                            self.draw_runtime_state_debug(ui);
-                        });
-                    }
-                    GuiMainTabs::Log => {
-                        egui_logger::logger_ui().show(ui);
-                    }
-                    GuiMainTabs::Variables => {
-                        ui.separator();
-                        ui.group(|ui| {
-                            self.draw_variables(ui);
-                        });
-                    }
-                };
-            });
+                        }
+                        GuiMainTabs::ConfigYaml => {
+                            ui.separator();
+                            ui.group(|ui| {
+                                ui.label("Configuration YAML (select text and use Ctrl+C to copy):");
+                                ui.separator();
+                                egui::ScrollArea::vertical()
+                                    .auto_shrink([false, false])
+                                    .scroll_source(ScrollSource::ALL)
+                                    .show(ui, |ui| {
+                                        ui.label(egui::RichText::from(&self.cfg_yaml).monospace());
+                                    });
+                            });
+                        }
+                        GuiMainTabs::ConfigDescription => {
+                            ui.separator();
+                            ui.group(|ui| {
+                                egui::ScrollArea::vertical()
+                                    .auto_shrink([false, false])
+                                    .scroll_source(ScrollSource::ALL)
+                                    .show(ui, |ui| {
+                                        if ui
+                                            .add(
+                                                egui::TextEdit::multiline(&mut self.cfg.description.0)
+                                                    .font(egui::TextStyle::Monospace)
+                                                    .interactive(true)
+                                                    .desired_width(f32::INFINITY)
+                                                    .hint_text(
+                                                        "Please describe the details about this configuration here.",
+                                                    ),
+                                            )
+                                            .changed()
+                                        {
+                                            self.submit_post_draw_cmd(GuiCmd::ConfigChangeSimple);
+                                        }
+                                    })
+                            });
+                        }
+                        GuiMainTabs::RuntimeConfigState => {
+                            ui.separator();
+                            ui.group(|ui| {
+                                self.draw_runtime_state_debug(ui);
+                            });
+                        }
+                        GuiMainTabs::Log => {
+                            egui_logger::logger_ui().show(ui);
+                        }
+                        GuiMainTabs::Variables => {
+                            ui.separator();
+                            ui.group(|ui| {
+                                self.draw_variables(ui);
+                            });
+                        }
+                    };
+                });
         });
 
         self.process_post_draw_commands();
@@ -1256,17 +1268,12 @@ impl GuiMain {
                 match m.1 {
                     UiMonitorsCfg::Axis(ui_axis_monitor_cfg) => {
                         ui.collapsing(format!("{} {}", m.0, ui_axis_monitor_cfg.name), |ui| {
-                            egui::ScrollArea::vertical().show(ui, |ui| {
-                                ui.add(
-                                    egui::TextEdit::multiline(&mut format!("{ui_axis_monitor_cfg:#?}"))
-                                        .font(egui::TextStyle::Monospace)
-                                        .interactive(true)
-                                        // .background_color(Color32::BLACK)
-                                        // .text_color(Color32::GRAY)
-                                        .desired_width(f32::INFINITY)
-                                        .hint_text("--"),
-                                )
-                            });
+                            egui::ScrollArea::vertical()
+                                .auto_shrink([false, false])
+                                .scroll_source(ScrollSource::ALL)
+                                .show(ui, |ui| {
+                                    ui.label(egui::RichText::from(format!("{:#?}", ui_axis_monitor_cfg)).monospace());
+                                });
                         });
                     }
                 }
@@ -1276,59 +1283,41 @@ impl GuiMain {
         ui.collapsing("Mappings state:", |ui| {
             for m in self.cfg.mappings.iter().enumerate() {
                 ui.collapsing(format!("{} {}", m.0, m.1.name), |ui| {
-                    egui::ScrollArea::vertical().show(ui, |ui| {
-                        ui.add(
-                            egui::TextEdit::multiline(&mut format!("{m:#?}"))
-                                .font(egui::TextStyle::Monospace)
-                                .interactive(true)
-                                // .background_color(Color32::BLACK)
-                                // .text_color(Color32::GRAY)
-                                .desired_width(f32::INFINITY)
-                                .hint_text("--"),
-                        )
-                    });
+                    egui::ScrollArea::vertical()
+                        .auto_shrink([false, false])
+                        .scroll_source(ScrollSource::ALL)
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::from(format!("{m:#?}")).monospace());
+                        });
                 });
             }
         });
         ui.separator();
         ui.collapsing("Device and control matchers state:", |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.add(
-                    egui::TextEdit::multiline(&mut format!("{:#?}", self.cfg.devices))
-                        .font(egui::TextStyle::Monospace)
-                        .interactive(false)
-                        // .background_color(Color32::BLACK)
-                        // .text_color(Color32::GRAY)
-                        .desired_width(f32::INFINITY)
-                        .hint_text("--"),
-                )
-            });
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .scroll_source(ScrollSource::ALL)
+                .show(ui, |ui| {
+                    ui.label(egui::RichText::from(format!("{:#?}", self.cfg.devices)).monospace());
+                });
         });
         ui.separator();
         ui.collapsing("Global params:", |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.add(
-                    egui::TextEdit::multiline(&mut format!("{:#?}", self.cfg.global))
-                        .font(egui::TextStyle::Monospace)
-                        // .background_color(Color32::BLACK)
-                        // .text_color(Color32::GRAY)
-                        .desired_width(f32::INFINITY)
-                        .hint_text("--"),
-                )
-            });
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .scroll_source(ScrollSource::ALL)
+                .show(ui, |ui| {
+                    ui.label(egui::RichText::from(format!("{:#?}", self.cfg.global)).monospace());
+                });
         });
         ui.separator();
         ui.collapsing("Pre-configured (predefined) controls configuration (static):", |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.add(
-                    egui::TextEdit::multiline(&mut format!("{:#?}", crate::config::PREDEF_CONTROLS))
-                        .font(egui::TextStyle::Monospace)
-                        // .background_color(Color32::BLACK)
-                        // .text_color(Color32::GRAY)
-                        .desired_width(f32::INFINITY)
-                        .hint_text("--"),
-                )
-            });
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .scroll_source(ScrollSource::ALL)
+                .show(ui, |ui| {
+                    ui.label(egui::RichText::from(format!("{:#?}", crate::config::PREDEF_CONTROLS)).monospace());
+                });
         });
     }
 

@@ -19,7 +19,7 @@ impl<'s> DrawEgui<'s> for UiAxisMonitorCfg {
         // }
 
         let panel_frame = egui::Frame::new().fill(egui::Color32::from_black_alpha(150));
-        egui::CentralPanel::default().frame(panel_frame).show_inside(ui, |ui| {
+        egui::CentralPanel::default().frame(panel_frame).show(ui, |ui| {
             let rect = ui.max_rect();
             let painter = ui.painter();
             let center_x = rect.center().x;
