@@ -1,6 +1,6 @@
 [package]
 name = "mmvj"
-version = "2026.9.11-3"
+version = "2026.9.13-0"
 edition = "2024"
 # rust-version = "1.85.0"
 authors = ["Leonid Satanovskiy"]
@@ -71,7 +71,7 @@ schemars = { version = "1.2.0", features = [
 ] }
 serde_json = "1.0.148"
 serde_regex = "1.1.0"
-serde-saphyr = { version = "0.0.29", features = ["garde"] }
+serde-saphyr = { version = "1.2.0", features = ["garde"] }
 serde-value = "0.7.0"
 serde = { version = "1.0", features = [
     "alloc",
