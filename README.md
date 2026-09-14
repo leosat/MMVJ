@@ -35,6 +35,7 @@ _The following image shows visual debugging of force feedback application (seen 
 
 NB 2: Regarding steering emulation functionality in particular, force feedback works perfectly with "Richard Burns Rally" (tested the latest variations with NGP) and many other titles like "Euro truck sim", "Race Room", "Rush rally 3" which use **Constant force** effect to report already calculated forces to the steering wheel. Some of other effects like **Spring** (e.g. used in "Rfactor 1"), **Friction** and **Ramp** are also supported (including envelope (fade-in/fade-out) and delay/repeat, but not trigger (WIP)). Damper, Intertia and Periodic (waveforms generators) effects are not yet supported (WIP). Until then we just fake the support for all those "other" effects (with warning emitted) if user configures them as supported in config. Stay tuned. If seeing trouble with it in your particular case and wish to help, please run the program with **\--debug-ff** flag and [send me the the output](mailto:leonid.satanovsky@gmail.com).
 
+
 ---
 
 Some early video demos of MMVJ being applied in raw rally simulation:
@@ -65,8 +66,8 @@ Some early video demos of MMVJ being applied in raw rally simulation:
     *   Few details on **steering transformation** for use in simracing, flight and other simulator gaming:
         *   **Supports force feedback**: accepts **constant force and other effects (see the FAQ why this matters).**
         *   Supports configurable **autocentering (useful if no force feedback available or as an auxiliary behavior)**.
-        *   Supports intuitive emulation **of hands holding the steering wheel** with different force  \*\*(a.k.a "hold factor" affecting the two mentioned above.
-    *   **Force feedback readings** from virtual HID (Virtual Joysticks) are also avaialbe as general readings on special internally-visible controls, enabling force feedback as input in arbitrary places of transformation pipelines (read and apply them from scripts or for ad-hoc parametrisation of transformation steps).
+        *   Supports intuitive emulation **of hands holding the steering wheel** with different force  \*\*(a.k.a "hold factor" affecting the two mentioned above.
+    *   **Force feedback readings** from virtual HID (Virtual Joysticks) are also avaialbe as general readings on special internally-visible controls, enabling force feedback as input in arbitrary places of transformation pipelines (read and apply them from scripts or for ad-hoc parametrisation of transformation steps).
     *   **Supports scripting with Luau**: define scripted transformation steps having multiple optionally defined inputs, outputs (e.g. to use as hubs for smart signal routing) or child transformation pipelines synchronously runnable from the script.
 *   **Console-based monitoring mode for HID and MIDI devices.**
 
@@ -243,6 +244,12 @@ mappings:
     <...>
 ```
 
+#### Value ports.
+
+Are abstractions over value sources, destinations or source-destinations. They allow specifying additional remapping and/or a general transformation
+pipeline for value being read or written. Transformation steps allowing both static and dynamic parametrisation
+use value ports to source parameters. Script transformation uses them as auxiliary sources and destinations.
+
 ### Idle tick
 
 Processing is happening either due to active user input (**event-driven, with the frequency of user input**) or by the **internal clock with configurable frequency**. The latter is necessary for transformations that require processing post-user-input (e.g. autocentering during steering simulation, filters application) or require by-timer processing irrespective to user input happening or not (such as scripts).
@@ -269,7 +276,7 @@ Open Wine Control panel and go to "Game controllers", or run in terminal with e.
 
 `wine control joy.cpl`
 
-(make sure this wine is the one you are running your game with in case you have many of them in the system. If using Lutris or alike open wine control panel from the GUI to configure the proper one). If joystick is present among XInput ones, select the controller on the left and press "Override" button on the right. Go to DInput tab and check that joystick is selected, check that ConstantForce is displayed in the list of force feedback effects.   
+(make sure this wine is the one you are running your game with in case you have many of them in the system. If using Lutris or alike open wine control panel from the GUI to configure the proper one). If joystick is present among XInput ones, select the controller on the left and press "Override" button on the right. Go to DInput tab and check that joystick is selected, check that ConstantForce is displayed in the list of force feedback effects.   
 
 ---
 
@@ -285,7 +292,7 @@ E.g. steering an RWD group B rally car feels totally different from controlling 
 
 So, power users may have different configurations for different use-cases. They need align the setup with application context for the best performance possible.
 
-As an example, for a particular rally car and type of ride one MAY want to 
+As an example, for a particular rally car and type of ride one MAY want to 
 
 ```
 * ... Decrease or increase autocentering timing (make it snappy or disable it by setting to 0),
@@ -336,17 +343,17 @@ sudo modprobe uinput
 
 ### Binary releases.
 
-[**Download binary releases here**](https://github.com/leosat/MMVJ/releases/) (or build manually with cargo if binary release [doesn't work on your system](#troubleshooting) (takes a few minutes, [see below for instructions](#build-from-source))). 
+[**Download binary releases here**](https://github.com/leosat/MMVJ/releases/) (or build manually with cargo if binary release [doesn't work on your system](#troubleshooting) (takes a few minutes, [see below for instructions](#build-from-source))). 
 
-Release contains pre-built application and configuration packed in **appimage format**. 
+Release contains pre-built application and configuration packed in **appimage format**. 
 
-To run it, 
+To run it, 
 
-1.  Add executable permission `chmod +x mmvj*appimage`  
-2.  Run it!  `./mmvj*appimage`  
+1.  Add executable permission `chmod +x mmvj*appimage`  
+2.  Run it!  `./mmvj*appimage`  
     1.  When running from terminal will by default start in command-line mode. To enable gui run it with --gui option.
     2.  When running from gui will by default start in gui mode.
-3.  On start application will create **conf/** directory **in current working directory**, where set of example configuration files will be automatically extracted.   
+3.  On start application will create **conf/** directory **in current working directory**, where set of example configuration files will be automatically extracted.   
     Those can be manipulated/saved, they _will not_ be automatically overwritten.
 
 ---
@@ -437,7 +444,10 @@ cargo build --release -j4
 
 #### \[i\] [Minimal mouse steering-oriented config example + some keyboard mappings to joystick buttons, default config](conf/default.yaml)
 
-#### \[i\] [Mouse OR Keyboard steering-oriented config example (uses Luau scripting for smart signal routing) with autoswitching between modes and hold factor for mouse being linked to Y movement and for keyboard - to DOWN and UP buttons](conf/example-keyboard-or-mouse-steering-both-with-ffb.yaml) // Both Mouse and Keyboard modes add force feedback signal to input and use additional autocentering.
+#### \[i\] [Mouse OR Keyboard steering-oriented config example (uses Luau scripting for smart signal routing) with autoswitching between modes and hold factor for mouse being linked to Y movement and for keyboard - to DOWN and UP buttons](conf/example-kbd-or-ms-steering-lua.yaml) // Both Mouse and Keyboard modes add force feedback signal to input and use additional autocentering. Use variables to tweak the behavior.
+
+#### \[i\] [Mouse OR Keyboard steering-oriented config example (no scripting) with autoswitching between modes and hold factor for mouse being linked to Y movement and for keyboard - to DOWN and UP buttons](conf/example-kbd-or-ms-steering-noscript.yaml) // Both Mouse and Keyboard modes add force feedback signal to input and use additional autocentering.  Use variables to tweak the behavior.
+
 
 #### \[i\] [MIDI pedals or PitchWheel-based steering + Mouse steering with force feedback and autocetering](conf/example-midi-or-mouse-steering.yaml)
 
@@ -448,7 +458,7 @@ cargo build --release -j4
 
 *   Low latency: \< 1ms processing time.
 *   Event-driven, on idle input base update rate is configurable from 10 to 1000 Hz.  
-     
+     
 
 ---
 
@@ -456,7 +466,7 @@ cargo build --release -j4
 
 ### Binary release run problems:
 
-AppImage release.  
+AppImage release.  
 
 ```
 fuse: mount failed: Permission denied
@@ -531,22 +541,22 @@ ls -la /dev/snd/
 
 # **WARNING DISCLAIMER:**
 
-This application is in active development state and is used as **a toy project** by the author **to learn the new programming language** (with all the consequences) and is provided as is without any warranties. **Not everything works and it is far from ideal currently**. Nevertheless, while still in development I'm finding it **already quite useful and capable**, so, I've decided to opensource it and provide for those who are looking for such a tool. When/if the project reaches production state, this warning will not be here.  
+This application is in active development state and is used as **a toy project** by the author **to learn the new programming language** (with all the consequences) and is provided as is without any warranties. **Not everything works and it is far from ideal currently**. Nevertheless, while still in development I'm finding it **already quite useful and capable**, so, I've decided to opensource it and provide for those who are looking for such a tool. When/if the project reaches production state, this warning will not be here.  
 
 For any questions (or anything else) feel free to contact me at [leonid.satanovsky@gmail.com](mailto:leonid.satanovsky@gmail.com) (Leonid Satanovskiy).
 
 # **HELPFUL TOOLS**:
 
-[https://github.com/berarma/ffbtools](https://github.com/berarma/ffbtools)  
+[https://github.com/berarma/ffbtools](https://github.com/berarma/ffbtools)  
 
 ## License.
 
 All rights reserved. Copyright: Leonid Satanovskiy.  
 When this app reaches production state this will be changed.  
-/\* "GNU is not Unix." \*/ 
+/\* "GNU is not Unix." \*/ 
 
 ## Contributing.
 
-Pull requests are **not yet accepted**,   
+Pull requests are **not yet accepted**,   
 because please see the WARNING/DISCLAIMER at the top.  
 It will change as soon as the project gets in production-ready state
