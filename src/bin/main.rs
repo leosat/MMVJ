@@ -80,11 +80,11 @@ async fn main() -> Result<()> {
     }
 
     if let Some(ref aux_task) = cli.aux_task {
-        return mmvj_lib::driver::run_aux_task(aux_task, &cli.cfg_file_path, cli.debug).await;
+        return mmvj_lib::driver::run_aux_task(aux_task, cli.cfg_file_path, cli.debug).await;
     }
 
     mmvj_lib::driver::run(
-        &cli.cfg_file_path,
+        cli.cfg_file_path,
         cli.no_hot_reload,
         cli.debug,
         cli.debug_ff,

@@ -10,10 +10,10 @@ pub struct Cli {
     #[arg(long, help = "Log to console even if running Gui.", num_args = 0..=1, 
     default_value = "false")]
     pub log_to_console: bool,
-    #[arg(short, long = "config", alias = "cfg-file-path", default_value = crate::config::APP_DEFAULT_CONFIG_FILE,
+    #[arg(short, long = "config", alias = "cfg-file-path", default_value = None,
     help = "Path to main config file, including filename.",
     overrides_with = "cfg_file_path", action = ArgAction::Set)]
-    pub cfg_file_path: std::path::PathBuf,
+    pub cfg_file_path: Option<std::path::PathBuf>,
     #[arg(long, default_value =  crate::config::APP_DEFAULT_NO_HOT_RELOAD, help = "Disable automatic engine reload on configuration file change.")]
     pub no_hot_reload: bool,
     #[arg(

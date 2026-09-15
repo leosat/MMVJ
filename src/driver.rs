@@ -27,6 +27,12 @@ use tokio_util::sync::CancellationToken;
 const COMMAND_RECV_CAPACITY: usize = 100;
 
 #[derive(Debug, Clone)]
+pub(crate) enum LoadCfgSource {
+    File(PathBuf),
+    Demo(String),
+}
+
+#[derive(Debug, Clone)]
 pub(crate) enum DriverCmd {
     ChangeConfigSimple {
         cfg: Config,
@@ -51,7 +57,7 @@ pub(crate) enum DriverCmd {
         cfg_suffix: Option<String>,
     },
     LoadCfg {
-        cfg_file: PathBuf,
+        cfg_source: LoadCfgSource,
         resp_tx: std::sync::mpsc::Sender<Result<Config, String>>,
     },
     Reload,
@@ -117,9 +123,7 @@ fn sanitize_cfg_file_path(cfg_file_path: &std::path::Path) -> Result<()> {
     Ok(())
 }
 
-pub async fn run_aux_task(aux_task: &AuxDriverTask, cfg_file_path: &Path, debug: DebugLevel) -> Result<()> {
-    sanitize_cfg_file_path(cfg_file_path)?;
-
+pub async fn run_aux_task(aux_task: &AuxDriverTask, cfg_file_path: Option<PathBuf>, debug: DebugLevel) -> Result<()> {
     match aux_task {
         #[cfg(feature = "midi")]
         AuxDriverTask::EnumMidi => {
@@ -159,10 +163,15 @@ pub async fn run_aux_task(aux_task: &AuxDriverTask, cfg_file_path: &Path, debug:
         AuxDriverTask::ValidateConfig {
             save_after_validation: save_after_valiadation,
         } => {
-            let mut cfg_mgr = ConfigManager::new(cfg_file_path, debug)?;
-            cfg_mgr.load()?;
-            if save_after_valiadation.unwrap_or_default() {
-                cfg_mgr.save(&None, &None)?;
+            if let Some(cfg_file_path) = cfg_file_path {
+                sanitize_cfg_file_path(&cfg_file_path)?;
+                let mut cfg_mgr = ConfigManager::new(cfg_file_path.into(), debug)?;
+                cfg_mgr.load(None)?;
+                if save_after_valiadation.unwrap_or_default() {
+                    cfg_mgr.save(&None, &None)?;
+                }
+            } else {
+                bail!("Config validation triggered, but no cfgfile path specified.");
             }
         }
     }
@@ -199,9 +208,9 @@ fn watch_config_file(cfg_file_path: &std::path::Path, tx: tokio::sync::mpsc::Sen
 }
 
 fn check_and_load_new_cfg(cfg_mgr: &mut ConfigManager, new_cfg_file: &Path, debug: DebugLevel) -> Result<()> {
-    if let Err(e) = ConfigManager::new(new_cfg_file, debug)
+    if let Err(e) = ConfigManager::new(Some(new_cfg_file.into()), debug)
         .context("Config file not found (didn't exist or was lost in space-time transition!)")?
-        .load()
+        .load(None)
     {
         log::error!("\n---\n!!! Configuration load failed while trying to hot-reload.");
         log::error!("!!! Will continue running with previous config.    _o_O-`  \n---\n");
@@ -211,7 +220,7 @@ fn check_and_load_new_cfg(cfg_mgr: &mut ConfigManager, new_cfg_file: &Path, debu
     } else {
         info!("Configuration validated. Stopping mapping engine to restart with new configuration.");
         cfg_mgr.set_cfg_file(new_cfg_file)?;
-        cfg_mgr.load()?;
+        cfg_mgr.load(None)?;
         Ok(())
     }
 }
@@ -222,7 +231,7 @@ impl MappedMidiManager for MidiManager {}
 
 #[allow(clippy::too_many_arguments)]
 pub async fn run(
-    cfg_file_path: &Path,
+    cfg_file_path: Option<PathBuf>,
     no_hot_reload: bool,
     debug: DebugLevel,
     debug_ff: bool,
@@ -234,8 +243,6 @@ pub async fn run(
 ) -> Result<()> {
     crate::debug::set_debug_level__(debug);
 
-    sanitize_cfg_file_path(cfg_file_path)?;
-
     #[cfg(feature = "gui")]
     let any_gui = gui_monitors || gui_full;
 
@@ -245,10 +252,14 @@ pub async fn run(
     let gui_monitor_only = gui_monitors && !gui_full;
 
     let (cfg_watcher_tx, mut cfg_watcher_rx) = tokio::sync::mpsc::channel::<()>(1);
-    watch_config_file(cfg_file_path, cfg_watcher_tx)?;
+
+    if let Some(ref cfg_file_path) = cfg_file_path {
+        sanitize_cfg_file_path(cfg_file_path)?;
+        watch_config_file(cfg_file_path, cfg_watcher_tx)?;
+    }
 
     //----------------------------- CFG MANAGER --------------------------------------
-    let mut cfg_mgr = ConfigManager::new(cfg_file_path, debug)?;
+    let mut cfg_mgr = ConfigManager::new(cfg_file_path.clone().into(), debug)?;
 
     //----------------------------- DEVICE MANAGERS ---------------------------------
     let hid_mgr = HidManager::new(debug, debug_ff)?;
@@ -266,7 +277,7 @@ pub async fn run(
     #[cfg(feature = "gui")]
     let gui_thread_cancellation_token = CancellationToken::new();
 
-    cfg_mgr.load()?;
+    cfg_mgr.load(None)?;
 
     #[cfg(feature = "gui")]
     let mut gui_thread_handle = if any_gui {
@@ -443,11 +454,15 @@ pub async fn run(
                             continue 'restart_mapping_engine;
                         }
                         (DriverMainLoopAction::GoToStartWithInitialCfg,_) => {
-                            log::info!("Full reload with initial config {}", cfg_file_path.to_string_lossy());
                             mapping_engine.stop()?;
-                            cfg_mgr.set_cfg_file(cfg_file_path).expect("Failed to set config file");
-                            cfg_mgr.load().expect("Failed to load config");
-                            cfg_mgr = ConfigManager::new(cfg_file_path, debug)?;
+                            if let Some(ref cfg_file_path) = cfg_file_path {
+                                log::info!("Full reload with initial config {}", cfg_file_path.to_string_lossy());
+                                cfg_mgr.set_cfg_file(cfg_file_path).expect("Failed to set config file");
+                                cfg_mgr.load(None).expect("Failed to load config");
+                            } else {
+                                log::info!("Full reload with initial config (no file)");
+                            }
+                            cfg_mgr = ConfigManager::new(cfg_file_path.clone(), debug)?;
                             continue 'restart_mapping_engine
                         },
                     }
@@ -462,9 +477,9 @@ pub async fn run(
                         #[cfg(not(feature = "gui"))]
                         return true; })()
                 => {
-                    log::info!("Config watcher triggered, reloading with new configuration.");
-                    let cfg_file_name = cfg_mgr.get_cfg_file();
-                    if check_and_load_new_cfg(&mut cfg_mgr, &cfg_file_name, debug).is_ok() {
+                    if let Some(cfg_file_name) = cfg_mgr.get_cfg_file() &&
+                        check_and_load_new_cfg(&mut cfg_mgr, &cfg_file_name, debug).is_ok() {
+                        log::info!("Config watcher triggered, reloading from file {}.", cfg_file_name.display());
                         mapping_engine.stop()?;
                         continue 'restart_mapping_engine;
                     }
@@ -550,25 +565,43 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                     }
                     // command_channel_rx.close(); // NB: the channel would be closed anyways after last sender is out, but...
                 }
-                DriverCmd::LoadCfg { ref cfg_file, resp_tx } => {
-                    let loading_new_cfg_file = cfg_mgr.get_cfg_file() != *cfg_file;
-                    match check_and_load_new_cfg(cfg_mgr, cfg_file, debug) {
-                        Ok(_) => {
-                            log::info!("Sending new config to Gui");
-                            post_reload_report_back_tx = Some(DriverResponseOneShotChannels::Config(resp_tx));
-
-                            if loading_new_cfg_file {
-                                log::warn!("Loading new configuration file will make persistent joysticks stopped.");
-                                hid_mgr.stop(true).expect("Stopping joysticks failed.");
+                DriverCmd::LoadCfg { cfg_source, resp_tx } => {
+                    match cfg_source {
+                        LoadCfgSource::File(cfg_file) => {
+                            let loading_new_cfg_file = cfg_mgr.get_cfg_file().unwrap_or_default() != *cfg_file;
+                            match check_and_load_new_cfg(cfg_mgr, &cfg_file, debug) {
+                                Ok(_) => {
+                                    if loading_new_cfg_file {
+                                        log::warn!(
+                                            "Loading new configuration file will make persistent joysticks stopped."
+                                        );
+                                        hid_mgr.stop(true).expect("Stopping joysticks failed.");
+                                    }
+                                }
+                                Err(e) => {
+                                    let _ = resp_tx.send(Err(e.to_string())).inspect_err(|e| log::error!("{e}"));
+                                }
                             }
+                        }
+                        LoadCfgSource::Demo(demo_name) => {
+                            let _ = cfg_mgr
+                                .load(
+                                    crate::config::DEMO_CFG
+                                        .lock()
+                                        .unwrap()
+                                        .iter()
+                                        .find(|v| v.0 == demo_name)
+                                        .map(|v| v.clone()),
+                                )
+                                .inspect_err(|e| log::error!("{e}"));
+                            hid_mgr.stop(true).expect("Stopping joysticks failed.");
+                        }
+                    };
 
-                            let _ = mapping_engine.stop().inspect_err(|e| log::error!("{e}"));
-                            main_loop_action = DriverMainLoopAction::GoToStartWithCurrentCfg;
-                        }
-                        Err(e) => {
-                            let _ = resp_tx.send(Err(e.to_string())).inspect_err(|e| log::error!("{e}"));
-                        }
-                    }
+                    let _ = mapping_engine.stop().inspect_err(|e| log::error!("{e}"));
+                    log::info!("Sending new config to Gui");
+                    post_reload_report_back_tx = Some(DriverResponseOneShotChannels::Config(resp_tx));
+                    main_loop_action = DriverMainLoopAction::GoToStartWithCurrentCfg;
                 }
                 DriverCmd::SaveCfg {
                     ref cfg_file,
