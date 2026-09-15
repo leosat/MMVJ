@@ -103,8 +103,7 @@ jobs:
           mkdir -p AppDir/usr/bin
           mkdir -p AppDir/usr/share/mmvj
           cp -a target/release/${{ env.APP_NAME }} AppDir/usr/bin/
-          cp -r conf AppDir/usr/share/mmvj/conf
-          ln -s AppDir/usr/share/mmvj/conf AppDir/conf
+          cp -r conf AppDir/conf
 
           cat <<EOF > AppDir/${{ env.APP_NAME }}.desktop
           [Desktop Entry]
@@ -126,12 +125,7 @@ jobs:
           cat <<'EOF' > AppDir/custom_apprun.sh
           #!/bin/bash
           HERE="$(dirname "$(readlink -f "${0}")")"
-          PACKAGED_CONF="$HERE/usr/share/mmvj/conf"
           BINARY="$HERE/usr/bin/mmvj"
-
-          if [ ! -d "./conf" ]; then
-            cp -r "$PACKAGED_CONF" ./conf
-          fi
 
           if [ ! -t 0 ]; then
             echo "Running in a non-interactive environment (or input is piped/redirected)... automatically adding --gui option to avoid silent run in background."
@@ -167,13 +161,6 @@ jobs:
 
           chmod +x "${{ env.APPIMAGE_FILE }}"
           cp -a "${{ env.APPIMAGE_FILE }}" "$STAGING_DIR/"
-
-          if [ -d "conf" ]; then
-            cp -r conf "$STAGING_DIR/"
-          else
-            echo "::error::The 'conf' directory was not found in the repository root!"
-            exit 1
-          fi
 
           TAR_ARCHIVE="${{ env.APP_NAME }}-v${{ env.VERSION }}-${{ matrix.arch }}.tar.gz"
           tar -czvf "$TAR_ARCHIVE" "$STAGING_DIR"
