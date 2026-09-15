@@ -1744,12 +1744,12 @@
         "auto_center_halflife": {
           "description": "Half-life (in seconds) of the exponential autocentering decay.\n\n- `0`: autocentering disabled.\n- `0.1`: snappy return.\n- `0.3` (default): moderate, natural return.\n- `1.0+`: slow drift to center.\n\nDecay per tick: `(1 - 2^(-dt / halflife)) * (1 - hold_factor)`.\nOnly active when the user is idle and (FFB is negligible or\n`auto_center_along_force_feedback > 0`).",
           "$ref": "#/$defs/ValuePort5",
-          "default": 0.0
+          "default": 1.0
         },
         "auto_center_along_force_feedback": {
-          "description": "Allows autocentering to operate **alongside** active force feedback,\nscaled by this factor in [0, 1].\n\n- `0.0` (default): autocentering suppressed while FFB is present.\n- `1.0`: autocentering at full strength regardless of FFB.\n\nAccepts a bare `true`/`false` in YAML (converted to 1.0/0.0).",
+          "description": "Allows autocentering to operate **alongside** active force feedback,\nscaled by this factor in [0, 1].\n\n- `0.0`: autocentering suppressed while FFB is present.\n- `1.0`: (default) autocentering at full strength regardless of FFB.\n\nAccepts a bare `true`/`false` in YAML (converted to 1.0/0.0).",
           "$ref": "#/$defs/ValuePort5",
-          "default": 0.0
+          "default": 1.0
         },
         "tfm": {
           "description": "Sub-pipeline applied to the accumulated user input **after**\nintegration but **before** FFB and autocentering.\n\nReceives the wheel angle in [-1, +1] (absolute). Use this to\nreshape the steering response curve:\n\n- `exp` with `base > 1, center_symmetric: true` — progressive\n  ratio (less sensitive in center).\n- `exp` with `base < 1` — inverted progressive (more sensitive\n  in center).\n- Empty (default) — linear 1:1 passthrough.",

@@ -2246,8 +2246,8 @@ pub(crate) struct SteeringCfg {
     /// Allows autocentering to operate **alongside** active force feedback,
     /// scaled by this factor in [0, 1].
     ///
-    /// - `0.0` (default): autocentering suppressed while FFB is present.
-    /// - `1.0`: autocentering at full strength regardless of FFB.
+    /// - `0.0`: autocentering suppressed while FFB is present.
+    /// - `1.0`: (default) autocentering at full strength regardless of FFB.
     ///
     /// Accepts a bare `true`/`false` in YAML (converted to 1.0/0.0).
     #[serde(default)]
@@ -2340,10 +2340,17 @@ make_input_port_inner_nutype!(
 
 make_input_port_inner_nutype!(
     SteeringAutocenterAlongFfbCfg,
-    default: default_zero_range_zero_to_one(),
+    default: default_autocentering_along_ffb(),
     san-doc: "Autocenter along force feedback is in range [0,1]",
     san-exe: |v: BaseNumT| {UNIT_INTERVAL.clamp(v)}
 );
+
+pub(crate) fn default_autocentering_along_ffb() -> ValueSrcs {
+    ValueSrcs::Static(StaticValueCfg {
+        value: 1.00.into(),
+        interval: AutoOrManual::Auto(UNIT_INTERVAL),
+    })
+}
 
 #[derive(
     PartialEq, PartialOrd, Clone, Copy, std::fmt::Debug, Default, Serialize, Deserialize, TraversableMut, Traversable,
