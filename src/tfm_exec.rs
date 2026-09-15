@@ -982,18 +982,18 @@ impl WithTfmExec for Box<SteeringCfg> {
         if !*self.enabled {
             return value;
         }
+
         let now = Instant::now();
         let state = &mut self.exe_state_mut();
+        let in_interval = self.common_state_ref().get_in_interval();
 
         let auto_center_along_force_feedback = self.auto_center_along_force_feedback.port_get_numeric_value(Some(ctx));
 
         let dt = clamp_dt_by_min_and_max_period((now - state.last_time).as_secs_f32() as BaseNumT);
 
-        let delta: BaseNumT = self
-            .common_state_ref()
-            .get_in_interval()
-            .map_to_symm_unit::<BaseNumT>(value, OutOfRangePolicy::Clamp)
-            * self.in_gain.port_get_numeric_value(Some(ctx));
+        let delta_raw = in_interval.map_to_symm_unit::<BaseNumT>(value, OutOfRangePolicy::Clamp);
+
+        let delta: BaseNumT = delta_raw * self.in_gain.port_get_numeric_value(Some(ctx));
 
         let mut post_filter: BaseNumT;
 
@@ -1168,6 +1168,8 @@ impl WithTfmExec for Box<SteeringCfg> {
                 if !ffb_is_small {
                     centerwize_decay_factor *= auto_center_along_force_feedback;
                 }
+
+                // centerwize_decay_factor *= (1.0 as BaseNumT) - (delta_raw.abs().mul(1.0).clamp(0.0, 1.0));
 
                 state.pre_filter -= state.pre_filter * centerwize_decay_factor;
                 post_filter -= post_filter * centerwize_decay_factor;
