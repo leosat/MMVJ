@@ -112,17 +112,38 @@ impl WithTfmExec for TfmSeqCfg {
     type OutputT = Self::InputT;
     fn exec(&self, mut input: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
         let in_interval = self.get_in_interval();
-
-        if input.interval != in_interval {
+        if branches::unlikely(input.interval != in_interval) {
             input.value = in_interval.map_from(input.value, &input.interval, OutOfRangePolicy::Clamp);
             input.interval = in_interval;
         }
 
         let mut value = input.value;
 
+        if branches::unlikely(!value.is_finite()) {
+            // TODO: use malfunction reporting when added.
+            log::error!(
+                "Non-finite value received as transformation input, transformation not executed to prevent propagation.\n\
+                    affected transformation runtime id {}",
+                self.get_id()
+            );
+            return input;
+        }
+
         self.set_last_known_io((Some(value), None));
         for step in &self.steps {
             value = step.exec(value, ctx);
+            if branches::unlikely(!value.is_finite()) {
+                // TODO?: currently such output is expected only after script transform, where a user-defined logic can produce
+                //       NaN or infinity, however, for generality, for now, will check after every step.
+                // TODO: use malfunction reporting when added.
+                log::error!(
+                    "In-pipeline non-finite value produced, transform execution interrupted to prevent propagation.\n\
+                    Non-finite value produced by step {} with runtime id {}",
+                    step.to_string(),
+                    step.get_id()
+                );
+                return input;
+            }
         }
         self.set_last_known_io((None, Some(value)));
 
