@@ -71,8 +71,8 @@ pub(crate) fn run(
                     EventLoopBuilderExtWayland::with_any_thread(builder, true);
                 })),
                 renderer: eframe::Renderer::Glow,
-                // multisampling: 0,
-                // dithering: false,
+                //multisampling: 0,
+                //dithering: false,
                 glow_options: egui_glow::GlowConfiguration {
                     vsync: true,
                     hardware_acceleration: egui_glow::HardwareAcceleration::Preferred,
@@ -307,13 +307,14 @@ impl eframe::App for GuiMain {
                         FilePickingAction::Load => {
                             self.file_dialog.update(ui.ctx());
                             if let Some(path) = self.file_dialog.take_picked() {
-                                self.submit_post_draw_cmd(GuiCmd::LoadCfg(path));
+                                self.submit_post_draw_cmd(GuiCmd::LoadCfgFile(path));
                                 self.file_picking_action_in_progress = FilePickingAction::None;
                             }
                         }
                         FilePickingAction::Save => {
                             self.file_dialog.update(ui.ctx());
                             if let Some(path) = self.file_dialog.take_picked() {
+                                dbg!("Seving", Some(&path));
                                 self.submit_post_draw_cmd(GuiCmd::SaveCfg(Some(path), None));
                                 self.file_picking_action_in_progress = FilePickingAction::None;
                             }
@@ -322,6 +323,23 @@ impl eframe::App for GuiMain {
                     };
 
                     ui.menu_button("File", |ui| {
+                        ui.separator();
+                        ui.menu_button("Load demo config", |ui| {
+                            for (demo_name, _) in crate::config::DEMO_CFG.lock().unwrap().iter() {
+                                if ui
+                                    .button(format!(
+                                        "{} {} Load {} ",
+                                        egui_phosphor::regular::TREE_PALM,
+                                        egui_phosphor::regular::DOTS_SIX_VERTICAL,
+                                        demo_name
+                                    ))
+                                    .clicked()
+                                {
+                                    self.submit_post_draw_cmd(GuiCmd::LoadCfgDemo(demo_name.into()));
+                                }
+                            }
+                        });
+
                         ui.separator();
                         if ui
                             .button(format!(
@@ -347,33 +365,38 @@ impl eframe::App for GuiMain {
                             self.file_dialog.save_file();
                         }
                         ui.separator();
-                        if ui
-                            .button(format!(
-                                "{} {} Save config as copy ...",
-                                egui_phosphor::regular::COPY,
-                                egui_phosphor::regular::DOTS_SIX_VERTICAL
-                            ))
-                            .clicked()
-                        {
-                            self.submit_post_draw_cmd(GuiCmd::SaveCfg(
-                                None,
-                                Some(format!(
-                                    "copy.{}.yaml",
-                                    chrono::Local::now().format("%Y-%m-%d-%H-%M-%S")
-                                )),
-                            ));
-                        }
-                        ui.separator();
-                        if ui
-                            .button(format!(
-                                "{} {} Save current config (overwrite!)",
-                                egui_phosphor::regular::FLOPPY_DISK_BACK,
-                                egui_phosphor::regular::DOTS_SIX_VERTICAL
-                            ))
-                            .clicked()
-                        {
-                            self.submit_post_draw_cmd(GuiCmd::SaveCfg(None, None));
-                        }
+                        ui.scope(|ui| {
+                            if self.cfg.cfg_file.is_none() {
+                                ui.disable();
+                            }
+                            if ui
+                                .button(format!(
+                                    "{} {} Save config as copy (with auto suffix)",
+                                    egui_phosphor::regular::COPY,
+                                    egui_phosphor::regular::DOTS_SIX_VERTICAL
+                                ))
+                                .clicked()
+                            {
+                                self.submit_post_draw_cmd(GuiCmd::SaveCfg(
+                                    None,
+                                    Some(format!(
+                                        "copy.{}.yaml",
+                                        chrono::Local::now().format("%Y-%m-%d-%H-%M-%S")
+                                    )),
+                                ));
+                            }
+                            ui.separator();
+                            if ui
+                                .button(format!(
+                                    "{} {} Save current config (overwrite!)",
+                                    egui_phosphor::regular::FLOPPY_DISK_BACK,
+                                    egui_phosphor::regular::DOTS_SIX_VERTICAL
+                                ))
+                                .clicked()
+                            {
+                                self.submit_post_draw_cmd(GuiCmd::SaveCfg(None, None));
+                            }
+                        });
                         ui.separator();
                         if ui
                             .button(format!(
@@ -445,7 +468,11 @@ impl eframe::App for GuiMain {
                     };
                 });
                 ui.separator();
-                ui.label(format!(" Config: {}", self.cfg.cfg_file.to_string_lossy()));
+                if let Some(cfg_file) = &self.cfg.cfg_file {
+                    ui.label(format!(" Config file: {}", cfg_file.to_string_lossy()));
+                } else {
+                    ui.label("Running bundled demo config");
+                }
             });
 
         egui::CentralPanel::default().show(ui, |ui| {
@@ -790,11 +817,11 @@ impl GuiMain {
                     .recv_timeout(Duration::from_millis(3000))
                     .inspect_err(|e| log::error!("{e}"));
             }
-            GuiCmd::LoadCfg(path) => {
-                let (resp_tx, resp_rx) = std::sync::mpsc::channel::<Result<Config, String>>();
+            GuiCmd::LoadCfgDemo(demo_name) => {
                 self.reset_available_devices_caches();
+                let (resp_tx, resp_rx) = std::sync::mpsc::channel::<Result<Config, String>>();
                 self.send_driver_cmd(DriverCmd::LoadCfg {
-                    cfg_file: path.clone(),
+                    cfg_source: crate::driver::LoadCfgSource::Demo(demo_name.clone()),
                     resp_tx,
                 });
                 match resp_rx.recv_timeout(Duration::from_millis(5000)) {
@@ -804,10 +831,31 @@ impl GuiMain {
                         self.pending_cmds.clear();
                     }
                     Ok(Err(e)) => {
-                        return Err(format!("Failed to load new config: {e:?}"));
+                        return Err(format!("Failed to load demo config: {e:?}"));
                     }
                     Err(e) => {
-                        return Err(format!("Failed to receive new config from driver: {e:?}"));
+                        return Err(format!("Failed to receive opened demo config from driver: {e:?}"));
+                    }
+                }
+            }
+            GuiCmd::LoadCfgFile(path) => {
+                self.reset_available_devices_caches();
+                let (resp_tx, resp_rx) = std::sync::mpsc::channel::<Result<Config, String>>();
+                self.send_driver_cmd(DriverCmd::LoadCfg {
+                    cfg_source: crate::driver::LoadCfgSource::File(path.clone()),
+                    resp_tx,
+                });
+                match resp_rx.recv_timeout(Duration::from_millis(5000)) {
+                    Ok(Ok(new_cfg)) => {
+                        self.cfg = new_cfg;
+                        self.update_cfg_yaml();
+                        self.pending_cmds.clear();
+                    }
+                    Ok(Err(e)) => {
+                        return Err(format!("Failed to load config from file: {e:?}"));
+                    }
+                    Err(e) => {
+                        return Err(format!("Failed to receive config opened from file from driver: {e:?}"));
                     }
                 }
             }

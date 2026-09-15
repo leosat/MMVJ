@@ -178,7 +178,7 @@ macro_rules! config_struct_tpl {
         #[traverse(skip)]
         #[serde(skip)]
         #[garde(skip)]
-        pub(crate) cfg_file: PathBuf,
+        pub(crate) cfg_file: Option<PathBuf>,
         #[garde(skip)]
         #[serde(
             default,

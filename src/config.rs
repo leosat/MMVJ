@@ -15,7 +15,7 @@ use garde::Validate;
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use traversable::TraversableMut;
 // use yaml_merge_keys::merge_keys_serde;
 
@@ -138,7 +138,7 @@ impl WithSelfSanitize for Config {
 }
 
 impl Config {
-    fn new(cfg_file: PathBuf) -> Self {
+    fn new(cfg_file: Option<PathBuf>) -> Self {
         Self {
             cfg_file,
             ..Default::default()
@@ -486,20 +486,20 @@ impl Config {
 //------------------------------------------------------
 #[derive(Debug)]
 pub(crate) struct ConfigManager {
-    cfg_file_path_canon: PathBuf,
-    cfg_schema_file_path_canon: PathBuf,
+    cfg_file_path_canon: Option<PathBuf>,
+    cfg_schema_file_path_canon: Option<PathBuf>,
     cfg: Config,
     debug: DebugLevel,
 }
 
 impl ConfigManager {
-    pub(crate) fn get_cfg_file(&self) -> PathBuf {
+    pub(crate) fn get_cfg_file(&self) -> Option<PathBuf> {
         self.cfg_file_path_canon.clone()
     }
 
     pub(crate) fn set_cfg_file(&mut self, cfg_file_path: &Path) -> Result<()> {
         let cfg_file_path_canon = fs::canonicalize(cfg_file_path).context("Failed to canonicalize config file path")?;
-        self.cfg_file_path_canon = cfg_file_path_canon.to_owned();
+        self.cfg_file_path_canon = cfg_file_path_canon.to_owned().into();
         Ok(())
     }
 
@@ -507,102 +507,133 @@ impl ConfigManager {
         self.cfg = cfg;
     }
 
-    pub(crate) fn new(cfg_file_path: &Path, debug: DebugLevel) -> Result<Self> {
-        let cfg_file_path_canon = fs::canonicalize(cfg_file_path).context("Failed to canonicalize config file path")?;
-        Ok(Self {
-            cfg_file_path_canon: cfg_file_path_canon.to_owned(),
-            cfg_schema_file_path_canon: cfg_file_path_canon.with_file_name(APP_CONFIG_SCHEMA_FILE_CFG_RELATIVE),
-            cfg: Config::new(cfg_file_path_canon),
-            debug,
+    pub(crate) fn new(cfg_file_path: Option<PathBuf>, debug: DebugLevel) -> Result<Self> {
+        Ok(if let Some(cfg_file_path) = cfg_file_path {
+            let cfg_file_path_canon =
+                fs::canonicalize(cfg_file_path).context("Failed to canonicalize config file path")?;
+            Self {
+                cfg_file_path_canon: cfg_file_path_canon.to_owned().into(),
+                cfg_schema_file_path_canon: cfg_file_path_canon
+                    .with_file_name(APP_CONFIG_SCHEMA_FILE_CFG_RELATIVE)
+                    .into(),
+                cfg: Config::new(cfg_file_path_canon.into()),
+                debug,
+            }
+        } else {
+            Self {
+                cfg_file_path_canon: None,
+                cfg_schema_file_path_canon: None,
+                cfg: Config::new(None),
+                debug,
+            }
         })
     }
 
-    pub(crate) fn load(&mut self) -> Result<()> {
-        log::info!("Loading user config from {}", self.cfg_file_path_canon.display());
+    pub(crate) fn load(&mut self, cfg: Option<(String, Config)>) -> Result<()> {
+        if let Some(cfg) = cfg {
+            log::info!("Loading config {}", cfg.0);
+            self.cfg = cfg.1;
+        } else if let Some(path) = &self.cfg_file_path_canon {
+            log::info!("Loading user config from {}", path.display());
 
-        /* Generate and save config scheme. */
-        let schema = schemars::schema_for!(Config);
-        {
-            if self.debug.is_on() {
-                log::debug!(
-                    "Generating and saving config schema into {}",
-                    self.cfg_schema_file_path_canon.as_path().display()
-                );
+            /* Generate and save config scheme. */
+            let schema = schemars::schema_for!(Config);
+            if let Some(ref schema_path) = self.cfg_schema_file_path_canon {
+                if self.debug.is_on() {
+                    log::debug!(
+                        "Generating and saving config schema into {}",
+                        schema_path.as_path().display()
+                    );
+                }
+
+                if let Err(e) = fs::write(
+                    schema_path.as_path(),
+                    serde_json::to_string_pretty(&schema).context("Failed to generate schema from internal spec")?,
+                ) {
+                    log::warn!(
+                        "Failed to update schema at {} based on internal spec due to: {:?}",
+                        schema_path.as_path().display(),
+                        e
+                    );
+                };
             }
 
-            if let Err(e) = fs::write(
-                self.cfg_schema_file_path_canon.as_path(),
-                serde_json::to_string_pretty(&schema).context("Failed to generate schema from internal spec")?,
-            ) {
-                log::warn!(
-                    "Failed to update schema at {} based on internal spec due to: {:?}",
-                    self.cfg_schema_file_path_canon.as_path().display(),
-                    e
-                );
-            };
-        }
+            if !path.exists() {
+                // log::warn!(
+                //     "Configuration file not found, creating default: {:?}",
+                //     self.cfg_file_path_canon
+                // );
+                // self.cfg = Config::default();
+                // let _ = self.save(&None, &None);
 
-        if !self.cfg_file_path_canon.exists() {
-            // log::warn!(
-            //     "Configuration file not found, creating default: {:?}",
-            //     self.cfg_file_path_canon
-            // );
-            // self.cfg = Config::default();
-            // let _ = self.save(&None, &None);
+                log::error!("Config file is not found at {:?}", self.cfg_file_path_canon);
+                bail!("Config file not found at {:?}", self.cfg_file_path_canon);
+            }
 
-            log::error!("Config file is not found at {:?}", self.cfg_file_path_canon);
-            bail!("Config file not found at {:?}", self.cfg_file_path_canon);
-        }
+            let txt = fs::read_to_string(&path).context("Failed to read config file")?;
+            let parse_res: Result<Config, serde_saphyr::Error> = serde_saphyr::from_str(&txt);
 
-        let txt = fs::read_to_string(&self.cfg_file_path_canon).context("Failed to read config file")?;
-        let parse_res: Result<Config, serde_saphyr::Error> = serde_saphyr::from_str(&txt);
-
-        match parse_res {
-            Ok(cfg) => self.cfg = cfg,
-            Err(e) => {
-                if let Some(location) = e.location()
-                    && (location.line() != 0 || location.column() != 0)
-                {
-                    let mut ee = e.render();
-                    ee += &self.load_print_cfg_error_context(&txt, location.line().saturating_sub(5u64) as usize, 7);
-                    bail!(ee);
-                } else {
-                    bail!(e);
+            match parse_res {
+                Ok(cfg) => self.cfg = cfg,
+                Err(e) => {
+                    if let Some(location) = e.location()
+                        && (location.line() != 0 || location.column() != 0)
+                    {
+                        let mut ee = e.render();
+                        ee +=
+                            &self.load_print_cfg_error_context(&txt, location.line().saturating_sub(5u64) as usize, 7);
+                        bail!(ee);
+                    } else {
+                        bail!(e);
+                    }
                 }
             }
-        }
 
-        self.cfg.cfg_file = self.cfg_file_path_canon.clone();
+            self.cfg.cfg_file = self.cfg_file_path_canon.clone();
+
+            /* Dumping predefined controls templates for reference. */
+            {
+                let predef_ctls_dump_path = path
+                    .parent()
+                    .expect("Config file path should have a parent directory")
+                    .join("predefined_controls_dump.yaml");
+
+                if self.debug.is_on() {
+                    log::debug!(
+                        "Generating and saving predefined controls templates into {}",
+                        predef_ctls_dump_path.as_path().display()
+                    );
+                }
+
+                if let Err(e) = fs::write(
+                    predef_ctls_dump_path.as_path(),
+                    serde_saphyr::to_string(&*PREDEF_CONTROLS)
+                        .context("Failed to generate text YAML from predefined controls spec.")?,
+                ) {
+                    log::warn!(
+                        "Failed to update predefined controls at {} based on internal spec due to: {:?}",
+                        predef_ctls_dump_path.as_path().display(),
+                        e
+                    );
+                };
+            }
+        } else {
+            // bail!("Can't load config: neither pre-parsed config provided, nor file path was specified.");
+            log::info!("No config specified, loading default bundled demo config");
+            return self.load(
+                DEMO_CFG
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .nth(0)
+                    .map(|v| (v.0.clone(), v.1.clone()))
+                    .expect("Can't get bundled demo config")
+                    .into(),
+            );
+        };
+
         self.cfg.resolve()?;
         self.cfg.validate()?;
-
-        /* Dumping predefined controls templates for reference. */
-        {
-            let predef_ctls_dump_path = self
-                .cfg_file_path_canon
-                .parent()
-                .expect("Config file path should have a parent directory")
-                .join("predefined_controls_dump.yaml");
-
-            if self.debug.is_on() {
-                log::debug!(
-                    "Generating and saving predefined controls templates into {}",
-                    predef_ctls_dump_path.as_path().display()
-                );
-            }
-
-            if let Err(e) = fs::write(
-                predef_ctls_dump_path.as_path(),
-                serde_saphyr::to_string(&*PREDEF_CONTROLS)
-                    .context("Failed to generate text YAML from predefined controls spec.")?,
-            ) {
-                log::warn!(
-                    "Failed to update predefined controls at {} based on internal spec due to: {:?}",
-                    predef_ctls_dump_path.as_path().display(),
-                    e
-                );
-            };
-        }
 
         Ok(())
     }
@@ -628,14 +659,21 @@ impl ConfigManager {
     // -------------------------------------------------------
     #[allow(unused)]
     pub(crate) fn save(&self, file: &Option<PathBuf>, suffix: &Option<String>) -> Result<()> {
-        let file = file.clone().unwrap_or_else(|| {
-            let mut p = self.cfg_file_path_canon.clone();
+        let file = if let Some(file) = file {
+            file.clone()
+        } else if let Some(mut path) = self.cfg_file_path_canon.clone() {
             if let Some(suffix) = suffix {
-                p.set_extension(suffix);
+                path.set_extension(suffix);
+                path
+            } else {
+                path
             }
-            p
-        });
+        } else {
+            bail!("Can't save config copy when it's not opened from an existing file.");
+        };
+
         fs::write(&file, self.cfg_ref().get_yaml_str()).context("Failed to write config file")?;
+
         Ok(())
     }
 
@@ -666,4 +704,64 @@ pub(crate) static PREDEF_CONTROLS: LazyLock<ControlsPredefinedCfg> = LazyLock::n
     }
 
     serde_saphyr::from_str(&s).expect("Failed to parse built-in predefined controls")
+});
+
+pub(crate) static DEMO_CFG: LazyLock<Arc<std::sync::Mutex<Vec<(String, Config)>>>> = LazyLock::new(|| {
+    let mut demo_cfg: Vec<(String, Config)> = Default::default();
+
+    demo_cfg.push((
+        "Keyboard and mouse steering, no-script".into(),
+        serde_saphyr::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/conf/example-kbd-or-ms-steering-noscript.yaml"
+        )))
+        .expect(""),
+    ));
+
+    demo_cfg.push((
+        "Mouse steering only".into(),
+        serde_saphyr::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/conf/example-default.yaml"
+        )))
+        .expect(""),
+    ));
+
+    demo_cfg.push((
+        "G29-like joystick, mouse steering only".into(),
+        serde_saphyr::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/conf/example-g29-like-joystick-mouse-steering.yaml"
+        )))
+        .expect(""),
+    ));
+
+    demo_cfg.push((
+        "Keyboard and mouse steering, Lua script".into(),
+        serde_saphyr::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/conf/example-kbd-or-ms-steering-lua.yaml"
+        )))
+        .expect(""),
+    ));
+
+    demo_cfg.push((
+        "Mouse steering or MIDI-controlled joystick".into(),
+        serde_saphyr::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/conf/example-midi-or-mouse-steering.yaml"
+        )))
+        .expect(""),
+    ));
+
+    demo_cfg.push((
+        "Abstract Lua scripting demo".into(),
+        serde_saphyr::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/conf/example-scripting-lua.yaml"
+        )))
+        .expect(""),
+    ));
+
+    Arc::new(demo_cfg.into())
 });

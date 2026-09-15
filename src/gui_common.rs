@@ -268,7 +268,8 @@ pub(crate) enum GuiCmd {
     // -----------------------------
     SubmitPending(Box<GuiCmd>),
     // -----------------------------
-    LoadCfg(PathBuf),
+    LoadCfgFile(PathBuf),
+    LoadCfgDemo(String),
     SaveCfg(Option<PathBuf>, Option<String>),
     // -----------------------------
     VirtualDeviceChange(GuiCmdVirtualDeviceChange),
