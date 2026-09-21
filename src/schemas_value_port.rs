@@ -837,6 +837,8 @@ macro_rules! make_input_port_inner_nutype {
             inner:    ValueSrcs,
             inner_default:  $inner_default,
             nutype_san: |mut value| {
+                // Within the context of a value port the sanitized static value will guide associated interval bounds
+                // (interval automatically expands to fit it).
                 use $crate::schemas_value_port::WithNumIntervalSanitizerStatic;
                 use $crate::schemas_value_port::WithNumericValueSanitizerStatic;
                 use $crate::schemas_value::WithNumericValueSettable;
@@ -847,9 +849,7 @@ macro_rules! make_input_port_inner_nutype {
                     if interval_sanitized == default_interval ||
                             (value.interval.is_auto() && default_interval.contains_value_closed(value.get_numeric_value()))
                                                       /* when deserialized from single value format, the interval is set to
-                                                        default interval (unit), which must be reset here to default making sense.
-                                                        TODO: need to enable interval optionality for static values and use
-                                                        None in case of deserialization from single-value format*/ {
+                                                        default interval (unit), which must be reset here to default making sense.*/ {
                         value.interval = AutoOrManual::Auto(default_interval);
                     } else {
                         let numeric_value = value.get_numeric_value();
