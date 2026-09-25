@@ -53,8 +53,12 @@ impl TfmExecCtx for () {}
 
 #[allow(unused)]
 pub(crate) trait TfmExecCtx {
-    fn get_dt(&self) -> std::time::Duration {
-        std::time::Duration::ZERO
+    // fn get_dt(&self) -> std::time::Duration {
+    //     std::time::Duration::ZERO
+    // }
+
+    fn is_reactive_mode(&self) -> bool {
+        true
     }
 
     fn is_idle_tick(&self) -> bool {
@@ -107,13 +111,29 @@ pub(crate) trait WithTfmExec: TfmCfgDuplicateWithNewState + WithSelfSanitize {
     fn exec(&self, input: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT;
 }
 
+// ----------------------------------------------------------
+
+pub(crate) fn get_out_of_range_policy(rel: Relativity, is_reactive: bool) -> OutOfRangePolicy {
+    if rel.is_relative() && !is_reactive {
+        OutOfRangePolicy::Allow
+    } else {
+        OutOfRangePolicy::Clamp
+    }
+}
+
+// ----------------------------------------------------------
+
 impl WithTfmExec for TfmSeqCfg {
     type InputT = TfmValue<BaseNumT>;
     type OutputT = Self::InputT;
     fn exec(&self, mut input: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
         let in_interval = self.get_in_interval();
         if branches::unlikely(input.interval != in_interval) {
-            input.value = in_interval.map_from(input.value, &input.interval, OutOfRangePolicy::Clamp);
+            input.value = in_interval.map_from(
+                input.value,
+                &input.interval,
+                get_out_of_range_policy(input.relativity, ctx.is_reactive_mode()),
+            );
             input.interval = in_interval;
         }
 
@@ -149,8 +169,11 @@ impl WithTfmExec for TfmSeqCfg {
 
         input.interval = self.get_out_interval();
         input.relativity = self.get_out_relativity();
-        input.value = input.interval.clamp(value);
-
+        if ctx.is_reactive_mode() || input.relativity.is_absolute() {
+            input.value = input.interval.clamp(value);
+        } else {
+            input.value = value;
+        }
         input
     }
 }
@@ -192,7 +215,9 @@ impl WithTfmExec for TfmStepCfg {
             TfmStepCfg::Script(s) => s.exec(value, ctx),
         };
 
-        if !common_step_data.get_out_interval().contains_value_closed(value) {
+        if !common_step_data.get_out_interval().contains_value_closed(value)
+            && !(common_step_data.is_out_relative() && !ctx.is_reactive_mode())
+        {
             branches::mark_unlikely();
             if get_debug_level().is_mid_or_above() {
                 branches::mark_unlikely();
@@ -205,6 +230,7 @@ impl WithTfmExec for TfmStepCfg {
                     self.get_id()
                 );
             }
+
             value = common_step_data.get_out_interval().clamp(value);
         }
 
@@ -249,14 +275,14 @@ impl WithTfmExec for ArithCfg {
 impl WithTfmExec for VelocityToDisplacementCfg {
     type InputT = BaseNumT;
     type OutputT = Self::InputT;
-    fn exec(&self, mut value: Self::InputT, _ctx: &impl TfmExecCtx) -> Self::OutputT {
+    fn exec(&self, mut value: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
         if branches::unlikely(!*self.enabled) {
             return value;
         }
         value = self.out_interval.map_from(
             value * self.multiplier * (std::time::Instant::now() - self.last_time.get()).as_secs_f32() as BaseNumT,
             &self.common_state_ref().get_in_interval(),
-            OutOfRangePolicy::Clamp,
+            get_out_of_range_policy(Relativity::Rel, ctx.is_reactive_mode()),
         );
         self.last_time.set(std::time::Instant::now());
         value
@@ -266,8 +292,8 @@ impl WithTfmExec for VelocityToDisplacementCfg {
 impl WithTfmExec for ClampCfg {
     type InputT = BaseNumT;
     type OutputT = Self::InputT;
-    fn exec(&self, value: Self::InputT, _ctx: &impl TfmExecCtx) -> Self::OutputT {
-        if !*self.enabled {
+    fn exec(&self, value: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
+        if !*self.enabled || (!ctx.is_reactive_mode() && self.common_state_ref().is_in_relative()) {
             return value;
         }
         self.get_clamping_interval().clamp(value)
@@ -471,15 +497,18 @@ impl WithTfmExec for SignedPowerCfg {
                 value,
                 interval,
                 |v_abs| signed_power(v_abs, self.power),
-                OutOfRangePolicy::WarnIfDebugAndClamp,
+                get_out_of_range_policy(self.common_state_ref().get_in_relativity(), ctx.is_reactive_mode()),
             )
         } else {
             interval.map_from_unit(
                 signed_power(
-                    interval.map_to_unit(value, OutOfRangePolicy::WarnIfDebugAndClamp),
+                    interval.map_to_unit(
+                        value,
+                        get_out_of_range_policy(self.common_state_ref().get_in_relativity(), ctx.is_reactive_mode()),
+                    ),
                     self.power,
                 ),
-                OutOfRangePolicy::WarnIfDebugAndClamp,
+                get_out_of_range_policy(self.common_state_ref().get_in_relativity(), ctx.is_reactive_mode()),
             )
         };
         value
@@ -501,15 +530,18 @@ impl WithTfmExec for NormExpCfg {
                 value,
                 interval,
                 |v_abs| exp_curve(v_abs, self.base),
-                OutOfRangePolicy::WarnIfDebugAndClamp,
+                get_out_of_range_policy(self.common_state_ref().get_in_relativity(), ctx.is_reactive_mode()),
             )
         } else {
             interval.map_from_unit(
                 exp_curve(
-                    interval.map_to_unit(value, OutOfRangePolicy::WarnIfDebugAndClamp),
+                    interval.map_to_unit(
+                        value,
+                        get_out_of_range_policy(self.common_state_ref().get_in_relativity(), ctx.is_reactive_mode()),
+                    ),
                     self.base,
                 ),
-                OutOfRangePolicy::WarnIfDebugAndClamp,
+                get_out_of_range_policy(self.common_state_ref().get_in_relativity(), ctx.is_reactive_mode()),
             )
         };
         value
@@ -527,10 +559,13 @@ impl WithTfmExec for SCurveCfg {
         let interval = self.common_state_ref().get_in_interval();
         value = interval.map_from_unit(
             s_curve(
-                interval.map_to_unit(value, OutOfRangePolicy::WarnIfDebugAndClamp),
+                interval.map_to_unit(
+                    value,
+                    get_out_of_range_policy(self.common_state_ref().get_in_relativity(), ctx.is_reactive_mode()),
+                ),
                 self.steepness,
             ),
-            OutOfRangePolicy::WarnIfDebugAndClamp,
+            get_out_of_range_policy(self.common_state_ref().get_in_relativity(), ctx.is_reactive_mode()),
         );
         value
     }
@@ -546,8 +581,11 @@ impl WithTfmExec for SmoothstepCfg {
 
         let interval = self.common_state_ref().get_in_interval();
         value = interval.map_from_unit(
-            smoothstep(interval.map_to_unit(value, OutOfRangePolicy::WarnIfDebugAndClamp)),
-            OutOfRangePolicy::WarnIfDebugAndClamp,
+            smoothstep(interval.map_to_unit(
+                value,
+                get_out_of_range_policy(self.common_state_ref().get_in_relativity(), ctx.is_reactive_mode()),
+            )),
+            get_out_of_range_policy(self.common_state_ref().get_in_relativity(), ctx.is_reactive_mode()),
         );
         value
     }
@@ -556,13 +594,13 @@ impl WithTfmExec for SmoothstepCfg {
 impl WithTfmExec for LinearCfg {
     type InputT = BaseNumT;
     type OutputT = Self::InputT;
-    fn exec(&self, mut value: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
+    fn exec(&self, value: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
         if !(*self.enabled && (!ctx.is_idle_tick() || self.on_idle)) {
             return value;
         }
 
-        let interval = self.common_state_ref().get_in_interval();
-        value = if self.center_symmetric {
+        if self.center_symmetric {
+            let interval = self.common_state_ref().get_in_interval();
             apply_center_symmetric_with_abs_value(
                 value,
                 interval,
@@ -574,12 +612,11 @@ impl WithTfmExec for LinearCfg {
                         interval.map_to_symm_unit(self.shift_y, OutOfRangePolicy::Clamp),
                     )
                 },
-                OutOfRangePolicy::Clamp,
+                get_out_of_range_policy(self.common_state_ref().get_in_relativity(), ctx.is_reactive_mode()),
             )
         } else {
-            interval.clamp(linear(value, self.slope, self.shift_x, self.shift_y))
-        };
-        value
+            linear(value, self.slope, self.shift_x, self.shift_y)
+        }
     }
 }
 
@@ -921,12 +958,15 @@ impl WithTfmExec for InvertCfg {
 }
 
 impl IntegrateCfg {
-    pub(crate) fn get_delta_acc_norm(&self, value: BaseNumT) -> BaseNumT {
+    pub(crate) fn get_delta_acc_norm(&self, value: BaseNumT, is_reactive: bool) -> BaseNumT {
         value.signum()
             * self.accumulator.port_get_interval().map_from(
                 self.common_state_ref()
                     .get_in_interval()
-                    .map_to_symm_unit::<BaseNumT>(value, OutOfRangePolicy::Clamp)
+                    .map_to_symm_unit::<BaseNumT>(
+                        value,
+                        get_out_of_range_policy(self.common_state_ref().get_in_relativity(), is_reactive),
+                    )
                     .abs(),
                 &UNIT_INTERVAL,
                 OutOfRangePolicy::Clamp,
@@ -948,7 +988,7 @@ impl WithTfmExec for IntegrateCfg {
 
         value *= self.in_gain;
 
-        let acc_delta = self.get_delta_acc_norm(value);
+        let acc_delta = self.get_delta_acc_norm(value, ctx.is_reactive_mode());
         let acc_out = acc_interval.clamp(acc_value + acc_delta);
 
         self.accumulator
@@ -975,7 +1015,7 @@ impl Default for SteeringExeState {
     }
 }
 
-impl WithTfmExec for Box<SteeringCfg> {
+impl WithTfmExec for SteeringCfg {
     type InputT = BaseNumT;
     type OutputT = Self::InputT;
     fn exec(&self, value: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
@@ -991,7 +1031,10 @@ impl WithTfmExec for Box<SteeringCfg> {
 
         let dt = clamp_dt_by_min_and_max_period((now - state.last_time).as_secs_f32() as BaseNumT);
 
-        let delta_raw = in_interval.map_to_symm_unit::<BaseNumT>(value, OutOfRangePolicy::Clamp);
+        let delta_raw = in_interval.map_to_symm_unit::<BaseNumT>(
+            value,
+            get_out_of_range_policy(self.common_state_ref().get_in_relativity(), ctx.is_reactive_mode()),
+        );
 
         let delta: BaseNumT = delta_raw * self.in_gain.port_get_numeric_value(Some(ctx));
 

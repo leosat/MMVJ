@@ -3,7 +3,7 @@ use std::fmt::Display;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize, Copy, PartialEq, JsonSchema, Default)]
+#[derive(Clone, Debug, Serialize, Deserialize, Copy, PartialEq, PartialOrd, JsonSchema, Default)]
 pub(crate) enum Relativity {
     Rel,
     #[default]

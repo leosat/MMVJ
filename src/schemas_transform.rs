@@ -367,6 +367,9 @@ pub(crate) struct ArithCfg {
 
 impl ArithCfg {
     fn sanitize_inplace_epilogue(&mut self) {
+        if self.sources.iter().all(|src| src.port_get_relativity().is_relative()) {
+            self.common_state_mut().set_out_relativity(Relativity::Rel);
+        }
         let out_interval = self.out_interval;
         let in_interval = self.common_state.get_in_interval();
         self.common_state_mut().set_out_interval(if out_interval.is_manual() {
@@ -654,7 +657,7 @@ impl TfmStepCfg {
             | TfmStepCfg::Exp(_)
             | TfmStepCfg::SignedPower(_)
             // | TfmStepCfg::_HighPass(_)
-            // | TfmStepCfg::_ForceFeedback(_) 
+            // | TfmStepCfg::_ForceFeedback(_)
             => DEFAULT_TRANSFORM_DESCRIPTION,
         }
     }

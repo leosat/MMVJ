@@ -1,6 +1,5 @@
 use crate::base_num::BaseNumT;
 use crate::hid_device::HidDeviceEvent;
-use crate::interner::{get_interned_str, intern_str};
 
 use crate::debug::DebugLevel;
 use crate::debug::get_debug_level;
@@ -15,7 +14,8 @@ use crate::schemas_cfg::Config;
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_control_matcher::ControlMatchers;
 
-use crate::schemas_hid::HidDeviceCfg;
+use crate::schemas_hid::{HidControlMatcherCfg, HidDeviceCfg};
+use crate::schemas_mapping::MapperMode;
 use crate::schemas_mapping::Mapping;
 #[cfg(feature = "midi")]
 use crate::schemas_midi::MidiMatcherCfg;
@@ -34,10 +34,12 @@ use std::collections::HashMap;
 use std::fs;
 #[cfg(not(feature = "midi"))]
 use std::marker::PhantomData;
+use std::ops::Not;
 use std::sync::atomic::Ordering::Relaxed;
 use tokio::select;
-use tokio::time::{Duration, MissedTickBehavior, interval};
+use tokio::time::{MissedTickBehavior, interval};
 
+// ---------------------------------------------
 #[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) enum MappingEngineCmd {
     _None,
@@ -46,16 +48,20 @@ pub(crate) enum MappingEngineCmd {
     UpdateMappingRouter,
 }
 
+// ---------------------------------------------
 pub(crate) trait MappedHidManager:
     DeviceManagerCommon<DeviceCfgT = HidDeviceCfg, DeviceEventT = HidDeviceEvent> + DeviceManagerWithFfb
 {
 }
 
+// ---------------------------------------------
 #[cfg(feature = "midi")]
 pub(crate) trait MappedMidiManager:
     DeviceManagerCommon<DeviceCfgT = MidiMatcherCfg, DeviceEventT = MidiDeviceEvent>
 {
 }
+
+// ---------------------------------------------
 
 pub(crate) struct MappingEngine<
     'd,
@@ -64,7 +70,7 @@ pub(crate) struct MappingEngine<
     #[cfg(not(feature = "midi"))] MidiManagerT,
 > {
     running: bool,
-    idle_tick_rate: u32,
+    mode: MapperMode,
     // ---
     debug: DebugLevel,
     debug_idle_tick: bool,
@@ -82,6 +88,7 @@ pub(crate) struct MappingEngine<
     router_index_sysdev_and_ctl_type_to_cms_and_mappings:
         HashMap<(ObjId, MappedCtls), (Vec<ControlMatchers>, Vec<Vec<usize>>)>,
     router_buff_mappings_to_execute: Vec<usize>,
+    rel_ctls: Vec<*const HidControlMatcherCfg>,
     // ---
     idle_tick_mappings: Vec<usize>,
     lua: &'d mlua::Lua,
@@ -107,8 +114,8 @@ pub(crate) trait Mapper<'d> {
     fn set_mappings(&mut self, mappings: &[Mapping]);
     fn active_mappings_count(&self) -> usize;
 
-    fn get_idle_tick_rate(&self) -> u32;
-    fn set_idle_tick_rate(&mut self, rate: u32);
+    fn set_mode(&mut self, mode: MapperMode);
+    fn get_mode(&self) -> &MapperMode;
 
     fn init(&mut self) -> Result<()>;
     fn idle_tick_mappings_reset(&mut self);
@@ -140,7 +147,7 @@ impl<
         Ok(Self {
             // ---
             running: false,
-            idle_tick_rate: cfg.global.idle_tick_rate,
+            mode: cfg.global.mode,
             // ---
             debug,
             debug_idle_tick,
@@ -154,6 +161,7 @@ impl<
             // ---
             router_index_sysdev_and_ctl_type_to_cms_and_mappings: Default::default(),
             router_buff_mappings_to_execute: Default::default(),
+            rel_ctls: Default::default(),
             // ---
             idle_tick_mappings: Default::default(),
             lua,
@@ -162,19 +170,11 @@ impl<
 
     fn set_cfg(&mut self, cfg: Config) {
         self.cfg = cfg;
+        self.reset_rel_ctls_cache();
     }
 
     fn set_mappings(&mut self, mappings: &[Mapping]) {
         self.cfg.mappings = mappings.to_vec();
-    }
-
-    fn get_idle_tick_rate(&self) -> u32 {
-        self.idle_tick_rate
-    }
-
-    fn set_idle_tick_rate(&mut self, rate: u32) {
-        self.idle_tick_rate = rate.clamp(crate::config::MIN_BASE_FREQ_HZ, crate::config::MAX_BASE_FREQ_HZ);
-        log::info!("Set base (idle tick) update rate to {}", self.idle_tick_rate);
     }
 
     fn active_mappings_count(&self) -> usize {
@@ -195,6 +195,9 @@ impl<
         // ---
         self.router_index_sysdev_and_ctl_type_to_cms_and_mappings.clear();
         self.router_buff_mappings_to_execute.clear();
+
+        // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        self.reset_rel_ctls_cache();
 
         // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         let available_hid_devices = self.hid_mgr.enumerate_available_devices(Some(
@@ -337,7 +340,7 @@ impl<
                 .map(|(i, _)| i)
                 .collect::<Vec<_>>(),
         );
-        self.run_input_triggered_mappings(ObjId::from(intern_str("Init")));
+        self.run_active_mappings();
         self.router_buff_mappings_to_execute.clear();
 
         Ok(())
@@ -355,29 +358,58 @@ impl<
 
     async fn run(&mut self) {
         self.running = true;
-        let mut ticker = interval(Duration::from_secs_f64(
-            1.0 / (self.idle_tick_rate as f64).max(crate::config::MIN_BASE_FREQ_HZ as f64),
-        ));
-        ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
+        let mut idle_ticker = interval(self.mode.calc_idle_tick_period());
+        let mut mapping_ticker = interval(self.mode.calc_mapping_tick_period());
+
+        idle_ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        mapping_ticker.set_missed_tick_behavior(MissedTickBehavior::Burst);
 
         //-------------------------------- MAIN LOOP ----------------------------------
         const DEBUG_MAIN_LOOP_LATENCY: bool = false; // TODO: generalized stats data, observable via Gui.
+        let is_reactive: bool = self.mode.is_reactive();
+        let is_capped: bool = self.mode.is_capped();
+        let mapping_tick_period = self.mode.calc_mapping_tick_period();
+        let mut last_main_loop_period = std::time::Duration::ZERO;
         while self.running {
             let main_loop_iter_start = std::time::Instant::now();
-
-            #[cfg(feature = "midi")]
             select! {
-            Some(event) = self.midi_mgr.consume_any_opened_device_event()=> self.map_midi_event(event),
-            Some(event) =  self.hid_mgr.consume_any_opened_device_event() => self.map_hid_event(event),
-            _ = ticker.tick() => self.process_idle_tick() }
+            biased;
+            // Any scheduled mappings must execute first.
+            _ = mapping_ticker.tick(), if !is_reactive => self.process_mappings(),
+            // Then we choose between equally prioritized midi or hid  input events.
+            _ = async {
+                #[cfg(feature = "midi")]
+                select! {
+                    event = self.midi_mgr.consume_any_opened_device_event() =>
+                    match event {Some(event) => self.map_midi_event(event),
+                                 None => { log::error!("MIDI manager connection is gone");
+                                 self.running = false;}},
+                    event = self.hid_mgr.consume_any_opened_device_event() =>
+                    match event {Some(event) => self.map_hid_event(event),
+                                 None => { log::error!("HID manager connection is gone");
+                                 self.running = false;}},
+                }
 
-            #[cfg(not(feature = "midi"))]
-            select! {
-            Some(event) =  self.hid_mgr.consume_any_opened_device_event() => self.map_hid_event(event),
-            _ = ticker.tick() => self.process_idle_tick()}
+                #[cfg(not(feature = "midi"))]
+                select! {
+                    event = self.hid_mgr.consume_any_opened_device_event() =>
+                    match event {Some(event) => self.map_hid_event(event),
+                                 None => { log::error!("HID manager connection is gone");
+                                 self.running = false;}},
+                }
+            } =>
+            // If the mode is reactive or capped and the frequency is below the threshold,
+            // execute mappings immediately.
+                if is_reactive || (is_capped && last_main_loop_period > mapping_tick_period) {
+                    self.process_mappings();},
+            // Lastly we check to run idle tick, which bursts if we skip it due to any of the above.
+            _ = idle_ticker.tick() => self.process_idle_tick()
+            }
 
+            last_main_loop_period = std::time::Instant::now() - main_loop_iter_start;
             if DEBUG_MAIN_LOOP_LATENCY {
-                dbg!((std::time::Instant::now() - main_loop_iter_start).as_millis());
+                dbg!(last_main_loop_period, mapping_tick_period);
             }
         }
     }
@@ -388,6 +420,14 @@ impl<
         self.midi_mgr.stop(true)?;
         Ok(())
     }
+
+    fn set_mode(&mut self, mode: MapperMode) {
+        self.mode = mode;
+    }
+
+    fn get_mode(&self) -> &MapperMode {
+        &self.mode
+    }
 }
 
 impl<
@@ -397,6 +437,20 @@ impl<
     #[cfg(not(feature = "midi"))] MidiManagerT,
 > MappingEngine<'d, HidManagerT, MidiManagerT>
 {
+    fn reset_rel_ctls_cache(&mut self) {
+        let mut rel_ctls: Vec<_> = Default::default();
+        self.cfg.devices.hid.iter().for_each(|d| {
+            rel_ctls.extend(
+                d.1.controls
+                    .values()
+                    .filter(|c| c.r#type.is_relative())
+                    .map(|c| c as *const HidControlMatcherCfg)
+                    .collect::<Vec<_>>(),
+            );
+        });
+        self.rel_ctls = rel_ctls;
+    }
+
     fn set_idle_tick_enabled_on_device_control_for_mapping(&self, mapping: &Mapping) {
         if let Some(flag) = mapping.dst.get_idle_tick_enabled_flag()
             && let Ok(prev) = flag.compare_exchange(
@@ -433,12 +487,6 @@ impl<
                         self.router_buff_mappings_to_execute.extend(&mappings[cm_idx]);
                     }
                 });
-
-            let dedup = cms.len() > 1;
-            let shuffle = self.router_buff_mappings_to_execute.len() > 1;
-            Self::dedup_and_shuffle(&mut self.router_buff_mappings_to_execute, dedup, shuffle);
-            self.run_input_triggered_mappings(event.device_id);
-            self.router_buff_mappings_to_execute.clear();
         }
     }
 
@@ -459,34 +507,25 @@ impl<
         {
             cms.iter().enumerate().for_each(|(cm_idx, cm)| {
                 cm.set_last_known_io(event.data.value);
-                cm.set_numeric_value(
-                    event.data.value, /* NB/TODO: for Rel controls in proposed "stable mode": value + cm.get_numeric_value())
-                                      and safe ptr to the control to zero-out after mappings run complete*/
-                );
+                cm.set_numeric_value(if cm.get_relativity().is_relative() {
+                    cm.get_numeric_value() + event.data.value
+                } else {
+                    event.data.value
+                });
                 if !mappings.is_empty() {
                     self.router_buff_mappings_to_execute.extend(&mappings[cm_idx]);
                 }
             });
-
-            let dedup = cms.len() > 1;
-            let shuffle = self.router_buff_mappings_to_execute.len() > 1;
-            Self::dedup_and_shuffle(&mut self.router_buff_mappings_to_execute, dedup, shuffle);
-            self.run_input_triggered_mappings(event.device_id);
-            self.router_buff_mappings_to_execute.clear();
-
-            if event.data.control_type.is_relative() {
-                cms.iter().for_each(|cm| cm.set_numeric_value(0.0));
-            }
         }
     }
 
-    fn run_input_triggered_mappings(&self, triggering_device_id: ObjId) {
+    fn run_active_mappings(&self) {
         for mapping_idx in self.router_buff_mappings_to_execute.iter() {
             let mapping = &self.cfg.mappings[*mapping_idx];
             let input_value = mapping.src.get_numeric_value();
 
             mapping.set_last_known_io((Some(input_value), None));
-            let final_value = self.apply_transformation_for_mapping(triggering_device_id, mapping, input_value, false);
+            let final_value = self.apply_transformation_for_mapping(mapping, input_value, false);
             mapping.set_last_known_io((None, Some(final_value)));
 
             if let Some(d) = &mapping.dst.get_device_control_matcher_ref() {
@@ -505,9 +544,29 @@ impl<
         }
     }
 
-    fn process_idle_tick(&self) {
-        // TODO:? let _ = self.lua.gc_collect().inspect_err(|e| log::error!("{e}"));
+    fn clear_rel_ctls(&self) {
+        self.rel_ctls.iter().for_each(|ctl| {
+            unsafe { &**ctl }.set_numeric_value(0.0);
+        });
+    }
 
+    fn process_mappings(&mut self) {
+        if self.router_buff_mappings_to_execute.is_empty() {
+            return;
+        }
+        let dedup = true;
+        let shuffle = self.router_buff_mappings_to_execute.len() > 1;
+        Self::dedup_and_shuffle(&mut self.router_buff_mappings_to_execute, dedup, shuffle);
+        self.run_active_mappings();
+        self.router_buff_mappings_to_execute.clear();
+        self.clear_rel_ctls();
+    }
+
+    fn process_idle_tick(&self) {
+        if self.router_buff_mappings_to_execute.is_empty().not() {
+            return;
+        }
+        self.clear_rel_ctls();
         for idx in &self.idle_tick_mappings {
             let mapping = &self.cfg.mappings[*idx];
             if let Some(flag) = mapping.dst.get_idle_tick_enabled_flag()
@@ -520,8 +579,7 @@ impl<
 
             mapping.set_last_known_io((Some(idle_in_value), None));
 
-            let final_value =
-                self.apply_transformation_for_mapping(ObjId::from(usize::MAX), mapping, idle_in_value, true);
+            let final_value = self.apply_transformation_for_mapping(mapping, idle_in_value, true);
 
             mapping.set_last_known_io((None, Some(final_value)));
 
@@ -533,20 +591,14 @@ impl<
         }
     }
 
-    fn apply_transformation_for_mapping(
-        &self,
-        runtime_input_device_id: ObjId,
-        mapping: &Mapping,
-        value: BaseNumT,
-        is_idle_tick: bool,
-    ) -> BaseNumT {
+    fn apply_transformation_for_mapping(&self, mapping: &Mapping, value: BaseNumT, is_idle_tick: bool) -> BaseNumT {
         let mut vd = TfmValue::<BaseNumT> {
             value,
             interval: mapping.src.get_interval(),
             relativity: mapping.src.get_relativity(),
         };
 
-        if !vd.interval.contains_value_closed(vd.value) {
+        if vd.relativity.is_absolute() && !vd.interval.contains_value_closed(vd.value) {
             warn!(
                 "The value (={}) read from device {} \
                         is out of configured interval ({:?}), clamping it.",
@@ -554,7 +606,7 @@ impl<
                 if is_idle_tick {
                     "idle tick"
                 } else {
-                    get_interned_str(*runtime_input_device_id).unwrap_or_default()
+                    "input-triggered mapping"
                 },
                 vd.interval
             );
@@ -574,15 +626,23 @@ impl<
 
         let dst_interval = mapping.dst.get_interval();
         if vd.interval != dst_interval {
-            vd.value = dst_interval.map_from(vd.value, &vd.interval, OutOfRangePolicy::WarnIfDebugAndClamp);
+            vd.value = dst_interval.map_from(
+                vd.value,
+                &vd.interval,
+                if vd.relativity.is_absolute() {
+                    OutOfRangePolicy::WarnIfDebugAndClamp
+                } else {
+                    OutOfRangePolicy::Allow
+                },
+            );
         }
 
         vd.value
     }
 
     fn dcm_write_to_devices(&self, d: &DeviceControlMatcherRef, value: BaseNumT, debug: DebugLevel) {
-        // NB/TODO: for Rel controls in proposed "stable mode": do not reset those buffers
-        // NB/TODO: just emit event for the value to be re-fed into engine later
+        // TODO !!!: stable mode: for relative deltas do not reset those buffers
+        // TODO !!!: stable mode: just emit event for the value to be re-fed into engine later
         d.control_matcher.set_last_known_io(value);
         d.control_matcher.set_numeric_value(value);
 
@@ -593,6 +653,7 @@ impl<
                     "MIDI is not yet supported as a destination device. Only supporting variables and HID destinations."
                 )
             }
+            // TODO !!!: stable mode: for relative deltas out of bounds of estimated range emit multiple events.
             ControlMatchers::Hid(_) => self.hid_mgr.set_control_matcher_and_broadcast(
                 &d.device_matcher_key,
                 &d.control_matcher_key,
@@ -626,6 +687,10 @@ impl<
     #[cfg(not(feature = "midi"))] MidiManagerT,
 > TfmExecCtx for MappingTfmExecCtx<'m, 'd, HidManagerT, MidiManagerT>
 {
+    fn is_reactive_mode(&self) -> bool {
+        self.mapping_engine.mode.is_reactive()
+    }
+
     fn get_main_dst(&self) -> Option<&ValueDsts> {
         self.current_mapping_dst
     }
@@ -655,7 +720,7 @@ impl<
     }
 
     fn get_idle_tick_rate(&self) -> u32 {
-        self.mapping_engine.get_idle_tick_rate()
+        self.mapping_engine.get_mode().get_idle_tick_rate()
     }
 
     fn get_lua(&self) -> Option<&mlua::Lua> {

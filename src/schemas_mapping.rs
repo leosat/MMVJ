@@ -1,6 +1,7 @@
 use crate::base_num::BaseAtomicT;
 use crate::base_num::BaseNumT;
 use crate::config::WithSelfSanitize;
+use crate::config::default_base_freq_hz;
 use crate::schemas_common::EnabledFlagCfg;
 use crate::schemas_common::ObjId;
 use crate::schemas_common::WithRuntimeId;
@@ -20,10 +21,239 @@ use serde::{Deserialize, Serialize};
 use std::ops::Not;
 use std::sync::Arc;
 use std::sync::atomic::Ordering::Relaxed;
+use strum_macros::EnumIter;
+use strum_macros::EnumString;
 
 use schemars::JsonSchema;
 use traversable::{Traversable, TraversableMut};
 // use serde_valid::Validate;
+
+// ---------------------------------------------
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, EnumString, strum_macros::Display, JsonSchema)]
+pub(crate) enum MapperModeKind {
+    Reactive,
+    Capped,
+    Stable,
+}
+
+impl From<&MapperMode> for MapperModeKind {
+    fn from(value: &MapperMode) -> Self {
+        match value {
+            MapperMode::Reactive { .. } => MapperModeKind::Reactive,
+            MapperMode::Capped { .. } => MapperModeKind::Capped,
+            MapperMode::Stable { .. } => MapperModeKind::Stable,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub(crate) enum MapperModeSerdeHelper {
+    Full {
+        mode: MapperModeKind,
+        #[serde(
+            rename = "idle_rate",
+            alias = "idle_tick_rate",
+            default = "crate::config::default_base_freq_hz"
+        )]
+        idle_rate: u32,
+        #[serde(alias = "mapping_cap_rate", default = "crate::config::default_base_freq_hz")]
+        mapping_rate: u32,
+    },
+    Simple {
+        #[serde(default = "crate::config::default_base_freq_hz")]
+        idle_rate: u32,
+    },
+}
+
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Serialize,
+    Deserialize,
+    Validate,
+    PartialEq,
+    JsonSchema,
+    EnumString,
+    strum_macros::Display,
+    EnumIter,
+)]
+#[serde(from = "MapperModeSerdeHelper", into = "MapperModeSerdeHelper")]
+pub(crate) enum MapperMode {
+    Reactive {
+        #[garde(range(min=crate::config::MIN_BASE_FREQ_HZ,max=crate::config::MAX_BASE_FREQ_HZ))]
+        idle_rate: u32,
+    },
+    Capped {
+        #[garde(range(min=crate::config::MIN_BASE_FREQ_HZ,max=crate::config::MAX_BASE_FREQ_HZ))]
+        idle_rate: u32,
+        #[garde(range(min=crate::config::MIN_BASE_FREQ_HZ,max=crate::config::MAX_BASE_FREQ_HZ))]
+        mapping_rate: u32,
+    },
+    Stable {
+        #[garde(range(min=crate::config::MIN_BASE_FREQ_HZ,max=crate::config::MAX_BASE_FREQ_HZ))]
+        idle_rate: u32,
+        #[garde(range(min=crate::config::MIN_BASE_FREQ_HZ,max=crate::config::MAX_BASE_FREQ_HZ))]
+        mapping_rate: u32,
+    },
+}
+
+impl From<MapperModeSerdeHelper> for MapperMode {
+    fn from(value: MapperModeSerdeHelper) -> Self {
+        let mut ret = match value {
+            MapperModeSerdeHelper::Simple { idle_rate } => MapperMode::Reactive { idle_rate },
+            MapperModeSerdeHelper::Full {
+                mode,
+                idle_rate,
+                mapping_rate,
+            } => match mode {
+                MapperModeKind::Reactive => MapperMode::Reactive { idle_rate },
+                MapperModeKind::Capped => MapperMode::Capped {
+                    idle_rate,
+                    mapping_rate,
+                },
+                MapperModeKind::Stable => MapperMode::Stable {
+                    idle_rate,
+                    mapping_rate,
+                },
+            },
+        };
+        ret.sanitize_inplace(());
+        ret
+    }
+}
+
+impl From<MapperMode> for MapperModeSerdeHelper {
+    fn from(value: MapperMode) -> Self {
+        match value {
+            MapperMode::Reactive { idle_rate } => MapperModeSerdeHelper::Simple { idle_rate },
+            MapperMode::Capped {
+                idle_rate,
+                mapping_rate,
+            } => MapperModeSerdeHelper::Full {
+                mode: MapperModeKind::Capped,
+                idle_rate,
+                mapping_rate,
+            },
+            MapperMode::Stable {
+                idle_rate,
+                mapping_rate,
+            } => MapperModeSerdeHelper::Full {
+                mode: MapperModeKind::Stable,
+                idle_rate,
+                mapping_rate,
+            },
+        }
+    }
+}
+
+impl Default for MapperMode {
+    fn default() -> Self {
+        Self::Reactive {
+            idle_rate: crate::config::DEFAULT_BASE_FREQ_HZ,
+        }
+    }
+}
+
+impl WithSelfSanitize for MapperMode {
+    type SanInputT = ();
+    fn sanitize_inplace(&mut self, _input: Self::SanInputT) {
+        self.set_idle_rate_inner(
+            self.get_idle_tick_rate()
+                .clamp(crate::config::MIN_BASE_FREQ_HZ, crate::config::MAX_BASE_FREQ_HZ),
+        );
+        self.set_mapping_rate_inner(
+            self.get_mapping_rate()
+                .unwrap_or(crate::config::MAX_BASE_FREQ_HZ)
+                .max(self.get_idle_tick_rate())
+                .clamp(crate::config::MIN_BASE_FREQ_HZ, crate::config::MAX_BASE_FREQ_HZ),
+        );
+    }
+}
+
+impl MapperMode {
+    pub(crate) fn make_reactive(&mut self) {
+        *self = Self::Reactive {
+            idle_rate: self.get_idle_tick_rate(),
+        }
+        .to_sanitized(());
+    }
+    pub(crate) fn make_capped(&mut self) {
+        *self = Self::Capped {
+            idle_rate: self.get_idle_tick_rate(),
+            mapping_rate: self.get_mapping_rate().unwrap_or(default_base_freq_hz()),
+        }
+        .to_sanitized(());
+    }
+    pub(crate) fn make_stable(&mut self) {
+        *self = Self::Stable {
+            idle_rate: self.get_idle_tick_rate(),
+            mapping_rate: self.get_mapping_rate().unwrap_or(default_base_freq_hz()),
+        }
+        .to_sanitized(());
+    }
+    pub(crate) fn calc_idle_tick_period(&self) -> std::time::Duration {
+        std::time::Duration::from_secs_f64(
+            1.0 / (self.get_idle_tick_rate() as f64).max(crate::config::MIN_BASE_FREQ_HZ as f64),
+        )
+    }
+    pub(crate) fn calc_mapping_tick_period(&self) -> std::time::Duration {
+        std::time::Duration::from_secs_f64(
+            1.0 / (self
+                .get_mapping_rate()
+                .unwrap_or(crate::config::MAX_BASE_FREQ_HZ)
+                .max(self.get_idle_tick_rate()) as f64),
+        )
+    }
+    pub(crate) fn is_reactive(&self) -> bool {
+        matches!(self, Self::Reactive { .. })
+    }
+    pub(crate) fn is_capped(&self) -> bool {
+        matches!(self, Self::Capped { .. })
+    }
+    pub(crate) fn is_stable(&self) -> bool {
+        matches!(self, Self::Stable { .. })
+    }
+    pub(crate) fn get_idle_tick_rate(&self) -> u32 {
+        match self {
+            MapperMode::Reactive { idle_rate } => *idle_rate,
+            MapperMode::Capped { idle_rate, .. } => *idle_rate,
+            MapperMode::Stable { idle_rate, .. } => *idle_rate,
+        }
+    }
+    pub(crate) fn get_mapping_rate(&self) -> Option<u32> {
+        match self {
+            MapperMode::Reactive { .. } => None,
+            MapperMode::Capped { mapping_rate, .. } => Some(*mapping_rate),
+            MapperMode::Stable { mapping_rate, .. } => Some(*mapping_rate),
+        }
+    }
+    fn set_idle_rate_inner(&mut self, new_rate: u32) -> &mut Self {
+        match self {
+            MapperMode::Reactive { idle_rate } => *idle_rate = new_rate,
+            MapperMode::Capped { idle_rate, .. } => *idle_rate = new_rate,
+            MapperMode::Stable { idle_rate, .. } => *idle_rate = new_rate,
+        };
+        self
+    }
+    pub(crate) fn set_idle_rate(&mut self, new_rate: u32) -> &mut Self {
+        self.set_idle_rate_inner(new_rate);
+        self.sanitize_inplace(());
+        self
+    }
+    fn set_mapping_rate_inner(&mut self, new_rate: u32) {
+        match self {
+            MapperMode::Reactive { .. } => {}
+            MapperMode::Capped { mapping_rate, .. } => *mapping_rate = new_rate,
+            MapperMode::Stable { mapping_rate, .. } => *mapping_rate = new_rate,
+        };
+    }
+    pub(crate) fn set_mapping_rate(&mut self, new_rate: u32) {
+        self.set_mapping_rate_inner(new_rate);
+        self.sanitize_inplace(());
+    }
+}
 
 // -------------------------------------------------
 

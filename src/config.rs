@@ -42,7 +42,12 @@ pub const APP_DEFAULT_MAX_LOG_LEVEL: &str = "warn";
 #[cfg(not(debug_assertions))]
 pub const APP_DEFAULT_MAX_LOG_LEVEL: &str = "error";
 pub const MIN_BASE_FREQ_HZ: u32 = 10;
+pub const DEFAULT_BASE_FREQ_HZ: u32 = 60;
 pub const MAX_BASE_FREQ_HZ: u32 = 1000;
+
+pub const fn default_base_freq_hz() -> u32 {
+    DEFAULT_BASE_FREQ_HZ
+}
 
 #[cfg(not(feature = "gui"))]
 pub const GUI_ENABLED_CONST: bool = false;

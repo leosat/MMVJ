@@ -339,6 +339,7 @@ impl crate::gui_main::GuiMain {
                                     transient_script_aux_edits: &self.transient_states_script_aux_edit,
                                     hier: &UncheckedRefCell::new(Vec::new()),
                                     style: &self.style,
+                                    mode: &self.cfg.global.mode,
                                 },
                             ),
                             ui,

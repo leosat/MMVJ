@@ -22,6 +22,8 @@ use crate::midi::{AvailableMidiDeviceInfo, MidiManager};
 use crate::schemas_cfg::Config;
 use crate::schemas_common::ObjId;
 use crate::schemas_hid::HidDeviceCfg;
+use crate::schemas_mapping::MapperMode;
+use crate::schemas_mapping::MapperModeKind;
 #[cfg(feature = "midi")]
 use crate::schemas_midi::MidiMatcherCfg;
 use crate::schemas_ui::UiMonitorsCfg;
@@ -451,21 +453,9 @@ impl eframe::App for GuiMain {
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.separator();
-                    ui.label("Idle tick rate: ");
-                    if ui
-                        .add(
-                            egui::Slider::new(
-                                &mut self.cfg.global.idle_tick_rate,
-                                crate::config::MIN_BASE_FREQ_HZ..=crate::config::MAX_BASE_FREQ_HZ,
-                            )
-                            .logarithmic(true)
-                            .suffix(" Hz"),
-                        )
-                        .on_hover_text("When no user input engine runs at this base clock.")
-                        .changed()
-                    {
+                    if self.cfg.global.mode.egui((), ui) {
                         self.submit_post_draw_cmd(GuiCmd::IdleTickRateChange);
-                    };
+                    }
                 });
                 ui.separator();
                 if let Some(cfg_file) = &self.cfg.cfg_file {
@@ -621,6 +611,139 @@ impl eframe::App for GuiMain {
         } else {
             ui.ctx().request_repaint();
         }
+    }
+}
+
+fn mapper_mode_to_icon(mode: MapperModeKind) -> &'static str {
+    match mode {
+        MapperModeKind::Reactive => egui_phosphor::regular::ACTIVITY,
+        MapperModeKind::Capped => egui_phosphor::regular::WALL,
+        MapperModeKind::Stable => egui_phosphor::regular::ANCHOR,
+    }
+}
+
+fn mapper_mode_to_desc(mode: MapperModeKind) -> &'static str {
+    match mode {
+        MapperModeKind::Reactive => {
+            "In Reactive mode all input events result in immediate execution of all the relevant mappings. \
+            Use it for minimal response latency. Warning: high frequency input devices such as \
+            gaming mice may cause higher CPU load. "
+        }
+        MapperModeKind::Capped => {
+            "In Capped mode whenever input rate exceeds the configured threshold, mapping gets delayed to match the \
+            configured frequency ceiling. Any input with rate lower than that is executed immediatly as in Reactive mode. \
+            Relative deltas get accumulated until consumed by mappings run. \
+            Remapping behavior of relative deltas is allowing extrapolation, clamping is not applied."
+        }
+        MapperModeKind::Stable => {
+            "In Stable mode all the mappings are executed with fixed configured frequency, \
+            irrelevant to the frequency of input. Relative deltas get accumulated until consumed by mappings run. \
+            Remapping behavior of relative deltas is allowing extrapolation, clamping is not applied."
+        }
+    }
+}
+
+fn mapper_mode_to_mapper_frequency_desc(mode: MapperModeKind) -> &'static str {
+    match mode {
+        MapperModeKind::Reactive => "Mappings are executed immediately",
+        MapperModeKind::Capped => "Mapping frequency ceiling",
+        MapperModeKind::Stable => "Mapping frequency",
+    }
+}
+
+impl<'s> DrawEgui<'s> for MapperMode {
+    type In = ();
+    type Out = bool;
+
+    fn egui(&mut self, _gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+        let mut changed = false;
+        ui.label(format!("Current mode: "))
+            .on_hover_text(mapper_mode_to_desc((&*self).into()));
+        ui.label(mapper_mode_to_icon((&*self).into()))
+            .on_hover_text(mapper_mode_to_desc((&*self).into()));
+        ui.label(egui::RichText::new(self.to_string()).strong())
+            .on_hover_text(mapper_mode_to_desc((&*self).into()));
+
+        ui.separator();
+        let idle_desc = "Mappings scheduled for idle tick run at this frequency when no user input.";
+        ui.label("idle rate:").on_hover_text(idle_desc);
+        let mut idle_rate = self.get_idle_tick_rate();
+        if ui
+            .add(
+                egui::Slider::new(
+                    &mut idle_rate,
+                    crate::config::MIN_BASE_FREQ_HZ..=crate::config::MAX_BASE_FREQ_HZ,
+                )
+                .logarithmic(true)
+                .suffix(" Hz"),
+            )
+            .on_hover_text(idle_desc)
+            .changed()
+        {
+            self.set_idle_rate(idle_rate);
+            changed = true;
+        };
+
+        if let Some(mut mapping_rate) = self.get_mapping_rate() {
+            ui.separator();
+            ui.label(if self.is_capped() {
+                "mapping rate limit:"
+            } else {
+                "mapping rate:"
+            })
+            .on_hover_text(mapper_mode_to_mapper_frequency_desc((&*self).into()));
+            if ui
+                .add(
+                    egui::Slider::new(
+                        &mut mapping_rate,
+                        self.get_idle_tick_rate()..=crate::config::MAX_BASE_FREQ_HZ,
+                    )
+                    .logarithmic(true)
+                    .suffix(" Hz"),
+                )
+                .on_hover_text(mapper_mode_to_mapper_frequency_desc((&*self).into()))
+                .changed()
+            {
+                self.set_mapping_rate(mapping_rate);
+                changed = true;
+            };
+        }
+
+        ui.separator();
+        ui.label(format!(" Switch to: "));
+        if !self.is_reactive()
+            && ui
+                .button(mapper_mode_to_icon(MapperModeKind::Reactive))
+                .on_hover_text(mapper_mode_to_desc(MapperModeKind::Reactive))
+                .clicked()
+        {
+            self.make_reactive();
+            changed = true;
+        }
+        if !self.is_capped()
+            && ui
+                .button(mapper_mode_to_icon(MapperModeKind::Capped))
+                .on_hover_text(mapper_mode_to_desc(MapperModeKind::Capped))
+                .clicked()
+        {
+            self.make_capped();
+            changed = true;
+        }
+
+        if !self.is_stable()
+            && ui
+                .button(mapper_mode_to_icon(MapperModeKind::Stable))
+                .on_hover_text(mapper_mode_to_desc(MapperModeKind::Stable))
+                .clicked()
+        {
+            self.make_stable();
+            changed = true;
+        }
+
+        if changed {
+            self.sanitize_inplace(());
+        }
+        changed
     }
 }
 
@@ -799,7 +922,7 @@ impl GuiMain {
             GuiCmd::DragAndDrop(..) | GuiCmd::LocalItemRemove(..) => {
                 log::error!(
                     "Drag and drop and local item removal commands are expected to be \
-                      handled on upper level in Gui. Error in implementation. 
+                      handled on upper level in Gui. Error in implementation.
                     Command failed:
                       {gui_cmd:?}"
                 )
@@ -865,8 +988,8 @@ impl GuiMain {
                     cfg_suffix: cfg_suffix.clone(),
                 });
             }
-            GuiCmd::IdleTickRateChange => self.send_driver_cmd(DriverCmd::ChangeIdleTickRate {
-                rate: self.cfg.global.idle_tick_rate,
+            GuiCmd::IdleTickRateChange => self.send_driver_cmd(DriverCmd::ChangeMappingMode {
+                mode: self.cfg.global.mode,
             }),
             GuiCmd::CmdSeqence(gui_cmds) => {
                 let mut res = None;
