@@ -90,7 +90,7 @@ midi_controls:
     - 0.0
     - 127.0
     desc: Note A (all octaves)
-  "NOTE_A#":
+  NOTE_A#:
     midi_message:
       type: note
       channel: any
@@ -108,7 +108,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    desc: "Note A# (all octaves)"
+    desc: Note A# (all octaves)
   NOTE_B:
     midi_message:
       type: note
@@ -148,7 +148,7 @@ midi_controls:
     - 0.0
     - 127.0
     desc: Note C (all octaves)
-  "NOTE_C#":
+  NOTE_C#:
     midi_message:
       type: note
       channel: any
@@ -167,7 +167,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    desc: "Note C# (all octaves)"
+    desc: Note C# (all octaves)
   NOTE_D:
     midi_message:
       type: note
@@ -188,7 +188,7 @@ midi_controls:
     - 0.0
     - 127.0
     desc: Note D (all octaves)
-  "NOTE_D#":
+  NOTE_D#:
     midi_message:
       type: note
       channel: any
@@ -207,7 +207,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    desc: "Note D# (all octaves)"
+    desc: Note D# (all octaves)
   NOTE_E:
     midi_message:
       type: note
@@ -248,7 +248,7 @@ midi_controls:
     - 0.0
     - 127.0
     desc: Note F (all octaves)
-  "NOTE_F#":
+  NOTE_F#:
     midi_message:
       type: note
       channel: any
@@ -267,7 +267,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    desc: "Note F# (all octaves)"
+    desc: Note F# (all octaves)
   NOTE_G:
     midi_message:
       type: note
@@ -288,7 +288,7 @@ midi_controls:
     - 0.0
     - 127.0
     desc: Note G (all octaves)
-  "NOTE_G#":
+  NOTE_G#:
     midi_message:
       type: note
       channel: any
@@ -306,7 +306,7 @@ midi_controls:
     range:
     - 0.0
     - 127.0
-    desc: "Note G# (all octaves)"
+    desc: Note G# (all octaves)
   PAN:
     midi_message:
       type: control_change

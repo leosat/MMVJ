@@ -13,6 +13,7 @@ use crate::mapping::MappingEngineCmd;
 #[cfg(feature = "midi")]
 use crate::midi::{MidiLearnMode, MidiManager};
 use crate::schemas_cfg::Config;
+use crate::schemas_mapping::MapperMode;
 use crate::schemas_mapping::Mapping;
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
@@ -46,8 +47,8 @@ pub(crate) enum DriverCmd {
         mappings: Option<Vec<Mapping>>,
         action: MappingEngineCmd,
     },
-    ChangeIdleTickRate {
-        rate: u32,
+    ChangeMappingMode {
+        mode: MapperMode,
     },
     #[cfg(feature = "gui")]
     StatusGuiClosed,
@@ -342,9 +343,9 @@ pub async fn run(
         }
 
         if let Some(rate) = update_rate_hz {
-            mapping_engine.set_idle_tick_rate(rate);
+            mapping_engine.set_mode(cfg_mgr.cfg_ref().global.mode.clone().set_idle_rate(rate).clone());
         } else {
-            mapping_engine.set_idle_tick_rate(cfg_mgr.cfg_ref().global.idle_tick_rate);
+            mapping_engine.set_mode(cfg_mgr.cfg_ref().global.mode);
         }
 
         if debug.is_on() {
@@ -414,7 +415,7 @@ pub async fn run(
 
         info!(
             "Mapping engine running at {} Hz ... ",
-            mapping_engine.get_idle_tick_rate()
+            mapping_engine.get_mode().get_idle_tick_rate()
         );
 
         loop {
@@ -613,9 +614,9 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                         log::info!("Config saved successfully.");
                     }
                 }
-                DriverCmd::ChangeIdleTickRate { rate } => {
-                    cfg_mgr.cfg_mut().global.idle_tick_rate = rate;
-                    mapping_engine.set_idle_tick_rate(rate);
+                DriverCmd::ChangeMappingMode { mode } => {
+                    cfg_mgr.cfg_mut().global.mode = mode;
+                    mapping_engine.set_mode(mode);
                 }
                 DriverCmd::ChangeVirtualHids {
                     cfg,

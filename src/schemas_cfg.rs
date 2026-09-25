@@ -1,6 +1,7 @@
 use crate::device_and_device_manager::DeviceKind;
 use crate::device_and_device_manager::WithDeviceClassification;
 use crate::schemas_hid::HidDeviceCfg;
+use crate::schemas_mapping::MapperMode;
 use crate::schemas_mapping::Mapping;
 #[cfg(feature = "midi")]
 use crate::schemas_midi::MidiMatcherCfg;
@@ -223,18 +224,17 @@ pub(crate) type VariablesCfg = BTreeMap<String, VariableState>;
 
 // --------------------------------------
 
-pub(crate) fn default_update_rate() -> u32 {
-    200
-}
-
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Default, Validate, PartialEq)]
-#[serde(deny_unknown_fields)]
+//#[serde(deny_unknown_fields)]
 #[with_doc_str]
 pub(crate) struct GlobalSettingsCfg {
     /// The program will run idle tick with this rate in Hz.
-    #[serde(default = "default_update_rate")]
-    #[garde(range(min=crate::config::MIN_BASE_FREQ_HZ))]
-    pub(crate) idle_tick_rate: u32,
+    // #[serde(default = "default_update_rate")]
+    // #[garde(range(min=crate::config::MIN_BASE_FREQ_HZ))]
+    // pub(crate) idle_tick_rate: u32,
+    #[garde(dive)]
+    #[serde(flatten)]
+    pub(crate) mode: MapperMode,
     /// If true, all virtual joysticks will be persistent (not destroyed on hot-reload) by default.
     #[serde(default)]
     #[garde(skip)]

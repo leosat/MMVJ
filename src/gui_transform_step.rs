@@ -19,6 +19,7 @@ use crate::num_interval::SYMM_UNIT_INTERVAL;
 use crate::schemas_cfg::DescriptionCfg;
 use crate::schemas_cfg::{DevicesCfgNew, VariablesCfg};
 use crate::schemas_common::{ObjId, WithRuntimeId};
+use crate::schemas_mapping::MapperMode;
 use crate::schemas_transform::*;
 use crate::schemas_value::AutoOrManual;
 use crate::schemas_value::WithLastKnownIO;
@@ -171,6 +172,7 @@ pub(crate) enum GuiInCommon<'g> {
     Edit {
         style: &'g GuiStyle,
         graph_states: &'g UncheckedRefCell<GuiTelemetryGraphStates>,
+        mode: &'g MapperMode,
         cfg_devices: &'g DevicesCfgNew,
         cfg_variables: &'g VariablesCfg,
         #[allow(clippy::all)]
@@ -179,6 +181,7 @@ pub(crate) enum GuiInCommon<'g> {
     },
     _Display {
         style: &'g GuiStyle,
+        mode: &'g MapperMode,
         graph_states: &'g UncheckedRefCell<GuiTelemetryGraphStates>,
         cfg_devices: &'g DevicesCfgNew,
         cfg_variables: &'g VariablesCfg,
@@ -186,6 +189,12 @@ pub(crate) enum GuiInCommon<'g> {
 }
 
 impl<'g> GuiInCommon<'g> {
+    pub(crate) fn get_mode(&self) -> &'g MapperMode {
+        match self {
+            GuiInCommon::Edit { mode, .. } => mode,
+            GuiInCommon::_Display { mode, .. } => mode,
+        }
+    }
     pub(crate) fn get_style(&self) -> &'g GuiStyle {
         match self {
             Self::Edit { style, .. } => style,
@@ -637,7 +646,7 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                                 })
                                                 .inner
                                             }
-                                            Self::Clamp(s) => s.egui(in_interval, ui),
+                                            Self::Clamp(s) => s.egui(&gui_in.2, ui),
                                             Self::RaiseFall(s) => s.egui((&gui_in.2, in_interval), ui),
                                             Self::Ema(s) => s.egui(&gui_in.2, ui),
                                             Self::Linear(s) => s.egui(in_interval, ui),
@@ -666,13 +675,21 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
 // ---------------------------------
 
 impl<'s> DrawEgui<'s> for ClampCfg {
-    type In = NumInterval<BaseNumT>;
+    type In = &'s GuiInCommon<'s>;
     type Out = Option<GuiCmd>;
 
-    fn egui(&mut self, in_interval: Self::In, ui: &mut egui::Ui) -> Self::Out {
-        ui.label(format!("Input interval: {} ", in_interval));
+    fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+        if !gui_in.get_mode().is_reactive() && self.common_state_ref().is_out_relative() {
+            ui.label(
+                egui::RichText::new("NOTICE: with relative input in non-reactive mode clamp will not clamp!")
+                    .color(egui::Color32::RED)
+                    .strong(),
+            );
+            ui.disable();
+        }
 
         let mut changed = false;
+        let in_interval = self.common_state_ref().get_in_interval();
         let clamping_interval = self.get_clamping_interval();
         let mut clamp_from_iherited_from_in_interval = clamping_interval.from == in_interval.from;
         let mut clamp_to_iherited_from_in_interval = clamping_interval.to == in_interval.to;
@@ -772,7 +789,7 @@ impl<'s> DrawEgui<'s> for IntegrateCfg {
                     current_input,
                     current_input * self.in_gain,
                     self.accumulator.port_get_interval(),
-                    self.get_delta_acc_norm(current_input * self.in_gain)
+                    self.get_delta_acc_norm(current_input * self.in_gain, gui_in.get_mode().is_reactive())
                 ))
                 .monospace(),
             );
@@ -1043,7 +1060,11 @@ impl<'s> DrawEgui<'s> for ArithCfg {
             }
 
             ui.horizontal(|ui| {
-                ui.label(").clamp(");
+                if !gui_in.1.get_mode().is_reactive() && self.common_state_ref().is_out_relative() {
+                    ui.label(").assign_out_range(");
+                } else {
+                    ui.label(").clamp(");
+                }
 
                 if self.out_interval.egui(
                     GuiInInterval::Edit {

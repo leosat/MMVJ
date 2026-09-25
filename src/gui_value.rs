@@ -264,9 +264,10 @@ where
 
                 ui.label(
                     egui::RichText::new(format!(
-                        "{:+012.5} {}",
+                        "{:+012.5} {} {}",
                         port.port_get_numeric_value(None::<&()>),
-                        port.port_get_interval()
+                        port.port_get_interval(),
+                        port.port_get_relativity()
                     ))
                     .monospace()
                     .size(11.0),

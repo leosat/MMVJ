@@ -10,13 +10,13 @@
 
 ---
 
-### Screenshots 
+## Screenshots 
 
-## ![SS](https://raw.githubusercontent.com/leosat/MMVJ_assets/2281dd16f420d667c9cf057c34859f829b8e4179/Screenshot%20from%202026-05-30%2021-06-53.png)
+![SS](https://raw.githubusercontent.com/leosat/MMVJ_assets/2281dd16f420d667c9cf057c34859f829b8e4179/Screenshot%20from%202026-05-30%2021-06-53.png)
 
-## ![SS](https://raw.githubusercontent.com/leosat/MMVJ_assets/2281dd16f420d667c9cf057c34859f829b8e4179/Screenshot%20from%202026-05-30%2021-07-36.png)
+![SS](https://raw.githubusercontent.com/leosat/MMVJ_assets/2281dd16f420d667c9cf057c34859f829b8e4179/Screenshot%20from%202026-05-30%2021-07-36.png)
 
-## ![SS](https://raw.githubusercontent.com/leosat/MMVJ_assets/2281dd16f420d667c9cf057c34859f829b8e4179/Screenshot%20from%202026-05-30%2021-08-47.png)
+![SS](https://raw.githubusercontent.com/leosat/MMVJ_assets/2281dd16f420d667c9cf057c34859f829b8e4179/Screenshot%20from%202026-05-30%2021-08-47.png)
 
 _The following image shows visual debugging of force feedback application (seen in green) with mouse to joystick steering transformation._  
 ![Force Feedback plotted (green)](https://raw.githubusercontent.com/leosat/MMVJ_assets/7087c3723a7ff30dccbcf36872015fa8b9f4532b/Screenshot%20from%202026-02-16%2016-59-16.png)
@@ -27,7 +27,7 @@ _The following image shows visual debugging of force feedback application (seen 
 
 ---
 
-#### NB 1: To run with Gui use
+## NB 1: To run with Gui use
 
 ```
 --gui
@@ -37,7 +37,7 @@ command line option or just double click on appimage when under your favourite d
 
 ---
 
-#### NB 2: Force feedback support state
+## NB 2: Force feedback support state
 
 Regarding steering wheel simulation (in particular), **force feedback** checked to work with "Richard Burns Rally" (NGP), "Euro truck sim", "Race Room", "Rush rally 3" (all of them use constant force effect). Other effects such as Spring and Friction are also supported. If seeing trouble with your use case and wish to help, please run the program with **\--debug-ff** flag and [send me the the output](mailto:leonid.satanovsky@gmail.com).
 
@@ -66,7 +66,7 @@ Some early video demo of MMVJ being applied in rally simulation:
 
 ---
 
-**\> if you wish to make a review, please make sure to see the** [**development status notice**](#warningdisclaimer) **and if having any troubles with the app, please contact the author. I'd be totally happy to get direct feedback \<**
+**\> if you wish to make a review, please make sure to see the** [**development status notice**](#warning-disclaimer) **and if having any troubles with the app, please contact the author. I'd be totally happy to get direct feedback \<**
 
 ---
 
@@ -96,10 +96,20 @@ Some early video demo of MMVJ being applied in rally simulation:
 *   The engine is made to run with **low latency**: a main loop iteration usually takes \< 1ms.
 *   Provides three modes of execution:
     * **Reactive**: mappings run for every sample received (responsive, but high-frequency mice devices may cause higher CPU load).
-    * (**WIP**) _**Capped**: mappings run with frequency not exceeding the configurable mapping cap frequency (**a balance** between **Reactive** and **Stable** modes)_.
-    * (**WIP**) _**Stable**: mappings run with constant frequency (still responsive, depending on mapping frequency configured, good for high-frequency mice devices not to overload the CPU)_.
-* (**WIP**) _A user may seemlessly switch between modes depending on particular use case_.
+    * **Capped**: mappings run with frequency not exceeding the configurable mapping cap frequency (**a balance** between **Reactive** and **Stable** modes).
+    * **Stable**: mappings run with constant frequency (still responsive, depending on mapping frequency configured, good for high-frequency mice devices not to overload the CPU).
+* A user may seamlessly switch between modes depending on particular use case.
+* Currently **the default mode** is Reactive, but for high-frequency input you may want to change it to **Capped** (most likely it'll be the default in the future).
 * **Idle tick** (running e.g. filters or autocentering logic when no active user input is happening) frequency is separately configurable from 10 to 1000 Hz. For **Capped** and **Stable** modes mapping frequency is automatically ensured to be not less than idle tick frequency.
+
+### Important notice about Capped and Stable (vs Reactive) modes behavior
+
+While being useful to control CPU load when working with devices reporting at high-frequencies (e.g. gaming mice) **Capped** and **Stable** modes, due to the fact that relative delta is being accumulated for the configured mapping period (according to mapping frequency (limit in Capped mode)), bear execution "artifact" decribed below so that a user was not confused.
+
+Because of this "non-immediate" reaction and value accumulation the **resultant relative delta values may well exceed estimated/expected per-single sample value**, this **is normal**. During transformations they are not being clamped and are remapped _with extrapolative behavior_, yielding values possibly outside of the configured remapping intervals). As all the normalization is done proportionally to the estimated/expected per-sample range, this behavior is sound and results in similar effects (except for values getting updated in accordance to configured frequency limit and not "immediately" as in **Reactive** mode) for all the built-in transformation steps. 
+
+E.g. moving mouse for the same distance over same time will result in same steering effects whether we are using Reactive, Capped or Stable modes with any settings, except for the fact that in Capped and Stable modes the joystick position will change with the granularity of configured mapping and idle tick frequencies and not "immediately".
+
 
 ---
 
@@ -292,13 +302,18 @@ Values received as device control inputs and being out of configured range are c
 
 Script transformation step, in which it is the duty of the script to provide value in expected output range and process inputs with respect to whatever input range is. However, for script author's convenience, optional **remapping ranges** can be specified **per auxiliary source** and **per auxiliary destination**. Denoting a value range to be used within the script. If set, for sources the remapping will be done from source range to remapping range before passing a value to script and for destinations - from remapping range to destination range before passing value from script, automatically. If not set - the script will work with ("native") ranges. Auxiliary pipelines, if configured, for the script are also configured for specific input range and relativity. Similarly to inputs and ouputs it's script's duty to provide value within appropriate range as such pipeline input. All values coming from script and falling out of configured ranges shall be automatically clamped with warning emitted.
 
-All the values within the transformation pipeline have a **relativity semantic marker**. Currently it's used internally for the engine in few places, but from user's perspective it's only actual **for informal purposes (as of current)** (e.g., steering and integrate steps will accumulate input irrespective to whether it's marked as relative or absolute, however it's possible to imlpement different behavior for relative vs absolute inputs). _NB: A special general mode is possible (but not yet planned) to implement in which absolute and relative values will be automatically interconverted with respect to relativity (e.g. mapping relative to absolute should result in accumulation, mapping absolute to relative should result in storing a delta and in two other cases (relative to relative and absolute to absolute) the result should be one to one mapping with remapping from source range to destination)_ .
+All the values within the transformation pipeline have a **relativity semantic marker**. Values marked as relative (Rel) are handleded specially in accordance to the following rules:
+
+  - In **Capped** and **Stable** execution modes **relative values** get accumulated between mappings execution, due to the fact that mappings do not run "immediately" as in **Reactive** mode, but are (possibly (for **Capped** mode)) delayed in accordance to configured mapping frequency.
+  - Values of device control matchers marked as **relative** get reset to 0 only after mappings execution.
+  - **Relative values** get remapped/normalized proportionally to the estimated/expected per-sample range that is set via relevant device control matcher. In **Capped** and **Stable** execution modes remapping allows extrapolative behavior and clamping is not applied to such values.
+  - Writeback to relative control matchers is done **as-is** even if relative delta accumulated exceeds estimated/expected per-sample input range. (WIP) This behavior will be improved to emitting multiple events split accordingly to the estimated/expected per-sample input range.
 
 ---
 
 ### IMPORTANT **#1**: **For force feedback to work under Wine**
 
-make sure you **override** joysticks to be DInput and not XInput in Wine control panel, because XInpit controls do not support this kind of FFB, which is specific to steering wheels and not gamepads.
+Make sure you **override** joysticks to be DInput and not XInput in Wine control panel, because XInpit controls do not support this kind of FFB, which is specific to steering wheels and not gamepads.
 
 Open Wine Control panel and go to "Game controllers", or run in terminal with e.g.
 
