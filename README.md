@@ -10,15 +10,7 @@
 
 ---
 
-NB 1: latest release, when built with "gui" feature (enabled by default), includes steering indicator window, and main gui, both are turned on by
-
-```
---gui
-```
-
-runtime option.
-
----
+### Screenshots 
 
 ## ![SS](https://raw.githubusercontent.com/leosat/MMVJ_assets/2281dd16f420d667c9cf057c34859f829b8e4179/Screenshot%20from%202026-05-30%2021-06-53.png)
 
@@ -33,45 +25,81 @@ _The following image shows visual debugging of force feedback application (seen 
 
 ![SS](https://raw.githubusercontent.com/leosat/MMVJ_assets/refs/heads/main/Screenshot%20from%202026-04-07%2013-46-29.png)
 
-NB 2: Regarding steering emulation functionality in particular, force feedback works perfectly with "Richard Burns Rally" (tested the latest variations with NGP) and many other titles like "Euro truck sim", "Race Room", "Rush rally 3" which use **Constant force** effect to report already calculated forces to the steering wheel. Some of other effects like **Spring** (e.g. used in "Rfactor 1"), **Friction** and **Ramp** are also supported (including envelope (fade-in/fade-out) and delay/repeat, but not trigger (WIP)). Damper, Intertia and Periodic (waveforms generators) effects are not yet supported (WIP). Until then we just fake the support for all those "other" effects (with warning emitted) if user configures them as supported in config. Stay tuned. If seeing trouble with it in your particular case and wish to help, please run the program with **\--debug-ff** flag and [send me the the output](mailto:leonid.satanovsky@gmail.com).
+---
 
+#### NB 1: To run with Gui use
+
+```
+--gui
+```
+
+command line option or just double click on appimage when under your favourite desktop.
 
 ---
 
-Some early video demos of MMVJ being applied in raw rally simulation:
+#### NB 2: Force feedback support state
+
+Regarding steering wheel simulation (in particular), **force feedback** checked to work with "Richard Burns Rally" (NGP), "Euro truck sim", "Race Room", "Rush rally 3" (all of them use constant force effect). Other effects such as Spring and Friction are also supported. If seeing trouble with your use case and wish to help, please run the program with **\--debug-ff** flag and [send me the the output](mailto:leonid.satanovsky@gmail.com).
+
+- Constant: **yes** (_contemporary games with advanced physics engines primarily use this_)
+- Friction: **yes**
+- Spring: **yes**
+- Damper: no ([waiting for relevant fix push to mainline](https://github.com/emberian/evdev/pull/168)), 
+- Inertia: no ([waiting for relevant fix push to mainline](https://github.com/emberian/evdev/pull/168))
+- Ramp: **yes**
+- Rumble: no (no need for our application, but is planned to be added)
+- Periodic/Waveforms: no (no need for our application, but is planned to be added)
+- Autocentering: no, **handled separately** by steering transform step
+- Gain: no, **handled separately** by steering transform step
+
+Application can "fake" that it supports any of unsupported effects if virtual joystick is configured to support them (for debugging purposes and games that would otherwise misbehave).
+
+---
+
+Some early video demo of MMVJ being applied in rally simulation:
 
 *   [**Scandinavian flick** with the RWD classics in RBR](https://www.youtube.com/watch?v=686QyszBWL4)
 
 ---
 
-## **\>** [Please see the **FAQ** if confused or curious!](doc/FAQ.md) **\<**
+## [See the FAQ for some contextual details](doc/FAQ.md) 
+
+---
 
 **\> if you wish to make a review, please make sure to see the** [**development status notice**](#warningdisclaimer) **and if having any troubles with the app, please contact the author. I'd be totally happy to get direct feedback \<**
 
 ---
 
-## High-level features overview.
+## High-level features overview
 
-*   **Matches existing devices by name regex and control types.**
+*   **Matches devices by name regex and control types** (runtime is still fast as we compute routing index on initialization).
 *   **Creates virtual HID (Mice/Keyboards/Joysticks) devices**: configure any number of Virtual Joysticks, Gamepads, Mice or hybrid devices with any sets of controls.
-    *   **With virtual HID (e.g. Virtual Joysticks) persistence**: if set as persistent will not be respawned across configuration changes.
+    *   **Supports virtual HID (e.g. Virtual Joysticks) persistence**: across configuration changes.
+*   **Supports shared state variables/manually configured params**: configure any number of variables with ranges metadata to use as intermediate inputs or outputs in mappings graph.
 *   **Remaps and transforms (advanced pipelines with shared and local state included) signals between different kinds of devices** (e.g. \[1\])**:**
     *   **Allowed inputs: Variables, MIDI and HID (Mice/Keyboards/Joysticks (including force feedback readings from virtual ones)).**
     *   **Allowed outputs: Variables and HID (Mice/Keyboards/Joysticks).**
-*   **Supports shared state variables/manually configured params**: configure any number of variables with ranges metadata to use as intermediate inputs or outputs in mappings graph.
-*   **Allows runtime re-configuration and monitoring via Gui (including per-step runtime signal graphing and parameters tweaking).**
-*   **Performs configuration validation and hot-reloadig on configuration file changes when in command line mode.**
-*   **Mappings run advanced configurable signal transformation pipelines including steps implementing**  
-    **curves, filters, intuitive steering wheel emulation, custom scripts (Luau).**
-    *   Few details on **steering transformation** for use in simracing, flight and other simulator gaming:
-        *   **Supports force feedback**: accepts **constant force and other effects (see the FAQ why this matters).**
-        *   Supports configurable **autocentering (useful if no force feedback available or as an auxiliary behavior)**.
-        *   Supports intuitive emulation **of hands holding the steering wheel** with different force  \*\*(a.k.a "hold factor" affecting the two mentioned above.
-    *   **Force feedback readings** from virtual HID (Virtual Joysticks) are also avaialbe as general readings on special internally-visible controls, enabling force feedback as input in arbitrary places of transformation pipelines (read and apply them from scripts or for ad-hoc parametrisation of transformation steps).
-    *   **Supports scripting with Luau**: define scripted transformation steps having multiple optionally defined inputs, outputs (e.g. to use as hubs for smart signal routing) or child transformation pipelines synchronously runnable from the script.
-*   **Console-based monitoring mode for HID and MIDI devices.**
+    *   **Transformation steps available out of the box include** curves, filters, intuitive steering wheel emulation, arithmetics, custom scripts (Luau)
+        * **Detail on steering transformation** used in simracing, flight and other simulator gaming:
+            *   **Supports force feedback**: accepts **constant force and other effects (see the FAQ why this matters).**
+            *   Supports configurable **autocentering (useful if no force feedback available or as an auxiliary behavior)**.
+            *   Supports intuitive emulation **of hands holding the steering wheel** with different force  \*\*(a.k.a "hold factor" affecting the two mentioned above.
+            *   **Force feedback readings** from virtual HID (Virtual Joysticks) are also avaialbe as general readings on special internally-visible controls, enabling force feedback as input in arbitrary places of transformation pipelines (read and apply them from scripts or for ad-hoc parametrisation of transformation steps).
+        *   **Detail about Luau scripting**: define scripted transformation steps having multiple optionally defined inputs, outputs (e.g. to use as hubs for smart signal routing) or child transformation pipelines synchronously runnable from the script.
+*   **Allows runtime re-configuration and monitoring via Gui (including per-step runtime signal graphing and parameters tweaking)**. Performs configuration validation and hot-reloadig on configuration file changes when in command line mode.
+*   **Supports console-based monitoring mode for HID and MIDI devices as well as in-Gui monitoring of device control matchers (see below) states.**
 
-\[1\] One fancy example: using 2 mice devices, mapping one's X movement to steering, Y movement to "hold factor" and a button to handbreak, whereas Y movement of the second mouse mapped to two separate brake and throttle axis of a target virtual joystick (it's achievable by accumulating relative input and mapping upper subrange of the integrated value to throttle and lower subrange (inverted) to breaking ([**configuration examples using this technique are coming soon**](#configuration-file-reference)))
+\[1\] _One fancy configuration example: using 2 mice devices, mapping one's X movement to steering, Y movement to "hold factor" and a button to handbreak, whereas Y movement of the second mouse mapped to two separate brake and throttle axis of a target virtual joystick (it's achievable by accumulating relative input and mapping upper subrange of the integrated value to throttle and lower subrange (inverted) to breaking (**See [configuration examples](#configuration-file-reference) (pre-bundled with the app and loadable via Gui)**))_
+
+## Modes of execution and estimated performance
+
+*   The engine is made to run with **low latency**: a main loop iteration usually takes \< 1ms.
+*   Provides three modes of execution:
+    * **Reactive**: mappings run for every sample received (responsive, but high-frequency mice devices may cause higher CPU load).
+    * (**WIP**) _**Capped**: mappings run with frequency not exceeding the configurable mapping cap frequency (**a balance** between **Reactive** and **Stable** modes)_.
+    * (**WIP**) _**Stable**: mappings run with constant frequency (still responsive, depending on mapping frequency configured, good for high-frequency mice devices not to overload the CPU)_.
+* (**WIP**) _A user may seemlessly switch between modes depending on particular use case_.
+* **Idle tick** (running e.g. filters or autocentering logic when no active user input is happening) frequency is separately configurable from 10 to 1000 Hz. For **Capped** and **Stable** modes mapping frequency is automatically ensured to be not less than idle tick frequency.
 
 ---
 
@@ -434,39 +462,40 @@ cargo build --release -j4
 
 ## **Configuration**
 
-### Configuration file reference:
+### Configuration file reference
 
+The recomended way to create configs is by using Gui mode. Run application with the ``--gui`` command line argument for that or just run appimage from under a desktop.
 
 [See the configuration readme](./doc/README.CONF.md)
 
+### Example Configuration
 
-### Example Configuration:
+NB: these configurations are pre-bundled within the application and can be loaded using Gui/saved to files from there. Alternatively they can be downloaded and app run with them using ``-c <CONFIG FILE>`` command line switch.
 
-#### \[i\] [Minimal mouse steering-oriented config example + some keyboard mappings to joystick buttons, default config](conf/default.yaml)
-
-#### \[i\] [Mouse OR Keyboard steering-oriented config example (uses Luau scripting for smart signal routing) with autoswitching between modes and hold factor for mouse being linked to Y movement and for keyboard - to DOWN and UP buttons](conf/example-kbd-or-ms-steering-lua.yaml) // Both Mouse and Keyboard modes add force feedback signal to input and use additional autocentering. Use variables to tweak the behavior.
-
-#### \[i\] [Mouse OR Keyboard steering-oriented config example (no scripting) with autoswitching between modes and hold factor for mouse being linked to Y movement and for keyboard - to DOWN and UP buttons](conf/example-kbd-or-ms-steering-noscript.yaml) // Both Mouse and Keyboard modes add force feedback signal to input and use additional autocentering.  Use variables to tweak the behavior.
-
-
-#### \[i\] [MIDI pedals or PitchWheel-based steering + Mouse steering with force feedback and autocetering](conf/example-midi-or-mouse-steering.yaml)
-
-#### \[i\] [Predefined control matchers config dump](conf/predefined_controls_dump.yaml) for definitions that you can reference in your config.
-
-##   
-**Performance**
-
-*   Low latency: \< 1ms processing time.
-*   Event-driven, on idle input base update rate is configurable from 10 to 1000 Hz.  
-     
+- [Minimal mouse steering-oriented config example + some keyboard mappings to joystick buttons, default config](conf/default.yaml)
+- [Mouse OR Keyboard steering-oriented config example (uses Luau scripting for smart signal routing) with autoswitching between modes and hold factor for mouse being linked to Y movement and for keyboard - to DOWN and UP buttons](conf/example-kbd-or-ms-steering-lua.yaml) // Both Mouse and Keyboard modes add force feedback signal to input and use additional autocentering. Use variables to tweak the behavior.
+- [Mouse OR Keyboard steering-oriented config example (no scripting) with autoswitching between modes and hold factor for mouse being linked to Y movement and for keyboard - to DOWN and UP buttons](conf/example-kbd-or-ms-steering-noscript.yaml) // Both Mouse and Keyboard modes add force feedback signal to input and use additional autocentering.  Use variables to tweak the behavior.
+- [MIDI pedals or PitchWheel-based steering + Mouse steering with force feedback and autocetering](conf/example-midi-or-mouse-steering.yaml)
+- [Predefined control matchers config dump](conf/predefined_controls_dump.yaml) for definitions that you can reference in your config.
 
 ---
 
 ## **Troubleshooting**
 
+
 ### Binary release run problems:
 
-AppImage release.  
+#### AppImage release.  
+
+
+```
+I click on appimage from my desktop, but it doesn't run.
+```
+
+Mark it as executable! 
+
+
+---
 
 ```
 fuse: mount failed: Permission denied
@@ -541,7 +570,7 @@ ls -la /dev/snd/
 
 # **WARNING DISCLAIMER:**
 
-This application is in active development state and is used as **a toy project** by the author **to learn the new programming language** (with all the consequences) and is provided as is without any warranties. **Not everything works and it is far from ideal currently**. Nevertheless, while still in development I'm finding it **already quite useful and capable**, so, I've decided to opensource it and provide for those who are looking for such a tool. When/if the project reaches production state, this warning will not be here.  
+This application is in active development state and is used as **a toy project** by the author **to learn the new programming language** (with all the consequences) and is provided as is without any warranties. While still in development I'm finding it **already quite useful and capable**, so, I've decided to opensource it and provide for those who are looking for such a tool. When/if the project reaches production state, this warning will not be here.  
 
 For any questions (or anything else) feel free to contact me at [leonid.satanovsky@gmail.com](mailto:leonid.satanovsky@gmail.com) (Leonid Satanovskiy).
 
