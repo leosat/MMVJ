@@ -53,20 +53,56 @@
     "GlobalSettingsCfg": {
       "type": "object",
       "properties": {
-        "idle_tick_rate": {
-          "description": "The program will run idle tick with this rate in Hz.",
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 10,
-          "default": 200
-        },
         "persistent_joysticks": {
           "description": "If true, all virtual joysticks will be persistent (not destroyed on hot-reload) by default.",
           "type": "boolean",
           "default": false
         }
       },
-      "additionalProperties": false
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "$ref": "#/$defs/MapperModeKind"
+            },
+            "idle_rate": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0,
+              "default": 60
+            },
+            "mapping_rate": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0,
+              "default": 60
+            }
+          },
+          "required": [
+            "mode"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "idle_rate": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0,
+              "default": 60
+            }
+          }
+        }
+      ]
+    },
+    "MapperModeKind": {
+      "type": "string",
+      "enum": [
+        "Reactive",
+        "Capped",
+        "Stable"
+      ]
     },
     "DevicesCfgNew": {
       "type": "object",
