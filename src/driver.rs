@@ -166,7 +166,7 @@ pub async fn run_aux_task(aux_task: &AuxDriverTask, cfg_file_path: Option<PathBu
         } => {
             if let Some(cfg_file_path) = cfg_file_path {
                 sanitize_cfg_file_path(&cfg_file_path)?;
-                let mut cfg_mgr = ConfigManager::new(cfg_file_path.into(), debug)?;
+                let mut cfg_mgr = ConfigManager::new(cfg_file_path.into())?;
                 cfg_mgr.load(None)?;
                 if save_after_valiadation.unwrap_or_default() {
                     cfg_mgr.save(&None, &None)?;
@@ -208,8 +208,8 @@ fn watch_config_file(cfg_file_path: &std::path::Path, tx: tokio::sync::mpsc::Sen
     Ok(())
 }
 
-fn check_and_load_new_cfg(cfg_mgr: &mut ConfigManager, new_cfg_file: &Path, debug: DebugLevel) -> Result<()> {
-    if let Err(e) = ConfigManager::new(Some(new_cfg_file.into()), debug)
+fn check_and_load_new_cfg(cfg_mgr: &mut ConfigManager, new_cfg_file: &Path) -> Result<()> {
+    if let Err(e) = ConfigManager::new(Some(new_cfg_file.into()))
         .context("Config file not found (didn't exist or was lost in space-time transition!)")?
         .load(None)
     {
@@ -239,6 +239,7 @@ pub async fn run(
     debug_idle_tick: bool,
     update_rate_hz: Option<u32>,
     persistent_joysticks_cli: Option<Vec<String>>,
+    write_schema_and_predefined_controls_dump: bool,
     #[cfg(feature = "gui")] gui_monitors: bool,
     #[cfg(feature = "gui")] gui_full: bool,
 ) -> Result<()> {
@@ -260,7 +261,13 @@ pub async fn run(
     }
 
     //----------------------------- CFG MANAGER --------------------------------------
-    let mut cfg_mgr = ConfigManager::new(cfg_file_path.clone().into(), debug)?;
+    let mut cfg_mgr = ConfigManager::new(cfg_file_path.clone().into())?;
+
+    if write_schema_and_predefined_controls_dump {
+        let _ = cfg_mgr
+            .write_schema_and_predefined_controls_files()
+            .inspect_err(|e| log::warn!("Unable to write schema and predefined controls dump: {e}"));
+    }
 
     //----------------------------- DEVICE MANAGERS ---------------------------------
     let hid_mgr = HidManager::new(debug, debug_ff)?;
@@ -428,7 +435,7 @@ pub async fn run(
                         //----
                         commands_rx_count,
                         &mut cmd_rx_buf,
-                        debug
+
                     ) {
                         (DriverMainLoopAction::Continue,_) => {},
                         (DriverMainLoopAction::Halt,_) => {
@@ -458,7 +465,7 @@ pub async fn run(
                             } else {
                                 log::info!("Full reload with initial config (no file)");
                             }
-                            cfg_mgr = ConfigManager::new(cfg_file_path.clone(), debug)?;
+                            cfg_mgr = ConfigManager::new(cfg_file_path.clone())?;
                             continue 'restart_mapping_engine
                         },
                     }
@@ -474,7 +481,7 @@ pub async fn run(
                         return true; })()
                 => {
                     if let Some(cfg_file_name) = cfg_mgr.get_cfg_file() &&
-                        check_and_load_new_cfg(&mut cfg_mgr, &cfg_file_name, debug).is_ok() {
+                        check_and_load_new_cfg(&mut cfg_mgr, &cfg_file_name).is_ok() {
                         log::info!("Config watcher triggered, reloading from file {}.", cfg_file_name.display());
                         mapping_engine.stop()?;
                         continue 'restart_mapping_engine;
@@ -515,7 +522,6 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
     #[cfg(not(feature = "midi"))] mapping_engine: &mut MappingEngine<HidManagerT, ()>,
     cmd_rx_count: usize,
     cmd_rx_buf: &mut Vec<DriverCmd>,
-    debug: DebugLevel,
 ) -> (DriverMainLoopAction, Option<DriverResponseOneShotChannels>) {
     let mut main_loop_action = DriverMainLoopAction::Continue;
     let mut post_reload_report_back_tx = None;
@@ -565,7 +571,7 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                     match cfg_source {
                         LoadCfgSource::File(cfg_file) => {
                             let loading_new_cfg_file = cfg_mgr.get_cfg_file().unwrap_or_default() != *cfg_file;
-                            match check_and_load_new_cfg(cfg_mgr, &cfg_file, debug) {
+                            match check_and_load_new_cfg(cfg_mgr, &cfg_file) {
                                 Ok(_) => {
                                     if loading_new_cfg_file {
                                         log::warn!(

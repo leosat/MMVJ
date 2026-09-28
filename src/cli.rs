@@ -7,7 +7,7 @@ use clap::{ArgAction, Parser};
 #[command(version = crate::config::APP_VERSION_STR)]
 #[command(about = crate::config::APP_ABOUT, long_about = crate::config::APP_LONG_ABOUT)]
 pub struct Cli {
-    #[arg(long, help = "Log to console even if running Gui.", num_args = 0..=1, 
+    #[arg(long, help = "Log to console even if running Gui.", num_args = 0..=1,
     default_value = "false")]
     pub log_to_console: bool,
     #[arg(short, long = "config", alias = "cfg-file-path", default_value = None,
@@ -24,7 +24,7 @@ pub struct Cli {
         help = "Enable debug information output (including related to Force Feedback, override with --debug-ff false)."
     )]
     pub debug: crate::debug::DebugLevel,
-    #[arg(long, help = "Enable Force Feedback debug information output.", num_args = 0..=1, 
+    #[arg(long, help = "Enable Force Feedback debug information output.", num_args = 0..=1,
     default_value = "false")]
     pub debug_ff: bool,
     #[arg(
@@ -44,7 +44,7 @@ pub struct Cli {
     #[arg(long, default_value = crate::config::APP_DEFAULT_MAX_LOG_LEVEL, help = "Limit max log level.")]
     pub log_level: String,
     #[cfg(feature = "gui")]
-    #[arg(long, alias = "gui-monitor", help = "Show monitors Gui (steering axis indicators, etc.).", 
+    #[arg(long, alias = "gui-monitor", help = "Show monitors Gui (steering axis indicators, etc.).",
         num_args = 0..=1, default_value = "false")]
     pub gui_monitors: bool,
     #[cfg(feature = "gui")]
@@ -58,7 +58,9 @@ pub struct Cli {
         num_args = 0..
     )]
     pub persistent_joysticks: Option<Vec<String>>,
-
     #[command(subcommand)]
     pub aux_task: Option<crate::driver::AuxDriverTask>,
+    #[arg(long, help = "Write files containing config schema and predefined control dumps", num_args = 0..=1,
+    default_value = "false")]
+    pub write_schema_and_predefined_controls_dump: bool,
 }
