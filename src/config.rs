@@ -41,6 +41,9 @@ pub const APP_DEFAULT_LATENCY_STR: &str = "normal";
 pub const APP_DEFAULT_MAX_LOG_LEVEL: &str = "warn";
 #[cfg(not(debug_assertions))]
 pub const APP_DEFAULT_MAX_LOG_LEVEL: &str = "error";
+#[cfg(debug_assertions)]
+pub const MIN_BASE_FREQ_HZ: u32 = 1;
+#[cfg(not(debug_assertions))]
 pub const MIN_BASE_FREQ_HZ: u32 = 10;
 pub const DEFAULT_BASE_FREQ_HZ: u32 = 60;
 pub const MAX_BASE_FREQ_HZ: u32 = 1000;
