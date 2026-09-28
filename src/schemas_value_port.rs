@@ -525,7 +525,7 @@ where
                     value,
                     &interval,
                     get_out_of_range_policy(
-                        self.inner.get_relativity(),
+                        self.port_get_relativity(),
                         ctx.map(|ctx| ctx.is_reactive_mode()).unwrap_or(false),
                     ),
                 )
@@ -542,7 +542,7 @@ where
             value,
             &self.port_get_interval(),
             get_out_of_range_policy(
-                self.inner.get_relativity(),
+                self.port_get_relativity(),
                 ctx.map(|ctx| ctx.is_reactive_mode()).unwrap_or(true),
             ),
         ));
