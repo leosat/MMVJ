@@ -344,8 +344,6 @@ pub async fn run(
 
         if let Some(rate) = update_rate_hz {
             mapping_engine.set_mode(cfg_mgr.cfg_ref().global.mode.clone().set_idle_rate(rate).clone());
-        } else {
-            mapping_engine.set_mode(cfg_mgr.cfg_ref().global.mode);
         }
 
         if debug.is_on() {
