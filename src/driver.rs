@@ -294,36 +294,31 @@ pub async fn run(
 
     let mut is_first_run = true;
     'restart_mapping_engine: loop {
-        // ------------------
-        // shared_atomic_state.clear();
-        // ------------------
+        if !is_first_run {
+            hid_mgr.stop(false)?;
+            #[cfg(feature = "midi")]
+            midi_mgr.stop(false)?;
+        }
 
-        /* Virtual Joysticks */
+        for (key, resolved_joystick) in cfg_mgr
+            .cfg_ref()
+            .devices
+            .hid
+            .iter()
+            .filter(|d| d.1.get_classification().is_a_virtual())
         {
-            if !is_first_run {
-                hid_mgr.stop(false)?;
-            }
-
-            for (key, resolved_joystick) in cfg_mgr
-                .cfg_ref()
-                .devices
-                .hid
-                .iter()
-                .filter(|d| d.1.get_classification().is_a_virtual())
-            {
-                if !resolved_joystick.is_enabled() {
-                    hid_mgr.destroy_virtual_device_if_exists(key);
-                    continue;
-                } else {
-                    let mut is_persistent = resolved_joystick.is_persistent();
-                    if let Some(cli_list) = &persistent_joysticks_cli
-                        && (cli_list.contains(&"all".to_string()) || cli_list.contains(&key.into()))
-                    {
-                        is_persistent = true;
-                    }
-                    log::info!("Creating virtual joystick {key}");
-                    hid_mgr.create_virtual_device(key, resolved_joystick, is_persistent)?;
+            if !resolved_joystick.is_enabled() {
+                hid_mgr.destroy_virtual_device_if_exists(key);
+                continue;
+            } else {
+                let mut is_persistent = resolved_joystick.is_persistent();
+                if let Some(cli_list) = &persistent_joysticks_cli
+                    && (cli_list.contains(&"all".to_string()) || cli_list.contains(&key.into()))
+                {
+                    is_persistent = true;
                 }
+                log::info!("Creating virtual joystick {key}");
+                hid_mgr.create_virtual_device(key, resolved_joystick, is_persistent)?;
             }
         }
 
@@ -445,6 +440,8 @@ pub async fn run(
                                         proceeding to stop engine and exit the main process"));
                             }
                             hid_mgr.stop(true)?;
+                            #[cfg(feature = "midi")]
+                            midi_mgr.stop(true)?;
                             mapping_engine.stop()?;
                             std::process::exit(0);
                         }
