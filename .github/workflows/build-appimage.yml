@@ -19,6 +19,8 @@ env:
 jobs:
   check-release:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+
     outputs:
       should_build: ${{ steps.check.outputs.should_build }}
       version: ${{ steps.check.outputs.version }}

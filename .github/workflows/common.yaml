@@ -13,6 +13,7 @@ jobs:
   common-testing:
     name: Common testing
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout Code
@@ -29,7 +30,7 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: "rust-cache-shared" 
+          shared-key: "rust-cache-shared"
 
       # - name: Set up Python
       #   uses: actions/setup-python@v5
@@ -40,14 +41,14 @@ jobs:
         uses: pre-commit/action@v3.0.1
 
       - name: Check example configs
-        run: | 
+        run: |
           cargo build
-          for cfg in conf/example*.yaml; do 
+          for cfg in conf/example*.yaml; do
             cargo run -- -c "$cfg" validate-config false
           done
 
       - name: Build and Test NDF and partial (Debug Mode)
-        run: | 
+        run: |
           cargo test --no-default-features
           cargo test --no-default-features --features=midi
           cargo test --no-default-features --features=gui
