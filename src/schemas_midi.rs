@@ -132,6 +132,12 @@ pub(crate) enum MidiMessageType {
     ProgramChange,
 }
 
+impl MidiMessageType {
+    pub(crate) fn is_a_button(&self) -> bool {
+        matches!(self, Self::NoteOn) || matches!(self, Self::NoteOff)
+    }
+}
+
 impl From<MappedCtlsMidi> for MidiMessageType {
     fn from(value: MappedCtlsMidi) -> Self {
         match value {
