@@ -415,8 +415,6 @@ impl<
 
     fn stop(&mut self) -> Result<()> {
         self.running = false;
-        #[cfg(feature = "midi")]
-        self.midi_mgr.stop(true)?;
         Ok(())
     }
 
