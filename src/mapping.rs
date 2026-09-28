@@ -365,7 +365,7 @@ impl<
         let mapping_tick_period = mode.calc_mapping_tick_period();
 
         let mut idle_ticker = interval(mode.calc_idle_tick_period());
-        let mut mapping_ticker = interval(mode.calc_mapping_tick_period());
+        let mut mapping_ticker = interval(mapping_tick_period);
 
         idle_ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
         mapping_ticker.set_missed_tick_behavior(MissedTickBehavior::Burst);
@@ -374,7 +374,6 @@ impl<
         const DEBUG_MAIN_LOOP_LATENCY: bool = false; // TODO: generalized stats data, observable via Gui.
         let mut last_main_loop_period = std::time::Duration::ZERO;
         while self.running {
-            // let mut mappings_pending = false;
             let main_loop_iter_start = std::time::Instant::now();
             select! {
             biased;
@@ -382,23 +381,17 @@ impl<
             _ = mapping_ticker.tick(), if !is_reactive => self.process_mappings_other(),
             // Then we choose between equally prioritized midi or hid  input events.
             _ = async {
-                #[cfg(feature = "midi")]
                 select! {
-                    event = self.midi_mgr.consume_any_opened_device_event() =>
-                    match event {Some(event) => self.map_midi_event(event),
-                                 None => { log::error!("MIDI manager connection is gone");
-                                 self.running = false;}},
+                    event = {#[cfg(feature = "midi")] {self.midi_mgr.consume_any_opened_device_event()}
+                             #[cfg(not(feature = "midi"))] std::future::pending::<()>()}
+                    => {#[cfg(feature = "midi")] {
+                        match event {Some(event) => self.map_midi_event(event),
+                                     None => { log::error!("MIDI manager connection is gone");
+                                     self.running = false; }}}},
                     event = self.hid_mgr.consume_any_opened_device_event() =>
-                    match event {Some(event) => self.map_hid_event(event),
-                                 None => { log::error!("HID manager connection is gone");
-                                 self.running = false;}},
-                }
-                #[cfg(not(feature = "midi"))]
-                select! {
-                    event = self.hid_mgr.consume_any_opened_device_event() =>
-                    match event {Some(event) => self.map_hid_event(event),
-                                 None => { log::error!("HID manager connection is gone");
-                                 self.running = false;}},
+                        match event {Some(event) => self.map_hid_event(event),
+                                     None => { log::error!("HID manager connection is gone");
+                                     self.running = false; }},
                 }
             } => {
                 // Immediate-priority mappings are being run... immediately, irrespective to execution mode.
