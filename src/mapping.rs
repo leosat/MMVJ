@@ -70,7 +70,6 @@ pub(crate) struct MappingEngine<
     #[cfg(not(feature = "midi"))] MidiManagerT,
 > {
     running: bool,
-    mode: MapperMode,
     // ---
     debug: DebugLevel,
     debug_idle_tick: bool,
@@ -148,7 +147,6 @@ impl<
         Ok(Self {
             // ---
             running: false,
-            mode: cfg.global.mode,
             // ---
             debug,
             debug_idle_tick,
@@ -361,17 +359,19 @@ impl<
     async fn run(&mut self) {
         self.running = true;
 
-        let mut idle_ticker = interval(self.mode.calc_idle_tick_period());
-        let mut mapping_ticker = interval(self.mode.calc_mapping_tick_period());
+        let mode = self.cfg.global.mode;
+        let is_reactive: bool = mode.is_reactive();
+        let is_capped: bool = mode.is_capped();
+        let mapping_tick_period = mode.calc_mapping_tick_period();
+
+        let mut idle_ticker = interval(mode.calc_idle_tick_period());
+        let mut mapping_ticker = interval(mode.calc_mapping_tick_period());
 
         idle_ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
         mapping_ticker.set_missed_tick_behavior(MissedTickBehavior::Burst);
 
         //-------------------------------- MAIN LOOP ----------------------------------
         const DEBUG_MAIN_LOOP_LATENCY: bool = false; // TODO: generalized stats data, observable via Gui.
-        let is_reactive: bool = self.mode.is_reactive();
-        let is_capped: bool = self.mode.is_capped();
-        let mapping_tick_period = self.mode.calc_mapping_tick_period();
         let mut last_main_loop_period = std::time::Duration::ZERO;
         while self.running {
             // let mut mappings_pending = false;
@@ -428,11 +428,11 @@ impl<
     }
 
     fn set_mode(&mut self, mode: MapperMode) {
-        self.mode = mode;
+        self.cfg.global.mode = mode;
     }
 
     fn get_mode(&self) -> &MapperMode {
-        &self.mode
+        &self.cfg.global.mode
     }
 }
 
@@ -725,7 +725,7 @@ impl<
 > TfmExecCtx for MappingTfmExecCtx<'m, 'd, HidManagerT, MidiManagerT>
 {
     fn is_reactive_mode(&self) -> bool {
-        self.mapping_engine.mode.is_reactive()
+        self.mapping_engine.get_mode().is_reactive()
     }
 
     fn get_main_dst(&self) -> Option<&ValueDsts> {
