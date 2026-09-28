@@ -91,6 +91,7 @@ async fn main() -> Result<()> {
         cli.debug_idle_tick,
         cli.idle_tick_update_rate,
         cli.persistent_joysticks,
+        cli.write_schema_and_predefined_controls_dump,
         #[cfg(feature = "gui")]
         cli.gui_monitors,
         #[cfg(feature = "gui")]

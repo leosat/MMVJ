@@ -107,6 +107,12 @@
     "DevicesCfgNew": {
       "type": "object",
       "properties": {
+        "midi": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/MidiMatcherCfg"
+          }
+        },
         "hid": {
           "type": "object",
           "additionalProperties": {
@@ -115,6 +121,150 @@
         }
       },
       "additionalProperties": false
+    },
+    "MidiMatcherCfg": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "$ref": "#/$defs/EnabledFlagCfg"
+        },
+        "match_name_regex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "controls": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/MidiControlMatcherCfg"
+          },
+          "default": {}
+        }
+      }
+    },
+    "EnabledFlagCfg": {
+      "type": "boolean"
+    },
+    "MidiControlMatcherCfg": {
+      "type": "object",
+      "properties": {
+        "midi_message": {
+          "$ref": "#/$defs/MidiMessageCfg"
+        },
+        "range": {
+          "$ref": "#/$defs/NumInterval"
+        },
+        "desc": {
+          "$ref": "#/$defs/DescriptionCfg"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "midi_message",
+        "range"
+      ]
+    },
+    "MidiMessageCfg": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/MappedCtlsMidi"
+        },
+        "channel": {
+          "$ref": "#/$defs/MidiChannelCfg",
+          "default": "any"
+        },
+        "number": {
+          "$ref": "#/$defs/MidiNumberCfg",
+          "default": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    "MappedCtlsMidi": {
+      "type": "string",
+      "enum": [
+        "pitch_wheel",
+        "note",
+        "control_change",
+        "program_change",
+        "aftertouch",
+        "poly_aftertouch",
+        "unhandled"
+      ]
+    },
+    "MidiChannelCfg": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "Any"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Number": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0,
+              "maximum": 255
+            }
+          },
+          "required": [
+            "Number"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "MidiNumberCfg": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0,
+            "maximum": 65535
+          }
+        },
+        {
+          "$ref": "#/$defs/MidiNumberSpecial"
+        }
+      ]
+    },
+    "MidiNumberSpecial": {
+      "anyOf": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "NumInterval": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "number",
+          "format": "float"
+        },
+        {
+          "type": "number",
+          "format": "float"
+        }
+      ],
+      "minItems": 2,
+      "maxItems": 2
     },
     "HidDeviceCfg": {
       "type": "object",
@@ -141,9 +291,6 @@
           "$ref": "#/$defs/HidVirtualParamsCfg"
         }
       ]
-    },
-    "EnabledFlagCfg": {
-      "type": "boolean"
     },
     "HidMatcherParamsCfg": {
       "type": "object",
@@ -993,21 +1140,6 @@
           "const": "ABS_MT_TOOL_Y"
         }
       ]
-    },
-    "NumInterval": {
-      "type": "array",
-      "prefixItems": [
-        {
-          "type": "number",
-          "format": "float"
-        },
-        {
-          "type": "number",
-          "format": "float"
-        }
-      ],
-      "minItems": 2,
-      "maxItems": 2
     },
     "AxisProperties": {
       "type": "object",
@@ -2690,6 +2822,12 @@
         },
         "global": {
           "$ref": "#/$defs/GlobalSettingsCfg"
+        },
+        "midi_devices": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/MidiMatcherCfg"
+          }
         },
         "mouse_devices": {
           "type": "object",

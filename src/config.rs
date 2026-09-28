@@ -1,4 +1,3 @@
-use crate::debug::DebugLevel;
 use crate::device_and_device_manager::WithDeviceClassification;
 use crate::schemas_cfg::*;
 use crate::schemas_control_matcher::ControlMatchers;
@@ -27,7 +26,7 @@ pub const MORE_DEBUG: bool = false;
 pub const APP_VERSION_STR: &str = env!("CARGO_PKG_VERSION");
 pub const CONFIG_VERSION_STR: &str = APP_VERSION_STR;
 pub const APP_DEFAULT_CONFIG_FILE: &str = "conf/default.yaml";
-pub const APP_DEFAULT_PREDEF_CONFIG_FILE_CFG_RELATIVE: &str = "predefined.yaml";
+pub const APP_DEFAULT_PREDEF_CONFIG_FILE_CFG_RELATIVE: &str = "predefined_controls_dump.yaml";
 pub const APP_CONFIG_SCHEMA_FILE_CFG_RELATIVE: &str = "scheme.json";
 pub const APP_AUTHORS: &str = env!("CARGO_PKG_AUTHORS"); // .. and small furry creatures from Alpha Centauri.
 pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
@@ -495,9 +494,7 @@ impl Config {
 #[derive(Debug)]
 pub(crate) struct ConfigManager {
     cfg_file_path_canon: Option<PathBuf>,
-    cfg_schema_file_path_canon: Option<PathBuf>,
     cfg: Config,
-    debug: DebugLevel,
 }
 
 impl ConfigManager {
@@ -515,24 +512,62 @@ impl ConfigManager {
         self.cfg = cfg;
     }
 
-    pub(crate) fn new(cfg_file_path: Option<PathBuf>, debug: DebugLevel) -> Result<Self> {
+    pub(crate) fn write_schema_and_predefined_controls_files(&self) -> Result<()> {
+        if let Some(target_dir) = self
+            .cfg_file_path_canon
+            .as_ref()
+            .map(|cfg_file| {
+                cfg_file
+                    .parent()
+                    .map(|cfg_file_parent_dir| cfg_file_parent_dir.to_path_buf())
+            })
+            .flatten()
+            .or(std::env::current_dir().ok())
+        {
+            let schema_path = target_dir.join(APP_CONFIG_SCHEMA_FILE_CFG_RELATIVE);
+            log::info!(
+                "Generating and saving config schema into {}",
+                schema_path.as_path().display()
+            );
+
+            fs::write(
+                schema_path.as_path(),
+                serde_json::to_string_pretty(&schemars::schema_for!(Config))
+                    .context("Failed to generate schema from internal spec")?,
+            )?;
+
+            let predef_ctls_dump_path = target_dir.join(APP_DEFAULT_PREDEF_CONFIG_FILE_CFG_RELATIVE);
+            log::info!(
+                "Generating and saving predefined controls templates into {}",
+                predef_ctls_dump_path.as_path().display()
+            );
+
+            fs::write(
+                predef_ctls_dump_path.as_path(),
+                serde_saphyr::to_string(&*PREDEF_CONTROLS)
+                    .context("Failed to generate text YAML from predefined controls spec.")?,
+            )?;
+        } else {
+            bail!(
+                "Unable to save schema and predefined controls dump: neither current directory \
+                nor config file directory are available"
+            );
+        };
+        Ok(())
+    }
+
+    pub(crate) fn new(cfg_file_path: Option<PathBuf>) -> Result<Self> {
         Ok(if let Some(cfg_file_path) = cfg_file_path {
             let cfg_file_path_canon =
                 fs::canonicalize(cfg_file_path).context("Failed to canonicalize config file path")?;
             Self {
                 cfg_file_path_canon: cfg_file_path_canon.to_owned().into(),
-                cfg_schema_file_path_canon: cfg_file_path_canon
-                    .with_file_name(APP_CONFIG_SCHEMA_FILE_CFG_RELATIVE)
-                    .into(),
                 cfg: Config::new(cfg_file_path_canon.into()),
-                debug,
             }
         } else {
             Self {
                 cfg_file_path_canon: None,
-                cfg_schema_file_path_canon: None,
                 cfg: Config::new(None),
-                debug,
             }
         })
     }
@@ -543,28 +578,6 @@ impl ConfigManager {
             self.cfg = cfg.1;
         } else if let Some(path) = &self.cfg_file_path_canon {
             log::info!("Loading user config from {}", path.display());
-
-            /* Generate and save config scheme. */
-            let schema = schemars::schema_for!(Config);
-            if let Some(ref schema_path) = self.cfg_schema_file_path_canon {
-                if self.debug.is_on() {
-                    log::debug!(
-                        "Generating and saving config schema into {}",
-                        schema_path.as_path().display()
-                    );
-                }
-
-                if let Err(e) = fs::write(
-                    schema_path.as_path(),
-                    serde_json::to_string_pretty(&schema).context("Failed to generate schema from internal spec")?,
-                ) {
-                    log::warn!(
-                        "Failed to update schema at {} based on internal spec due to: {:?}",
-                        schema_path.as_path().display(),
-                        e
-                    );
-                };
-            }
 
             if !path.exists() {
                 // log::warn!(
@@ -598,33 +611,6 @@ impl ConfigManager {
             }
 
             self.cfg.cfg_file = self.cfg_file_path_canon.clone();
-
-            /* Dumping predefined controls templates for reference. */
-            {
-                let predef_ctls_dump_path = path
-                    .parent()
-                    .expect("Config file path should have a parent directory")
-                    .join("predefined_controls_dump.yaml");
-
-                if self.debug.is_on() {
-                    log::debug!(
-                        "Generating and saving predefined controls templates into {}",
-                        predef_ctls_dump_path.as_path().display()
-                    );
-                }
-
-                if let Err(e) = fs::write(
-                    predef_ctls_dump_path.as_path(),
-                    serde_saphyr::to_string(&*PREDEF_CONTROLS)
-                        .context("Failed to generate text YAML from predefined controls spec.")?,
-                ) {
-                    log::warn!(
-                        "Failed to update predefined controls at {} based on internal spec due to: {:?}",
-                        predef_ctls_dump_path.as_path().display(),
-                        e
-                    );
-                };
-            }
         } else {
             // bail!("Can't load config: neither pre-parsed config provided, nor file path was specified.");
             log::info!("No config specified, loading default bundled demo config");
