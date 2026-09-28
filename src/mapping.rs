@@ -30,11 +30,11 @@ use crate::schemas_value::{ValueSrcs, WithRelativity};
 use crate::tfm_exec::{TfmExecCtx, WithTfmExec};
 use anyhow::Result;
 use log::{debug, info, warn};
+// use num_traits::Zero;
 use std::collections::HashMap;
 use std::fs;
 #[cfg(not(feature = "midi"))]
 use std::marker::PhantomData;
-use std::ops::Not;
 use std::sync::atomic::Ordering::Relaxed;
 use tokio::select;
 use tokio::time::{MissedTickBehavior, interval};
@@ -87,7 +87,8 @@ pub(crate) struct MappingEngine<
     #[allow(clippy::type_complexity)]
     router_index_sysdev_and_ctl_type_to_cms_and_mappings:
         HashMap<(ObjId, MappedCtls), (Vec<ControlMatchers>, Vec<Vec<usize>>)>,
-    router_buff_mappings_to_execute: Vec<usize>,
+    scheduled_mappings_immediate: Vec<usize>,
+    scheduled_mappings_other: Vec<usize>,
     rel_ctls: Vec<*const HidControlMatcherCfg>,
     // ---
     idle_tick_mappings: Vec<usize>,
@@ -160,7 +161,8 @@ impl<
             midi_mgr_placeholder: PhantomData,
             // ---
             router_index_sysdev_and_ctl_type_to_cms_and_mappings: Default::default(),
-            router_buff_mappings_to_execute: Default::default(),
+            scheduled_mappings_immediate: Default::default(),
+            scheduled_mappings_other: Default::default(),
             rel_ctls: Default::default(),
             // ---
             idle_tick_mappings: Default::default(),
@@ -194,7 +196,7 @@ impl<
 
         // ---
         self.router_index_sysdev_and_ctl_type_to_cms_and_mappings.clear();
-        self.router_buff_mappings_to_execute.clear();
+        self.scheduled_mappings_other.clear();
 
         // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         self.reset_rel_ctls_cache();
@@ -331,7 +333,7 @@ impl<
         }
 
         // Run all mappings once on init.
-        self.router_buff_mappings_to_execute.extend(
+        self.scheduled_mappings_other.extend(
             self.cfg
                 .mappings
                 .iter()
@@ -340,8 +342,8 @@ impl<
                 .map(|(i, _)| i)
                 .collect::<Vec<_>>(),
         );
-        self.run_active_mappings();
-        self.router_buff_mappings_to_execute.clear();
+        self.run_mappings(&self.scheduled_mappings_other);
+        self.scheduled_mappings_other.clear();
 
         Ok(())
     }
@@ -372,11 +374,12 @@ impl<
         let mapping_tick_period = self.mode.calc_mapping_tick_period();
         let mut last_main_loop_period = std::time::Duration::ZERO;
         while self.running {
+            // let mut mappings_pending = false;
             let main_loop_iter_start = std::time::Instant::now();
             select! {
             biased;
             // Any scheduled mappings must execute first.
-            _ = mapping_ticker.tick(), if !is_reactive => self.process_mappings(),
+            _ = mapping_ticker.tick(), if !is_reactive => self.process_mappings_other(),
             // Then we choose between equally prioritized midi or hid  input events.
             _ = async {
                 #[cfg(feature = "midi")]
@@ -390,7 +393,6 @@ impl<
                                  None => { log::error!("HID manager connection is gone");
                                  self.running = false;}},
                 }
-
                 #[cfg(not(feature = "midi"))]
                 select! {
                     event = self.hid_mgr.consume_any_opened_device_event() =>
@@ -398,11 +400,15 @@ impl<
                                  None => { log::error!("HID manager connection is gone");
                                  self.running = false;}},
                 }
-            } =>
-            // If the mode is reactive or capped and the frequency is below the threshold,
-            // execute mappings immediately.
+            } => {
+                // Immediate-priority mappings are being run... immediately, irrespective to execution mode.
+                self.process_mappings_immediate();
+                // If the mode is reactive or capped and the frequency is below the threshold,
+                // execute mappings immediately.
                 if is_reactive || (is_capped && last_main_loop_period > mapping_tick_period) {
-                    self.process_mappings();},
+                    self.process_mappings_other();
+                }
+            },
             // Lastly we check to run idle tick, which bursts if we skip it due to any of the above.
             _ = idle_ticker.tick() => self.process_idle_tick()
             }
@@ -484,7 +490,11 @@ impl<
                 .for_each(|(cm_idx, cm)| {
                     cm.set_numeric_value(event.data.get_operational_value());
                     if !mappings.is_empty() {
-                        self.router_buff_mappings_to_execute.extend(&mappings[cm_idx]);
+                        if event.data.message_type.is_a_button() {
+                            self.scheduled_mappings_immediate.extend(&mappings[cm_idx]);
+                        } else {
+                            self.scheduled_mappings_other.extend(&mappings[cm_idx]);
+                        }
                     }
                 });
         }
@@ -512,15 +522,20 @@ impl<
                 } else {
                     event.data.value
                 });
+
                 if !mappings.is_empty() {
-                    self.router_buff_mappings_to_execute.extend(&mappings[cm_idx]);
+                    if event.data.control_type.is_button() || event.data.control_type.is_key() {
+                        self.scheduled_mappings_immediate.extend(&mappings[cm_idx]);
+                    } else {
+                        self.scheduled_mappings_other.extend(&mappings[cm_idx]);
+                    }
                 }
             });
         }
     }
 
-    fn run_active_mappings(&self) {
-        for mapping_idx in self.router_buff_mappings_to_execute.iter() {
+    fn run_mappings(&self, mappings: &Vec<usize>) {
+        for mapping_idx in mappings.iter() {
             let mapping = &self.cfg.mappings[*mapping_idx];
             let input_value = mapping.src.get_numeric_value();
 
@@ -550,23 +565,45 @@ impl<
         });
     }
 
-    fn process_mappings(&mut self) {
-        if self.router_buff_mappings_to_execute.is_empty() {
+    fn process_mappings_other(&mut self) {
+        if self.scheduled_mappings_other.is_empty() {
             return;
         }
         let dedup = true;
-        let shuffle = self.router_buff_mappings_to_execute.len() > 1;
-        Self::dedup_and_shuffle(&mut self.router_buff_mappings_to_execute, dedup, shuffle);
-        self.run_active_mappings();
-        self.router_buff_mappings_to_execute.clear();
+        let shuffle = self.scheduled_mappings_other.len() > 1;
+        Self::dedup_and_shuffle(&mut self.scheduled_mappings_other, dedup, shuffle);
+        self.run_mappings(&self.scheduled_mappings_other);
+        self.scheduled_mappings_other.clear();
         self.clear_rel_ctls();
     }
 
-    fn process_idle_tick(&self) {
-        if self.router_buff_mappings_to_execute.is_empty().not() {
+    fn process_mappings_immediate(&mut self) {
+        if self.scheduled_mappings_immediate.is_empty() {
             return;
         }
-        self.clear_rel_ctls();
+        let dedup = true;
+        let shuffle = self.scheduled_mappings_immediate.len() > 1;
+        Self::dedup_and_shuffle(&mut self.scheduled_mappings_immediate, dedup, shuffle);
+        self.run_mappings(&self.scheduled_mappings_immediate);
+        self.scheduled_mappings_immediate.clear();
+        // We do not reset relative controls after processing immediate mappings.
+    }
+
+    fn process_idle_tick(&self) {
+        if !(self.scheduled_mappings_immediate.is_empty() && self.scheduled_mappings_other.is_empty()) {
+            return;
+        }
+        // self.clear_rel_ctls();
+        // debug_assert!(
+        //     self.scheduled_mappings_immediate.is_empty() && self.scheduled_mappings_other.is_empty(),
+        //     "All the input-triggered mappings must be executed by the time idle tick processing is triggered."
+        // );
+        // debug_assert!(
+        //     self.rel_ctls
+        //         .iter()
+        //         .all(|ctl| unsafe { &**ctl }.get_numeric_value().is_zero()),
+        //     "All the relative control matcher values must be reset to 0 (after mappings execution) by the time idle tick processing is triggered."
+        // );
         for idx in &self.idle_tick_mappings {
             let mapping = &self.cfg.mappings[*idx];
             if let Some(flag) = mapping.dst.get_idle_tick_enabled_flag()
