@@ -1,6 +1,6 @@
 [package]
 name = "mmvj"
-version = "2026.9.30-0"
+version = "2026.9.30-1"
 edition = "2024"
 #rust-version = "1.96.0"
 authors = ["Leonid Satanovskiy"]
@@ -134,16 +134,23 @@ inherits = "release"
 debug = true
 
 [package.metadata.appimage]
-# This will automatically find and bundle shared libraries.
+#desktop_entry = "assets/mmvj.desktop"
+icon = "assets/mmvj.svg"
+categories = ["Utility", "Game", "Controllers"]
+comment = "HID and MIDI transforming I/O mapper and force-feedback-enabled virtual HID manager."
+assets = ["conf", "LICENSE", "LICENSE_THIRDPARTY"]
 auto_link = true
-
-# Except for the below, that can break compatibility.
 auto_link_exclude_list = [
+    "libstdc++.so*",
     "libc.so*",
     "libdl.so*",
     "libpthread.so*",
     "libgcc_s.so*",
     "libm.so*",
     "librt.so*",
-    "ld-linux-x86-64.so*",
+    "ld-linux*",
+    "libGL.so*",
+    "libEGL.so*",
+    "libdrm.so*",
+    "libwayland-client.so*",
 ]

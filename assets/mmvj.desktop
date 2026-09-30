@@ -1,0 +1,8 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Name=${{ env.DISPLAY_NAME }}
+Exec=${{ env.APP_NAME }}
+Icon=${{ env.APP_NAME }}
+Type=Application
+Categories=Utility;Game;
+Comment=HID and MIDI transforming I/O mapper and virtual HID manager

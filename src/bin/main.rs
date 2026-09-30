@@ -1,5 +1,7 @@
 #![cfg_attr(all(not(feature = "default"), not(debug_assertions)), allow(warnings))]
 
+use std::io::IsTerminal;
+
 use anyhow::{Result, bail};
 use clap::Parser;
 use mmvj_lib::config;
@@ -39,7 +41,14 @@ async fn main() -> Result<()> {
     print_app_version_and_built_with_features_banner();
 
     // -------------------------------------------
-    let cli = mmvj_lib::cli::Cli::parse();
+    let cli = {
+        let mut cli = mmvj_lib::cli::Cli::parse();
+        #[cfg(feature = "gui")]
+        if !cli.force_cli && !cli.gui_monitors && !std::io::stdin().is_terminal() {
+            cli.gui_full = true;
+        }
+        cli
+    };
 
     // -------------------------------------------
     {
