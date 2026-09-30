@@ -51,6 +51,12 @@ pub struct Cli {
     #[arg(long, alias = "gui", help = "Show full Gui: monitors + interactive configuration editor/debugger.",
     num_args = 0..=1, default_value = "false")]
     pub gui_full: bool,
+    #[arg(
+        long,
+        help = "Do not automatically open Gui when stdin is not detected as terminal.",
+        default_value = "false"
+    )]
+    pub force_cli: bool,
     // TODO: enable_steering_indicator_console: bool,
     #[arg(
         long,
