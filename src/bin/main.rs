@@ -46,7 +46,7 @@ async fn main() -> Result<()> {
         let mut logger_initialized = false;
 
         #[cfg(feature = "gui")]
-        if cli.gui_full && !cli.log_to_console {
+        if cli.gui_full && !cli.log_to_console && !cli.license {
             egui_logger::builder().init()?;
             logger_initialized = true;
         }
@@ -56,6 +56,15 @@ async fn main() -> Result<()> {
                 .filter_module("mmvj_lib", log::LevelFilter::Debug)
                 .init();
         }
+    }
+
+    if cli.license {
+        print!("\nLicense:\n\n{}", &*crate::config::LICENSE);
+        print!(
+            "\nThird-party components license info:\n\n{}",
+            &*crate::config::LICENSE_THIRDPARTY
+        );
+        std::process::exit(0);
     }
 
     log::info!("------------====--=-=--=--==--====-=-=--==-=--===-=---=------------");

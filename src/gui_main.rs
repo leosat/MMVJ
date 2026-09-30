@@ -418,11 +418,26 @@ impl eframe::App for GuiMain {
                         ui.separator();
                         ui.label(format!(
                             // crate::config::APP_LONG_NAME,
-                            "{} <{}. v. {}>",
+                            "{} <{}. v. {}> (about)",
                             egui_phosphor::fill::TREE_EVERGREEN,
                             crate::config::APP_NAME.to_uppercase(),
                             crate::config::APP_VERSION_STR
-                        ));
+                        ))
+                        .on_hover_ui(|ui| {
+                            ui.vertical(|ui| {
+                                ui.set_min_height(200.0);
+                                ui.collapsing("Licensing information", |ui| {
+                                    ui.collapsing("License", |ui| {
+                                        ui.label(&*crate::config::LICENSE);
+                                    });
+                                    ui.separator();
+                                    ui.collapsing("Third-party components licenses", |ui| {
+                                        egui::ScrollArea::vertical()
+                                            .show(ui, |ui| ui.label(&*crate::config::LICENSE_THIRDPARTY));
+                                    });
+                                });
+                            });
+                        });
                         ui.separator();
                         if !self.cfg.ui.monitors.is_empty() {
                             if !self.show_monitors {

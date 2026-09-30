@@ -1,6 +1,6 @@
 [package]
 name = "mmvj"
-version = "2026.9.28-4"
+version = "2026.9.30-0"
 edition = "2024"
 #rust-version = "1.96.0"
 authors = ["Leonid Satanovskiy"]
@@ -24,6 +24,7 @@ name = "mmvj"
 path = "src/bin/main.rs"
 
 [dependencies]
+include-flate = "0.3.4"
 eframe = { version = "0.36.2", optional = true, features = [
     "glow",
     "persistence",

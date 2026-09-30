@@ -63,4 +63,6 @@ pub struct Cli {
     #[arg(long, help = "Write files containing config schema and predefined control dumps", num_args = 0..=1,
     default_value = "false")]
     pub write_schema_and_predefined_controls_dump: bool,
+    #[arg(long, help = "Print licensing info", default_value = "false")]
+    pub license: bool,
 }
