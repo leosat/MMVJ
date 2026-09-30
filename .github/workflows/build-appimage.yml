@@ -106,6 +106,7 @@ jobs:
           mkdir -p AppDir/usr/share/mmvj
           cp -a target/release/${{ env.APP_NAME }} AppDir/usr/bin/
           cp -r conf AppDir/conf
+          cp -r LICENS* AppDir/
 
           cat <<EOF > AppDir/${{ env.APP_NAME }}.desktop
           [Desktop Entry]
