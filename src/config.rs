@@ -13,7 +13,7 @@ use chrono::Utc;
 use garde::Validate;
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 use traversable::TraversableMut;
 // use yaml_merge_keys::merge_keys_serde;
@@ -504,12 +504,6 @@ impl ConfigManager {
         self.cfg_file_path_canon.clone()
     }
 
-    pub(crate) fn set_cfg_file(&mut self, cfg_file_path: &Path) -> Result<()> {
-        let cfg_file_path_canon = fs::canonicalize(cfg_file_path).context("Failed to canonicalize config file path")?;
-        self.cfg_file_path_canon = cfg_file_path_canon.to_owned().into();
-        Ok(())
-    }
-
     pub(crate) fn set_cfg(&mut self, cfg: Config) {
         self.cfg = cfg;
     }
@@ -558,46 +552,27 @@ impl ConfigManager {
         Ok(())
     }
 
-    pub(crate) fn new(cfg_file_path: Option<PathBuf>) -> Result<Self> {
-        Ok(if let Some(cfg_file_path) = cfg_file_path {
+    pub(crate) fn load_from_file(&mut self, cfg_file_path: PathBuf) -> Result<&mut Self> {
+        Ok({
             let cfg_file_path_canon =
-                fs::canonicalize(cfg_file_path).context("Failed to canonicalize config file path")?;
-            Self {
-                cfg_file_path_canon: cfg_file_path_canon.to_owned().into(),
-                cfg: Config::new(cfg_file_path_canon.into()),
-            }
-        } else {
-            Self {
-                cfg_file_path_canon: None,
-                cfg: Config::new(None),
-            }
-        })
-    }
+                fs::canonicalize(cfg_file_path.clone()).context("Failed to canonicalize config file path")?;
 
-    pub(crate) fn load(&mut self, cfg: Option<(String, Config)>) -> Result<()> {
-        if let Some(cfg) = cfg {
-            log::info!("Loading config {}", cfg.0);
-            self.cfg = cfg.1;
-        } else if let Some(path) = &self.cfg_file_path_canon {
-            log::info!("Loading user config from {}", path.display());
+            log::info!("Loading user config from {}", cfg_file_path_canon.display());
 
-            if !path.exists() {
-                // log::warn!(
-                //     "Configuration file not found, creating default: {:?}",
-                //     self.cfg_file_path_canon
-                // );
-                // self.cfg = Config::default();
-                // let _ = self.save(&None, &None);
-
-                log::error!("Config file is not found at {:?}", self.cfg_file_path_canon);
-                bail!("Config file not found at {:?}", self.cfg_file_path_canon);
+            if !cfg_file_path_canon.exists() {
+                log::error!("Config file is not found at {:?}", cfg_file_path_canon);
+                bail!("Config file not found at {:?}", cfg_file_path_canon);
             }
 
-            let txt = fs::read_to_string(&path).context("Failed to read config file")?;
+            let txt = fs::read_to_string(&cfg_file_path_canon).context("Failed to read config file")?;
             let parse_res: Result<Config, serde_saphyr::Error> = serde_saphyr::from_str(&txt);
 
             match parse_res {
-                Ok(cfg) => self.cfg = cfg,
+                Ok(cfg) => {
+                    self.cfg = cfg;
+                    self.cfg.resolve()?;
+                    self.cfg.validate()?;
+                }
                 Err(e) => {
                     if let Some(location) = e.location()
                         && (location.line() != 0 || location.column() != 0)
@@ -612,26 +587,41 @@ impl ConfigManager {
                 }
             }
 
-            self.cfg.cfg_file = self.cfg_file_path_canon.clone();
-        } else {
-            // bail!("Can't load config: neither pre-parsed config provided, nor file path was specified.");
-            log::info!("No config specified, loading default bundled demo config");
-            return self.load(
+            self.cfg.cfg_file = cfg_file_path.to_owned().into();
+            self.cfg_file_path_canon = cfg_file_path_canon.to_owned().into();
+            self
+        })
+    }
+
+    pub(crate) fn new() -> Self {
+        Self {
+            cfg_file_path_canon: None,
+            cfg: Config::new(None),
+        }
+    }
+
+    pub(crate) fn load_demo(&mut self) -> Result<&mut Self> {
+        log::info!("Loading default bundled demo config");
+        Ok(self
+            .load(
                 DEMO_CFG
                     .lock()
                     .unwrap()
                     .iter()
                     .nth(0)
                     .map(|v| (v.0.clone(), v.1.clone()))
-                    .expect("Can't get bundled demo config")
+                    .context("Can't get bundled demo config")?
                     .into(),
-            );
-        };
+            )
+            .context("Loading demo config failed")?)
+    }
 
+    pub(crate) fn load(&mut self, cfg: (String, Config)) -> Result<&mut Self> {
+        log::info!("Loading config {}", cfg.0);
+        self.cfg = cfg.1;
         self.cfg.resolve()?;
         self.cfg.validate()?;
-
-        Ok(())
+        Ok(self)
     }
 
     fn load_print_cfg_error_context(&mut self, src: &str, line0: usize, after: usize) -> String {

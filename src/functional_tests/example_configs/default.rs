@@ -379,8 +379,10 @@ mod default_config_tests {
         };
 
         let cfg_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("conf/example-default.yaml");
-        let mut cfg_mgr = ConfigManager::new(Some(cfg_path)).unwrap();
-        cfg_mgr.load(None).unwrap();
+        let mut cfg_mgr = ConfigManager::new();
+        cfg_mgr
+            .load_from_file(cfg_path)
+            .expect("Failed to load config from file.");
 
         let cfg_base = cfg_mgr.cfg_ref().clone();
 

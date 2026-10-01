@@ -15,7 +15,7 @@ use crate::midi::{MidiLearnMode, MidiManager};
 use crate::schemas_cfg::Config;
 use crate::schemas_mapping::MapperMode;
 use crate::schemas_mapping::Mapping;
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use clap::Subcommand;
 use colored::Colorize;
 use log::{error, info, warn};
@@ -166,8 +166,8 @@ pub async fn run_aux_task(aux_task: &AuxDriverTask, cfg_file_path: Option<PathBu
         } => {
             if let Some(cfg_file_path) = cfg_file_path {
                 sanitize_cfg_file_path(&cfg_file_path)?;
-                let mut cfg_mgr = ConfigManager::new(cfg_file_path.into())?;
-                cfg_mgr.load(None)?;
+                let mut cfg_mgr = ConfigManager::new();
+                cfg_mgr.load_from_file(cfg_file_path)?;
                 if save_after_valiadation.unwrap_or_default() {
                     cfg_mgr.save(&None, &None)?;
                 }
@@ -208,22 +208,13 @@ fn watch_config_file(cfg_file_path: &std::path::Path, tx: tokio::sync::mpsc::Sen
     Ok(())
 }
 
-fn check_and_load_new_cfg(cfg_mgr: &mut ConfigManager, new_cfg_file: &Path) -> Result<()> {
-    if let Err(e) = ConfigManager::new(Some(new_cfg_file.into()))
-        .context("Config file not found (didn't exist or was lost in space-time transition!)")?
-        .load(None)
-    {
+fn check_and_load_new_cfg<'d>(cfg_mgr: &'d mut ConfigManager, new_cfg_file: &Path) -> Result<&'d mut ConfigManager> {
+    cfg_mgr.load_from_file(new_cfg_file.into()).inspect_err(|e| {
         log::error!("\n---\n!!! Configuration load failed while trying to hot-reload.");
         log::error!("!!! Will continue running with previous config.    _o_O-`  \n---\n");
         log::error!("The error was: \n {:?} \n", e);
         log::warn!("Running with previous (valid) configuration.");
-        bail!(e);
-    } else {
-        info!("Configuration validated. Stopping mapping engine to restart with new configuration.");
-        cfg_mgr.set_cfg_file(new_cfg_file)?;
-        cfg_mgr.load(None)?;
-        Ok(())
-    }
+    })
 }
 
 impl MappedHidManager for HidManager {}
@@ -261,12 +252,18 @@ pub async fn run(
     }
 
     //----------------------------- CFG MANAGER --------------------------------------
-    let mut cfg_mgr = ConfigManager::new(cfg_file_path.clone().into())?;
+    let mut cfg_mgr = ConfigManager::new();
+
+    if let Some(cfg_file_path) = cfg_file_path.clone() {
+        cfg_mgr.load_from_file(cfg_file_path)?;
+    } else {
+        cfg_mgr.load_demo()?;
+    }
 
     if write_schema_and_predefined_controls_dump {
-        let _ = cfg_mgr
+        cfg_mgr
             .write_schema_and_predefined_controls_files()
-            .inspect_err(|e| log::warn!("Unable to write schema and predefined controls dump: {e}"));
+            .inspect_err(|e| log::warn!("Unable to write schema and predefined controls dump: {e}"))?;
     }
 
     //----------------------------- DEVICE MANAGERS ---------------------------------
@@ -284,8 +281,6 @@ pub async fn run(
     //------------------------------ GUI---------------------------------
     #[cfg(feature = "gui")]
     let gui_thread_cancellation_token = CancellationToken::new();
-
-    cfg_mgr.load(None)?;
 
     #[cfg(feature = "gui")]
     let mut gui_thread_handle = if any_gui {
@@ -460,12 +455,11 @@ pub async fn run(
                             mapping_engine.stop()?;
                             if let Some(ref cfg_file_path) = cfg_file_path {
                                 log::info!("Full reload with initial config {}", cfg_file_path.to_string_lossy());
-                                cfg_mgr.set_cfg_file(cfg_file_path).expect("Failed to set config file");
-                                cfg_mgr.load(None).expect("Failed to load config");
+                                cfg_mgr.load_from_file(cfg_file_path.clone())?;
                             } else {
                                 log::info!("Full reload with initial config (no file)");
+                                cfg_mgr.load_demo()?;
                             }
-                            cfg_mgr = ConfigManager::new(cfg_file_path.clone())?;
                             continue 'restart_mapping_engine
                         },
                     }
@@ -593,7 +587,8 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                                         .unwrap()
                                         .iter()
                                         .find(|v| v.0 == demo_name)
-                                        .map(|v| v.clone()),
+                                        .map(|v| v.clone())
+                                        .expect("Failed to get requested demo config"),
                                 )
                                 .inspect_err(|e| log::error!("{e}"));
                             hid_mgr.stop(true).expect("Stopping joysticks failed.");
