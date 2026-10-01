@@ -38,9 +38,9 @@ pub(crate) enum DriverCmd {
     ChangeConfigSimple {
         cfg: Config,
     },
-    ChangeVirtualHids {
+    ChangeVirtualHid {
         cfg: Config,
-        restart_persistent: bool,
+        virtual_hid_key: String,
         report_done_tx: std::sync::mpsc::Sender<()>,
     },
     ChangeMappings {
@@ -294,16 +294,7 @@ pub async fn run(
         None
     };
 
-    let mut is_first_run = true;
     'restart_mapping_engine: loop {
-        if !is_first_run {
-            hid_mgr.stop(false)?;
-            #[cfg(feature = "midi")]
-            midi_mgr.stop(false)?;
-        } else {
-            is_first_run = false;
-        }
-
         for (key, resolved_joystick) in cfg_mgr
             .cfg_ref()
             .devices
@@ -315,13 +306,14 @@ pub async fn run(
                 hid_mgr.destroy_virtual_device_if_exists(key);
                 continue;
             } else {
-                let mut is_persistent = resolved_joystick.is_persistent();
-                if let Some(cli_list) = &persistent_joysticks_cli
-                    && (cli_list.contains(&"all".to_string()) || cli_list.contains(&key.into()))
-                {
-                    is_persistent = true;
-                }
                 log::info!("Creating virtual joystick {key}");
+                let is_persistent = resolved_joystick.is_persistent()
+                    || persistent_joysticks_cli.as_ref().is_some_and(|cli_list| {
+                        cli_list.contains(&"all".to_string()) || cli_list.contains(&key.into())
+                    });
+                if !is_persistent {
+                    hid_mgr.destroy_virtual_device_if_exists(key);
+                }
                 hid_mgr.create_virtual_device(key, resolved_joystick, is_persistent)?;
             }
         }
@@ -517,7 +509,16 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
     let mut post_reload_report_back_tx = None;
     if cmd_rx_count > 0 {
         cmd_rx_buf.dedup_by(|next, prev| {
-            if let (DriverCmd::ChangeVirtualHids { .. }, DriverCmd::ChangeVirtualHids { .. }) = (&*next, &*prev) {
+            if let (
+                DriverCmd::ChangeVirtualHid {
+                    virtual_hid_key: vk1, ..
+                },
+                DriverCmd::ChangeVirtualHid {
+                    virtual_hid_key: vk2, ..
+                },
+            ) = (&*next, &*prev)
+                && vk1 == vk2
+            {
                 std::mem::swap(next, prev);
                 true
             } else if let (DriverCmd::ChangeMappings { .. }, DriverCmd::ChangeMappings { .. }) = (&*next, &*prev) {
@@ -610,19 +611,17 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                     cfg_mgr.cfg_mut().global.mode = mode;
                     mapping_engine.set_mode(mode);
                 }
-                DriverCmd::ChangeVirtualHids {
+                DriverCmd::ChangeVirtualHid {
                     cfg,
-                    restart_persistent,
+                    virtual_hid_key,
                     report_done_tx,
                 } => {
                     log::info!("Updating virtual joysticks definitions.");
                     let _ = mapping_engine.stop().inspect_err(|e| log::error!("{e}"));
                     cfg_mgr.set_cfg(cfg.clone());
                     mapping_engine.set_cfg(cfg);
-                    if restart_persistent {
-                        log::warn!("Virtual device persistence settings will be ignored due to changes requested.");
-                        hid_mgr.stop(true).expect("Stopping HID devices failed.");
-                    }
+                    log::warn!("Will destroy virtual device for cfg key {virtual_hid_key} if it exists");
+                    hid_mgr.destroy_virtual_device_if_exists(&virtual_hid_key);
                     post_reload_report_back_tx = Some(DriverResponseOneShotChannels::Empty(report_done_tx));
                     main_loop_action = DriverMainLoopAction::GoToStartWithCurrentCfg;
                 }

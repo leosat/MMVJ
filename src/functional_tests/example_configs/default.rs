@@ -168,6 +168,10 @@ mod default_config_tests {
         fn stop(&self, _full_shutdown: bool) -> anyhow::Result<()> {
             Ok(())
         }
+
+        fn destroy_virtual_device_if_exists(&self, _device_key: &str) {
+            unimplemented!()
+        }
     }
 
     impl DeviceManagerWithFfb for MockHidManager {
@@ -243,6 +247,10 @@ mod default_config_tests {
         fn set_control_matcher_and_broadcast(&self, _dev_key: &str, _ctl_key: &str, _value: BaseNumT, _silent: bool) {}
         fn stop(&self, _full_shutdown: bool) -> anyhow::Result<()> {
             Ok(())
+        }
+
+        fn destroy_virtual_device_if_exists(&self, _device_key: &str) {
+            unimplemented!()
         }
     }
 

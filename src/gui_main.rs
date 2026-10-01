@@ -7,7 +7,7 @@ use crate::device_and_device_manager::WithDeviceClassification;
 use crate::driver::DriverCmd;
 use crate::gui_common::GuiDndJob;
 use crate::gui_common::{
-    DrawEgui, GuiCmd, GuiCmdVariableChange, GuiCmdVariableRemove, GuiCmdVirtualDeviceChange, GuiInKinds, ScriptAuxKind,
+    DrawEgui, GuiCmd, GuiCmdChangeVirtualHid, GuiCmdVariableChange, GuiCmdVariableRemove, GuiInKinds, ScriptAuxKind,
     draw_collapsing_ui, get_item_name_with_random_suffix,
 };
 use crate::gui_common::{GuiCmdDeviceKeyRename, GuiCmdDeviceMatcherRemove};
@@ -841,8 +841,9 @@ impl GuiMain {
                 let _ = self.cfg.traverse_mut(cmd);
                 self.execute_gui_command(GuiCmd::ConfigChangeSimple)?;
                 if cmd.is_virtual {
-                    self.execute_gui_command(GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
-                        restart_persistent: true,
+                    self.execute_gui_command(GuiCmd::ChangeVirtualHid(GuiCmdChangeVirtualHid {
+                        virtual_hid_key: cmd.old_key.clone(), /* TODO: do not restart, just reassociate they
+                                                              key to already opened device within the HID manager*/
                     }))?;
                 }
             }
@@ -859,8 +860,8 @@ impl GuiMain {
                 self.cfg.sanitize_inplace(());
                 self.execute_gui_command(GuiCmd::ConfigChangeSimple)?;
                 if cmd.is_virtual {
-                    self.execute_gui_command(GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
-                        restart_persistent: true,
+                    self.execute_gui_command(GuiCmd::ChangeVirtualHid(GuiCmdChangeVirtualHid {
+                        virtual_hid_key: cmd.device_key.clone(),
                     }))?;
                 }
             }
@@ -942,13 +943,13 @@ impl GuiMain {
                       {gui_cmd:?}"
                 )
             }
-            GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange { restart_persistent }) => {
+            GuiCmd::ChangeVirtualHid(GuiCmdChangeVirtualHid { virtual_hid_key }) => {
                 self.cfg.sanitize_inplace(());
                 self.reset_available_devices_caches();
                 let (tx, rx) = std::sync::mpsc::channel::<()>();
-                self.send_driver_cmd(DriverCmd::ChangeVirtualHids {
+                self.send_driver_cmd(DriverCmd::ChangeVirtualHid {
                     cfg: self.cfg.clone(),
-                    restart_persistent: *restart_persistent,
+                    virtual_hid_key: virtual_hid_key.clone(),
                     report_done_tx: tx,
                 });
                 let _ = rx
@@ -1264,8 +1265,8 @@ impl GuiMain {
                                     cmd,
                                     GuiCmd::BreakOnErr,
                                     GuiCmd::SubmitPending(
-                                        GuiCmd::VirtualDeviceChange(GuiCmdVirtualDeviceChange {
-                                            restart_persistent: true,
+                                        GuiCmd::ChangeVirtualHid(GuiCmdChangeVirtualHid {
+                                            virtual_hid_key: dmk.clone(),
                                         })
                                         .into(),
                                     ),
