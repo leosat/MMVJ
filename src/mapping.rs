@@ -129,6 +129,20 @@ impl<
     HidManagerT: MappedHidManager,
     #[cfg(feature = "midi")] MidiManagerT: MappedMidiManager,
     #[cfg(not(feature = "midi"))] MidiManagerT,
+> Drop for MappingEngine<'d, HidManagerT, MidiManagerT>
+{
+    fn drop(&mut self) {
+        let _ = self
+            .stop()
+            .inspect_err(|e| log::error!("Error on mapping engine shutdown: {e}"));
+    }
+}
+
+impl<
+    'd,
+    HidManagerT: MappedHidManager,
+    #[cfg(feature = "midi")] MidiManagerT: MappedMidiManager,
+    #[cfg(not(feature = "midi"))] MidiManagerT,
 > Mapper<'d> for MappingEngine<'d, HidManagerT, MidiManagerT>
 {
     type HidManagerT = HidManagerT;
