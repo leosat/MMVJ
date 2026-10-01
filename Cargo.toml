@@ -1,6 +1,6 @@
 [package]
 name = "mmvj"
-version = "2026.9.30-1"
+version = "2026.10.1-0"
 edition = "2024"
 #rust-version = "1.96.0"
 authors = ["Leonid Satanovskiy"]
