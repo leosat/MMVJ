@@ -208,7 +208,7 @@ impl HidManager {
         Ok(())
     }
 
-    pub(crate) fn destroy_virtual_device_if_exists(&self, device_key: &str) {
+    fn destroy_virtual_device_if_exists(&self, device_key: &str) {
         self.device_key_to_devices.borrow_mut().retain(|_, device| {
             if !device.is_empty() {
                 if device_key != device[0].0.borrow().get_cfg_key() {
@@ -473,65 +473,6 @@ impl DeviceManagerCommon for HidManager {
         poll_fn(|cx| self.all_devices_rx.borrow_mut().poll_recv(cx)).await
     }
 
-    fn enumerate_available_devices(&self, filter: Option<Self::DeviceKindFilterT>) -> Vec<Self::AvailableDeviceInfoT> {
-        let Ok(rd) = std::fs::read_dir("/dev/input").inspect_err(|e| log::error!("{e}")) else {
-            return Vec::new();
-        };
-
-        rd.filter_map(|entry| {
-            let path = entry.inspect_err(|e| log::error!("{e:?}")).ok()?.path();
-            let name = path.file_name()?;
-
-            if !name.to_string_lossy().starts_with("event") {
-                return None;
-            }
-
-            let device = evdev::Device::open(&path).inspect_err(|e| log::error!("{e}")).ok()?;
-
-            let device_kind = device.get_classification();
-
-            if let Some(filter) = filter
-                && !filter.intersects(device_kind)
-            {
-                return None;
-            }
-
-            if device_kind.is_empty() {
-                return None;
-            }
-
-            Some(AvailableHIDDeviceInfo {
-                name: device.name().unwrap_or("Unnamed device.").to_string(),
-                path,
-                classification: device.get_classification(),
-            })
-        })
-        .collect()
-    }
-
-    fn stop(&self, full_shutdown: bool) -> Result<()> {
-        for (device_key, devices) in &mut *self.device_key_to_devices.borrow_mut() {
-            devices.retain(|d| {
-                if !full_shutdown && d.0.borrow().is_persistent() {
-                    log::info!("Keeping persistent virtual HID device: {}", device_key);
-                    return true;
-                }
-                if let Err(e) = d.0.borrow().close() {
-                    log::error!(
-                        "Error while closing HID device {}, cfg key: {}: {e}",
-                        device_key,
-                        d.0.borrow().get_name()
-                    );
-                }
-                false
-            });
-        }
-        if full_shutdown {
-            log::info!("All HID devices closed.");
-        }
-        Ok(())
-    }
-
     async fn device_monitor(
         &self,
         match_name_regex: &regex::Regex,
@@ -576,8 +517,71 @@ impl DeviceManagerCommon for HidManager {
         }
     }
 
+    fn enumerate_available_devices(&self, filter: Option<Self::DeviceKindFilterT>) -> Vec<Self::AvailableDeviceInfoT> {
+        let Ok(rd) = std::fs::read_dir("/dev/input").inspect_err(|e| log::error!("{e}")) else {
+            return Vec::new();
+        };
+
+        rd.filter_map(|entry| {
+            let path = entry.inspect_err(|e| log::error!("{e:?}")).ok()?.path();
+            let name = path.file_name()?;
+
+            if !name.to_string_lossy().starts_with("event") {
+                return None;
+            }
+
+            let device = evdev::Device::open(&path).inspect_err(|e| log::error!("{e}")).ok()?;
+
+            let device_kind = device.get_classification();
+
+            if let Some(filter) = filter
+                && !filter.intersects(device_kind)
+            {
+                return None;
+            }
+
+            if device_kind.is_empty() {
+                return None;
+            }
+
+            Some(AvailableHIDDeviceInfo {
+                name: device.name().unwrap_or("Unnamed device.").to_string(),
+                path,
+                classification: device.get_classification(),
+            })
+        })
+        .collect()
+    }
+
     fn set_control_matcher_and_broadcast(&self, device_key: &str, ctl_key: &str, value: BaseNumT, silent: bool) {
         self.set_control_matcher_and_broadcast(device_key, ctl_key, value, silent);
+    }
+
+    fn stop(&self, full_shutdown: bool) -> Result<()> {
+        for (device_key, devices) in &mut *self.device_key_to_devices.borrow_mut() {
+            devices.retain(|d| {
+                if !full_shutdown && d.0.borrow().is_persistent() {
+                    log::info!("Keeping persistent virtual HID device: {}", device_key);
+                    return true;
+                }
+                if let Err(e) = d.0.borrow().close() {
+                    log::error!(
+                        "Error while closing HID device {}, cfg key: {}: {e}",
+                        device_key,
+                        d.0.borrow().get_name()
+                    );
+                }
+                false
+            });
+        }
+        if full_shutdown {
+            log::info!("All HID devices closed.");
+        }
+        Ok(())
+    }
+
+    fn destroy_virtual_device_if_exists(&self, device_key: &str) {
+        self.destroy_virtual_device_if_exists(device_key);
     }
 }
 

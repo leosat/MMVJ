@@ -255,8 +255,8 @@ impl traversable::VisitorMut for GuiCmdScriptAuxRename {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct GuiCmdVirtualDeviceChange {
-    pub(crate) restart_persistent: bool,
+pub(crate) struct GuiCmdChangeVirtualHid {
+    pub(crate) virtual_hid_key: String,
 }
 
 // --------------------------------
@@ -272,7 +272,7 @@ pub(crate) enum GuiCmd {
     LoadCfgDemo(String),
     SaveCfg(Option<PathBuf>, Option<String>),
     // -----------------------------
-    VirtualDeviceChange(GuiCmdVirtualDeviceChange),
+    ChangeVirtualHid(GuiCmdChangeVirtualHid),
     // -----------------------------
     VariableChange(GuiCmdVariableChange),
     VariableRemove(GuiCmdVariableRemove),

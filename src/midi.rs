@@ -557,6 +557,10 @@ impl DeviceManagerCommon for MidiManager {
         self.connections.borrow_mut().clear();
         Ok(())
     }
+
+    fn destroy_virtual_device_if_exists(&self, _device_key: &str) {
+        unimplemented!("No owned virtual MIDI devices support");
+    }
 }
 
 // -------------------------------------------------------------

@@ -124,6 +124,7 @@ pub(crate) trait DeviceManagerCommon {
     ) -> anyhow::Result<()>;
     fn enumerate_available_devices(&self, filter: Option<Self::DeviceKindFilterT>) -> Vec<Self::AvailableDeviceInfoT>;
     fn set_control_matcher_and_broadcast(&self, dev_key: &str, ctl_key: &str, value: BaseNumT, silent: bool);
+    fn destroy_virtual_device_if_exists(&self, device_key: &str);
     fn stop(&self, full_shutdown: bool) -> anyhow::Result<()>;
 }
 
