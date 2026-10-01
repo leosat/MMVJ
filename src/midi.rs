@@ -252,6 +252,14 @@ pub(crate) struct MidiManager {
     note_states: UncheckedRefCell<HashMap<ObjId, HashSet<u8>>>,
 }
 
+impl Drop for MidiManager {
+    fn drop(&mut self) {
+        let _ = self
+            .stop(true)
+            .inspect_err(|e| log::error!("Error on MIDI manager shutdown: {e}"));
+    }
+}
+
 #[allow(non_upper_case_globals)]
 pub(crate) const MIDIv1_CONTROL_INTERVAL: NumInterval<BaseNumT> = NumInterval::<BaseNumT> { from: 0.0, to: 127.0 };
 

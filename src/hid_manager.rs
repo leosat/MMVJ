@@ -41,6 +41,14 @@ pub(crate) struct HidManager {
     all_devices_rx: UncheckedRefCell<tokio::sync::mpsc::UnboundedReceiver<HidDeviceEvent>>,
 }
 
+impl Drop for HidManager {
+    fn drop(&mut self) {
+        let _ = self
+            .stop(true)
+            .inspect_err(|e| log::error!("Error on HID manager shutdown: {e}"));
+    }
+}
+
 impl HidManager {
     pub(crate) fn set_control_matcher_and_broadcast(
         &self,

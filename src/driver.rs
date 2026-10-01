@@ -300,6 +300,8 @@ pub async fn run(
             hid_mgr.stop(false)?;
             #[cfg(feature = "midi")]
             midi_mgr.stop(false)?;
+        } else {
+            is_first_run = false;
         }
 
         for (key, resolved_joystick) in cfg_mgr
@@ -343,10 +345,10 @@ pub async fn run(
             mapping_engine.set_mode(cfg_mgr.cfg_ref().global.mode.clone().set_idle_rate(rate).clone());
         }
 
-        if debug.is_on() {
-            log::debug!("Initializing mapping engine.");
-            let _ = fs::write("cfg_tree.debug_dump.1.txt", format!("{:#?}", cfg_mgr.cfg_ref()));
-        }
+        // if debug.is_on() {
+        //     log::debug!("Initializing mapping engine.");
+        //     let _ = fs::write("cfg_tree.debug_dump.1.txt", format!("{:#?}", cfg_mgr.cfg_ref()));
+        // }
 
         if let Some(tx) = post_restart_response_channel {
             match tx {
@@ -406,8 +408,6 @@ pub async fn run(
         info!("{}", "Press Ctrl+C to stop.".green().bold());
         info!("{}", "=".repeat(50));
 
-        is_first_run = false;
-
         info!(
             "Mapping engine running at {} Hz ... ",
             mapping_engine.get_mode().get_idle_tick_rate()
@@ -441,10 +441,6 @@ pub async fn run(
                                     log::info!("Gui thread finitied with status {v:?}, \
                                         proceeding to stop engine and exit the main process"));
                             }
-                            hid_mgr.stop(true)?;
-                            #[cfg(feature = "midi")]
-                            midi_mgr.stop(true)?;
-                            mapping_engine.stop()?;
                             std::process::exit(0);
                         }
                         (DriverMainLoopAction::GoToStartWithCurrentCfg, report_done_tx) => {
@@ -482,18 +478,18 @@ pub async fn run(
                     }
                 }
                 _ = tokio::signal::ctrl_c() => {
-                    info!("Ctrl+C received, going to terminate. Stopping mapping engine.");
+                    info!("Ctrl+C received, going to terminate.");
                     #[cfg(feature = "gui")]
-                    gui_thread_cancellation_token.cancel();
-                    mapping_engine.stop()?;
-                    hid_mgr.stop(true)?;
-                    #[cfg(feature = "gui")]
-                    if let Some(gui_thread_handle) = gui_thread_handle.take() &&
-                            !gui_thread_handle.is_finished() {
-                        info!("Gui thread still not finished, terminating immediately.");
-                        std::process::exit(0);
+                    {
+                        gui_thread_cancellation_token.cancel();
+                        if let Some(gui_thread_handle) = gui_thread_handle.take() &&
+                                !gui_thread_handle.is_finished() {
+                            info!("Gui thread still not finished, terminating immediately.");
+                            std::process::exit(0);
+                        }
+
                     }
-                    info!("Cleanup complete, terminating.");
+                    info!("Terminating.");
                     return Ok(())
                 }
             }
