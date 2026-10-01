@@ -61,7 +61,11 @@ pub(crate) enum MapperModeSerdeHelper {
         mapping_rate: u32,
     },
     Simple {
-        #[serde(default = "crate::config::default_base_freq_hz")]
+        #[serde(
+            rename = "idle_rate",
+            alias = "idle_tick_rate",
+            default = "crate::config::default_base_freq_hz"
+        )]
         idle_rate: u32,
     },
 }
