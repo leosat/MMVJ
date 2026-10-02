@@ -451,7 +451,12 @@ impl HidDevice {
             }
         }
 
-        let mut device = Self::open_from_path(client_side_path.to_str().unwrap(), ctl_states, creation_spec.debug)?;
+        let mut device = Self::open_from_path(
+            client_side_path.to_str().unwrap(),
+            ctl_states,
+            Some(virtual_device_id),
+            creation_spec.debug,
+        )?;
 
         device.classification.insert(DeviceKind::Virtual);
         device.is_owned_virtual_device = true;
@@ -482,17 +487,101 @@ impl HidDevice {
     pub(crate) fn open_from_path(
         path: &str,
         ctl_states: Option<Arc<DeviceControlStates>>,
+        device_id: Option<ObjId>,
         debug: DebugLevel,
     ) -> anyhow::Result<HidDevice>
     where
         Self: Sized,
     {
-        anyhow::Ok(Self::init_with_opened_device(
-            evdev::Device::open(path)?,
-            PathBuf::from_str(path)?,
+        let platform_device = evdev::Device::open(path)?;
+        let device_path: PathBuf = PathBuf::from_str(path)?;
+
+        let device_name = platform_device.name().unwrap_or("Unknown device name").to_string();
+
+        // device.grab();
+        // device.ungrab();
+
+        let ctl_states = if let Some(ctl_states) = ctl_states {
+            ctl_states
+        } else {
+            Arc::new(std::array::from_fn(|_| Default::default()))
+        };
+
+        let mut ctl_intervals: [NumInterval<BaseNumT>; MappedCtls::Unhandled as usize] =
+            std::array::from_fn(|_| ZERO_INTERVAL);
+
+        if let Some(abs_axes) = platform_device.supported_absolute_axes() {
+            for abs in abs_axes {
+                if let Some(abs_info) = platform_device.get_abs_state()?.get(abs.0 as usize) {
+                    if let Ok(ctl) = MappedCtls::try_from(abs) {
+                        ctl_intervals[ctl as usize].from = abs_info.minimum as BaseNumT;
+                        ctl_intervals[ctl as usize].to = abs_info.maximum as BaseNumT;
+                        ctl_states[ctl as usize]
+                            .store(abs_info.value as BaseNumT, std::sync::atomic::Ordering::Relaxed);
+                        if debug.is_on() {
+                            log::debug!(
+                                "Abs info for {device_path:?} axis {} {:?}",
+                                abs.0,
+                                ctl_intervals[ctl as usize]
+                            )
+                        }
+                    }
+                } else {
+                    log::error!(
+                        "HID device {device_name} does not support the {abs:?} axis, although reported as supported."
+                    );
+                }
+            }
+        }
+
+        let (tx1, rx1) = tokio::sync::mpsc::unbounded_channel::<DeviceThreadCmd>();
+        let (tx2, rx2) = tokio::sync::mpsc::unbounded_channel::<DeviceThreadCmd>();
+        let cancellation_token = CancellationToken::new();
+        let opened_device_id = device_id.unwrap_or(ObjId::from(intern_str(&device_name)));
+
+        let classification = platform_device.get_classification();
+
+        {
+            let device_name = device_name.clone();
+            let cancellation_token = cancellation_token.clone();
+            let ctl_states = ctl_states.clone();
+            std::thread::spawn(move || {
+                tokio::runtime::Builder::new_current_thread()
+                    .thread_name(format!("HID general thread for {device_name}"))
+                    .enable_all()
+                    .build()
+                    .unwrap()
+                    .block_on(Self::run_main_device_event_thread(
+                        opened_device_id,
+                        platform_device,
+                        cancellation_token,
+                        &device_name,
+                        ctl_states,
+                        (rx2, tx1),
+                        debug,
+                    ));
+            });
+        }
+
+        anyhow::Ok(Self {
+            id: opened_device_id,
+            name: device_name,
+            _client_side_path: device_path,
+            is_owned_virtual_device: false,
+            is_owned_virtual_device_persistent: false,
+            owned_virtual_device: None,
+            owned_virtual_device_cmd: None,
+            owned_virtual_device_thread_cancellation: None,
+            events_listener: None,
+            client_side_thread_rx_tx: (rx1, tx2),
+            client_side_thread_cancellation: cancellation_token,
             ctl_states,
-            debug,
-        )?)
+            ff_enabled: false,
+            owned_virtual_device_thread_io: None,
+            ff_is_a_condition_effect_enabled: false,
+            cfg_key: "no cfg key".into(),
+            classification,
+        })
     }
 
     pub(crate) fn ff_get_x_sum_symm_norm(&self) -> BaseNumT {
@@ -775,100 +864,6 @@ impl HidDevice {
                 self.name
             );
         }
-    }
-
-    fn init_with_opened_device(
-        platform_device: evdev::Device,
-        device_path: PathBuf,
-        ctl_states: Option<Arc<DeviceControlStates>>,
-        debug: DebugLevel,
-    ) -> anyhow::Result<Self> {
-        let device_name = platform_device.name().unwrap_or("Unknown device name").to_string();
-
-        // device.grab();
-        // device.ungrab();
-
-        let ctl_states = if let Some(ctl_states) = ctl_states {
-            ctl_states
-        } else {
-            Arc::new(std::array::from_fn(|_| Default::default()))
-        };
-
-        let mut ctl_intervals: [NumInterval<BaseNumT>; MappedCtls::Unhandled as usize] =
-            std::array::from_fn(|_| ZERO_INTERVAL);
-
-        if let Some(abs_axes) = platform_device.supported_absolute_axes() {
-            for abs in abs_axes {
-                if let Some(abs_info) = platform_device.get_abs_state()?.get(abs.0 as usize) {
-                    if let Ok(ctl) = MappedCtls::try_from(abs) {
-                        ctl_intervals[ctl as usize].from = abs_info.minimum as BaseNumT;
-                        ctl_intervals[ctl as usize].to = abs_info.maximum as BaseNumT;
-                        ctl_states[ctl as usize]
-                            .store(abs_info.value as BaseNumT, std::sync::atomic::Ordering::Relaxed);
-                        if debug.is_on() {
-                            log::debug!(
-                                "Abs info for {device_path:?} axis {} {:?}",
-                                abs.0,
-                                ctl_intervals[ctl as usize]
-                            )
-                        }
-                    }
-                } else {
-                    log::error!(
-                        "HID device {device_name} does not support the {abs:?} axis, although reported as supported."
-                    );
-                }
-            }
-        }
-
-        let (tx1, rx1) = tokio::sync::mpsc::unbounded_channel::<DeviceThreadCmd>();
-        let (tx2, rx2) = tokio::sync::mpsc::unbounded_channel::<DeviceThreadCmd>();
-        let cancellation_token = CancellationToken::new();
-        let opened_device_id = ObjId::from(intern_str(&device_name));
-
-        let classification = platform_device.get_classification();
-
-        {
-            let device_name = device_name.clone();
-            let cancellation_token = cancellation_token.clone();
-            let ctl_states = ctl_states.clone();
-            std::thread::spawn(move || {
-                tokio::runtime::Builder::new_current_thread()
-                    .thread_name(format!("HID general thread for {device_name}"))
-                    .enable_all()
-                    .build()
-                    .unwrap()
-                    .block_on(Self::run_main_device_event_thread(
-                        opened_device_id,
-                        platform_device,
-                        cancellation_token,
-                        &device_name,
-                        ctl_states,
-                        (rx2, tx1),
-                        debug,
-                    ));
-            });
-        }
-
-        anyhow::Ok(Self {
-            id: opened_device_id,
-            name: device_name,
-            _client_side_path: device_path,
-            is_owned_virtual_device: false,
-            is_owned_virtual_device_persistent: false,
-            owned_virtual_device: None,
-            owned_virtual_device_cmd: None,
-            owned_virtual_device_thread_cancellation: None,
-            events_listener: None,
-            client_side_thread_rx_tx: (rx1, tx2),
-            client_side_thread_cancellation: cancellation_token,
-            ctl_states,
-            ff_enabled: false,
-            owned_virtual_device_thread_io: None,
-            ff_is_a_condition_effect_enabled: false,
-            cfg_key: "no cfg key".into(),
-            classification,
-        })
     }
 }
 
