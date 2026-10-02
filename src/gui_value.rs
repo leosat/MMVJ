@@ -189,8 +189,8 @@ fn get_new_value_target<'s>(gui_in: GuiInValue<'s>, ui: &mut egui::Ui) -> Option
             ui,
             params.name,
             params.name,
-            params.gui_common_ctx.cfg_devices(),
-            params.gui_common_ctx.cfg_variables(),
+            params.gui_common_ctx.cfg_devices,
+            params.gui_common_ctx.cfg_variables,
         )
     {
         target.into()
@@ -396,7 +396,7 @@ where
             ui.label(
                 params
                     .gui_common_ctx
-                    .get_style()
+                    .style
                     .value_identity_decorate(egui::RichText::new(this.value_identity())),
             );
 

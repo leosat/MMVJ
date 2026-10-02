@@ -168,96 +168,27 @@ fn draw_graph_docked_or_windowed(
 // ---------------------------------
 
 #[derive(Copy, Clone)]
-pub(crate) enum GuiInCommon<'g> {
-    Edit {
-        style: &'g GuiStyle,
-        graph_states: &'g UncheckedRefCell<GuiTelemetryGraphStates>,
-        mode: &'g MapperMode,
-        cfg_devices: &'g DevicesCfgNew,
-        cfg_variables: &'g VariablesCfg,
-        #[allow(clippy::all)]
-        transient_script_aux_edits: &'g UncheckedRefCell<HashMap<(ObjId, ScriptAuxKind), (String, String)>>,
-        hier: &'g UncheckedRefCell<Vec<usize>>,
-    },
-    _Display {
-        style: &'g GuiStyle,
-        mode: &'g MapperMode,
-        graph_states: &'g UncheckedRefCell<GuiTelemetryGraphStates>,
-        cfg_devices: &'g DevicesCfgNew,
-        cfg_variables: &'g VariablesCfg,
-    },
+pub(crate) struct GuiInCommon<'g> {
+    pub(crate) style: &'g GuiStyle,
+    pub(crate) graph_states: &'g UncheckedRefCell<GuiTelemetryGraphStates>,
+    pub(crate) mode: &'g MapperMode,
+    pub(crate) cfg_devices: &'g DevicesCfgNew,
+    pub(crate) cfg_variables: &'g VariablesCfg,
+    #[allow(clippy::all)]
+    pub(crate) transient_script_aux_edits: &'g UncheckedRefCell<HashMap<(ObjId, ScriptAuxKind), (String, String)>>,
+    pub(crate) hier: &'g UncheckedRefCell<Vec<usize>>,
 }
 
 impl<'g> GuiInCommon<'g> {
-    pub(crate) fn get_mode(&self) -> &'g MapperMode {
-        match self {
-            GuiInCommon::Edit { mode, .. } => mode,
-            GuiInCommon::_Display { mode, .. } => mode,
-        }
-    }
-    pub(crate) fn get_style(&self) -> &'g GuiStyle {
-        match self {
-            Self::Edit { style, .. } => style,
-            Self::_Display { style, .. } => style,
-        }
-    }
-
-    pub(crate) fn _get_graph_states(&self) -> &'g UncheckedRefCell<GuiTelemetryGraphStates> {
-        match self {
-            Self::Edit { graph_states, .. } => graph_states,
-            Self::_Display { graph_states, .. } => graph_states,
-        }
-    }
-
-    pub(crate) fn cfg_devices(&self) -> &'g DevicesCfgNew {
-        match self {
-            Self::Edit { cfg_devices, .. } => cfg_devices,
-            Self::_Display { cfg_devices, .. } => cfg_devices,
-        }
-    }
-
-    pub(crate) fn cfg_variables(&self) -> &'g VariablesCfg {
-        match self {
-            Self::Edit { cfg_variables, .. } => cfg_variables,
-            Self::_Display { cfg_variables, .. } => cfg_variables,
-        }
-    }
-
-    #[allow(clippy::type_complexity)]
-    pub(crate) fn _transient_script_aux_edits(
-        &self,
-    ) -> Option<&'g UncheckedRefCell<HashMap<(ObjId, ScriptAuxKind), (String, String)>>> {
-        match self {
-            Self::Edit {
-                transient_script_aux_edits,
-                ..
-            } => Some(transient_script_aux_edits),
-            Self::_Display { .. } => None,
-        }
-    }
-
     pub(crate) fn clone_and_push_hier(&self, id: ObjId) -> Self {
         #[allow(clippy::clone_on_copy)]
-        let mut tmp = self.clone();
-        match &mut tmp {
-            GuiInCommon::Edit { hier, .. } => (*hier).borrow_mut().push(*id),
-            GuiInCommon::_Display { .. } => {}
-        }
+        let tmp = self.clone();
+        tmp.hier.borrow_mut().push(*id);
         tmp
     }
 
     pub(crate) fn get_hier(&self) -> Option<Vec<usize>> {
-        match self {
-            GuiInCommon::Edit { hier: obj_ids_hier, .. } => obj_ids_hier.borrow_mut().to_vec().into(),
-            GuiInCommon::_Display { .. } => None,
-        }
-    }
-
-    pub(crate) fn is_editor(&self) -> bool {
-        match self {
-            GuiInCommon::Edit { .. } => true,
-            GuiInCommon::_Display { .. } => false,
-        }
+        self.hier.borrow_mut().to_vec().into()
     }
 }
 
@@ -304,175 +235,171 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
     type Out = Option<GuiCmd>;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
-        if gui_in.is_editor() {
-            let mut gui_out = None;
-            let gui_out_mut = &mut gui_out;
+        let mut gui_out = None;
+        let gui_out_mut = &mut gui_out;
 
+        ui.separator();
+
+        // ui.collapsing("Description", |ui| self.desc.egui(GuiInKinds::Edit, ui))
+        //     .body_returned
+        //     .unwrap_or_default()
+        //     .inspect(|out| *gui_out_mut = Some(out.clone()));
+
+        if let AutoOrManual::Manual(in_meta) = self.in_meta_mut() {
             ui.separator();
-
-            // ui.collapsing("Description", |ui| self.desc.egui(GuiInKinds::Edit, ui))
-            //     .body_returned
-            //     .unwrap_or_default()
-            //     .inspect(|out| *gui_out_mut = Some(out.clone()));
-
-            if let AutoOrManual::Manual(in_meta) = self.in_meta_mut() {
-                ui.separator();
-                let mut changed = false;
-                ui.horizontal(|ui| {
-                    ui.label("Input range:");
-                    changed |= in_meta.interval.egui(
-                        GuiInInterval::Edit {
-                            max_range: HID_AXIS_MAX_RANGE,
-                            from_label: "",
-                            to_label: "",
-                            sanitize_and_sort: true,
-                            truncate: false,
-                        },
-                        ui,
-                    );
-
-                    ui.separator();
-                    ui.label("Input relativity:");
-                    changed |= in_meta.relativity.egui(GuiInKinds::Edit, ui);
-                });
-
-                if changed {
-                    self.recompute_metadata_and_sanitize_recursive(None);
-                    *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
-                }
-            } else {
-                ui.horizontal(|ui| {
-                    ui.label(format!(
-                        "{} {} -> {} {}",
-                        self.get_in_relativity(),
-                        self.get_in_interval(),
-                        self.get_out_relativity(),
-                        self.get_out_interval(),
-                    ));
-                });
-            }
-
-            ui.separator();
+            let mut changed = false;
             ui.horizontal(|ui| {
-                // '_Add_New_Tfm_Step:
-                let is_win_opened_egui_id = ui.make_persistent_id("+ add step").with(*self.id); // gui::Id::new("Create new step window").with(self.id); // ui.make_persistent_id("..");
-                let is_win_opened = &mut ui.data_mut(|d| d.get_temp::<bool>(is_win_opened_egui_id).unwrap_or(false));
-                if !*is_win_opened {
-                    if ui.small_button("add step".to_string()).clicked() {
-                        *is_win_opened = true;
-                    }
-                } else {
-                    ui.label("... choosing step to add ...");
-                }
+                ui.label("Input range:");
+                changed |= in_meta.interval.egui(
+                    GuiInInterval::Edit {
+                        max_range: HID_AXIS_MAX_RANGE,
+                        from_label: "",
+                        to_label: "",
+                        sanitize_and_sort: true,
+                        truncate: false,
+                    },
+                    ui,
+                );
 
-                let step_to_add_opt = egui::Window::new("Select transformation to add...")
-                    .id(is_win_opened_egui_id)
-                    .open(is_win_opened)
-                    .resizable(true)
-                    .order(egui::Order::TOP)
-                    .show(ui.ctx(), |ui| {
-                        ui.separator();
-                        static STEPS_TEMPLATES_CACHE: std::sync::LazyLock<std::sync::Mutex<Vec<TfmStepCfg>>> =
-                            std::sync::LazyLock::new(|| TfmStepCfg::iter().collect::<Vec<_>>().into());
-                        let mut step_to_add = None;
-                        for step in &*STEPS_TEMPLATES_CACHE.lock().unwrap() {
-                            let btn_response = ui.add(Button::new(step.to_string()).sense(Sense::click_and_drag()));
-                            if btn_response.clicked() {
-                                step_to_add = Some(step.duplicate_with_new_state());
-                            } else if btn_response.drag_started() {
-                                btn_response.dnd_set_drag_payload(GuiDndJob::NewTfmStep(std::sync::Arc::new(
-                                    std::sync::Mutex::new(GuiDndJobNewTfmStep {
-                                        step: step.duplicate_with_new_state(),
-                                    }),
-                                )));
-                                // TODO?: maybe visual feedback of draggin the button...
-                            }
-                        }
-                        ui.separator();
-                        step_to_add
-                    });
-
-                if let Some(step_to_add) = step_to_add_opt
-                    && let Some(step) = step_to_add.inner.flatten()
-                {
-                    self.steps.push(step);
-                    *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
-                }
-
-                ui.data_mut(|d| d.insert_temp(is_win_opened_egui_id, *is_win_opened));
+                ui.separator();
+                ui.label("Input relativity:");
+                changed |= in_meta.relativity.egui(GuiInKinds::Edit, ui);
             });
 
-            ui.separator();
-
-            let mut matched_dnd_job = None;
-            let hier = gui_in.get_hier().unwrap();
-            for (step_idx, step) in self.steps.iter_mut().enumerate() {
-                // -- dnd detect drop.
-                if matched_dnd_job.is_none() {
-                    matched_dnd_job = egui_dnd_drop_job_to_insert_job(
-                        ui.dnd_drop_zone::<GuiDndJob, _>(egui::Frame::default(), |ui| {
-                            ui.separator();
-                        }),
-                        &hier,
-                        step_idx,
-                    );
-                }
-
-                ui.push_id(step.get_id(), |ui| {
-                    step.egui((step_idx, *self.id, gui_in), ui)
-                        .inspect(|out| *gui_out_mut = gui_out_mut.clone().or(Some(out.clone())))
-                });
-            }
-
-            // -- dnd detect drop at array tail.
-            matched_dnd_job = matched_dnd_job.or(egui_dnd_drop_job_to_insert_job(
-                ui.dnd_drop_zone::<GuiDndJob, _>(egui::Frame::new(), |ui| {
-                    ui.separator();
-                }),
-                &hier,
-                usize::MAX,
-            ));
-
-            if let Some((dst_obj_idx, dnd_job_tmp)) = &mut matched_dnd_job {
-                if MORE_DEBUG {
-                    dbg!("Dropping!");
-                }
-                match dnd_job_tmp {
-                    GuiDndJob::MoveTfmStep(dnd_job_tmp) => {
-                        if dnd_job_tmp.dst_container_id_opt.is_none() {
-                            dnd_job_tmp.dst_container_id_opt = Some(self.id);
-                        }
-                        if dnd_job_tmp.dst_idx_opt.is_none() {
-                            dnd_job_tmp.dst_idx_opt = Some(*dst_obj_idx);
-                        }
-                        dnd_job_tmp.do_copy = ui.input(|i| i.modifiers.ctrl);
-                        gui_out = gui_out.or(Some(GuiCmd::DragAndDrop(GuiDndJob::MoveTfmStep(dnd_job_tmp.clone()))));
-                    }
-                    GuiDndJob::NewTfmStep(dnd_job) => {
-                        if *dst_obj_idx == usize::MAX {
-                            self.steps.push(dnd_job.lock().unwrap().step.clone());
-                        } else {
-                            self.steps.insert(*dst_obj_idx, dnd_job.lock().unwrap().step.clone());
-                        }
-                        gui_out = gui_out.or(Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter)));
-                    }
-                }
-            }
-
-            // -----------------------------------------
-            if gui_out.is_some() {
-                if let Some(GuiCmd::LocalItemRemove(idx)) = gui_out {
-                    self.steps.remove(idx);
-                    gui_out = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
-                }
+            if changed {
                 self.recompute_metadata_and_sanitize_recursive(None);
+                *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
+            }
+        } else {
+            ui.horizontal(|ui| {
+                ui.label(format!(
+                    "{} {} -> {} {}",
+                    self.get_in_relativity(),
+                    self.get_in_interval(),
+                    self.get_out_relativity(),
+                    self.get_out_interval(),
+                ));
+            });
+        }
+
+        ui.separator();
+        ui.horizontal(|ui| {
+            // '_Add_New_Tfm_Step:
+            let is_win_opened_egui_id = ui.make_persistent_id("+ add step").with(*self.id); // gui::Id::new("Create new step window").with(self.id); // ui.make_persistent_id("..");
+            let is_win_opened = &mut ui.data_mut(|d| d.get_temp::<bool>(is_win_opened_egui_id).unwrap_or(false));
+            if !*is_win_opened {
+                if ui.small_button("add step".to_string()).clicked() {
+                    *is_win_opened = true;
+                }
+            } else {
+                ui.label("... choosing step to add ...");
             }
 
-            // dbg!(&gui_out);
-            gui_out
-        } else {
-            unreachable!()
+            let step_to_add_opt = egui::Window::new("Select transformation to add...")
+                .id(is_win_opened_egui_id)
+                .open(is_win_opened)
+                .resizable(true)
+                .order(egui::Order::TOP)
+                .show(ui.ctx(), |ui| {
+                    ui.separator();
+                    static STEPS_TEMPLATES_CACHE: std::sync::LazyLock<std::sync::Mutex<Vec<TfmStepCfg>>> =
+                        std::sync::LazyLock::new(|| TfmStepCfg::iter().collect::<Vec<_>>().into());
+                    let mut step_to_add = None;
+                    for step in &*STEPS_TEMPLATES_CACHE.lock().unwrap() {
+                        let btn_response = ui.add(Button::new(step.to_string()).sense(Sense::click_and_drag()));
+                        if btn_response.clicked() {
+                            step_to_add = Some(step.duplicate_with_new_state());
+                        } else if btn_response.drag_started() {
+                            btn_response.dnd_set_drag_payload(GuiDndJob::NewTfmStep(std::sync::Arc::new(
+                                std::sync::Mutex::new(GuiDndJobNewTfmStep {
+                                    step: step.duplicate_with_new_state(),
+                                }),
+                            )));
+                            // TODO?: maybe visual feedback of draggin the button...
+                        }
+                    }
+                    ui.separator();
+                    step_to_add
+                });
+
+            if let Some(step_to_add) = step_to_add_opt
+                && let Some(step) = step_to_add.inner.flatten()
+            {
+                self.steps.push(step);
+                *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
+            }
+
+            ui.data_mut(|d| d.insert_temp(is_win_opened_egui_id, *is_win_opened));
+        });
+
+        ui.separator();
+
+        let mut matched_dnd_job = None;
+        let hier = gui_in.get_hier().unwrap();
+        for (step_idx, step) in self.steps.iter_mut().enumerate() {
+            // -- dnd detect drop.
+            if matched_dnd_job.is_none() {
+                matched_dnd_job = egui_dnd_drop_job_to_insert_job(
+                    ui.dnd_drop_zone::<GuiDndJob, _>(egui::Frame::default(), |ui| {
+                        ui.separator();
+                    }),
+                    &hier,
+                    step_idx,
+                );
+            }
+
+            ui.push_id(step.get_id(), |ui| {
+                step.egui((step_idx, *self.id, gui_in), ui)
+                    .inspect(|out| *gui_out_mut = gui_out_mut.clone().or(Some(out.clone())))
+            });
         }
+
+        // -- dnd detect drop at array tail.
+        matched_dnd_job = matched_dnd_job.or(egui_dnd_drop_job_to_insert_job(
+            ui.dnd_drop_zone::<GuiDndJob, _>(egui::Frame::new(), |ui| {
+                ui.separator();
+            }),
+            &hier,
+            usize::MAX,
+        ));
+
+        if let Some((dst_obj_idx, dnd_job_tmp)) = &mut matched_dnd_job {
+            if MORE_DEBUG {
+                dbg!("Dropping!");
+            }
+            match dnd_job_tmp {
+                GuiDndJob::MoveTfmStep(dnd_job_tmp) => {
+                    if dnd_job_tmp.dst_container_id_opt.is_none() {
+                        dnd_job_tmp.dst_container_id_opt = Some(self.id);
+                    }
+                    if dnd_job_tmp.dst_idx_opt.is_none() {
+                        dnd_job_tmp.dst_idx_opt = Some(*dst_obj_idx);
+                    }
+                    dnd_job_tmp.do_copy = ui.input(|i| i.modifiers.ctrl);
+                    gui_out = gui_out.or(Some(GuiCmd::DragAndDrop(GuiDndJob::MoveTfmStep(dnd_job_tmp.clone()))));
+                }
+                GuiDndJob::NewTfmStep(dnd_job) => {
+                    if *dst_obj_idx == usize::MAX {
+                        self.steps.push(dnd_job.lock().unwrap().step.clone());
+                    } else {
+                        self.steps.insert(*dst_obj_idx, dnd_job.lock().unwrap().step.clone());
+                    }
+                    gui_out = gui_out.or(Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter)));
+                }
+            }
+        }
+
+        // -----------------------------------------
+        if gui_out.is_some() {
+            if let Some(GuiCmd::LocalItemRemove(idx)) = gui_out {
+                self.steps.remove(idx);
+                gui_out = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
+            }
+            self.recompute_metadata_and_sanitize_recursive(None);
+        }
+
+        // dbg!(&gui_out);
+        gui_out
     }
 }
 
@@ -486,189 +413,170 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
         let step_idx = gui_in.0;
         let container_id = gui_in.1;
         let step_id = self.get_id();
-        match gui_in.2 {
-            GuiInCommon::Edit {
-                graph_states,
-                cfg_devices,
-                cfg_variables,
-                ..
-            } => {
-                let transform_name = self.to_string();
-                let label = format!("({}) {}", step_idx + 1, transform_name);
-                let is_enabled = *self.get_enabled_ref_mut();
-                let state_id = self.get_id();
-                let heading = if !is_enabled {
-                    gui_in
-                        .2
-                        .get_style()
-                        .tfm_title_decorate_disabled(egui::RichText::new(&label))
-                } else {
-                    gui_in
-                        .2
-                        .get_style()
-                        .tfm_title_decorate_enabled(egui::RichText::new(&label))
-                };
-                ui.scope_builder(
-                    egui::UiBuilder::new().id(egui::Id::new(container_id).with(state_id)),
-                    |ui| {
-                        let collapsing = egui::collapsing_header::CollapsingState::load_with_default_open(
-                            ui.ctx(),
-                            ui.id().with("collapsing"),
-                            // egui::Id::new(container_id).with(state_id),
-                            false,
-                        );
-                        let header_response = collapsing
-                            .show_header(ui, |ui| {
-                                ui.horizontal(|ui| {
-                                    if crate::config::MORE_DEBUG {
-                                        ui.label(format!(
-                                            "ui.id() = {:?} + container_id: {} + tfm step state_id: {}",
-                                            ui.id(),
-                                            container_id,
-                                            state_id
-                                        ));
-                                    }
-                                    let _dnd_src = ui.dnd_drag_source(
-                                        ui.id().with("DND Source"),
-                                        GuiDndJob::MoveTfmStep(GuiDndJobMoveTfmStep {
-                                            src_container_id: container_id.into(),
-                                            src_obj_runtime_id: state_id,
-                                            dst_container_id_opt: None,
-                                            dst_idx_opt: None,
-                                            do_copy: false,
-                                        }),
-                                        |ui| {
-                                            ui.label(heading);
-                                        },
-                                    );
 
-                                    if self.doc_str() != DEFAULT_TRANSFORM_DESCRIPTION {
-                                        ui.label(
-                                            egui::RichText::from(egui_phosphor::bold::CIRCLE_WAVY_QUESTION).size(16.0),
-                                        )
-                                        .on_hover_text(self.doc_str());
-                                    }
+        let transform_name = self.to_string();
+        let label = format!("({}) {}", step_idx + 1, transform_name);
+        let is_enabled = *self.get_enabled_ref_mut();
+        let state_id = self.get_id();
+        let heading = if !is_enabled {
+            gui_in.2.style.tfm_title_decorate_disabled(egui::RichText::new(&label))
+        } else {
+            gui_in.2.style.tfm_title_decorate_enabled(egui::RichText::new(&label))
+        };
+        ui.scope_builder(
+            egui::UiBuilder::new().id(egui::Id::new(container_id).with(state_id)),
+            |ui| {
+                let collapsing = egui::collapsing_header::CollapsingState::load_with_default_open(
+                    ui.ctx(),
+                    ui.id().with("collapsing"),
+                    // egui::Id::new(container_id).with(state_id),
+                    false,
+                );
+                let header_response = collapsing
+                    .show_header(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            if crate::config::MORE_DEBUG {
+                                ui.label(format!(
+                                    "ui.id() = {:?} + container_id: {} + tfm step state_id: {}",
+                                    ui.id(),
+                                    container_id,
+                                    state_id
+                                ));
+                            }
+                            let _dnd_src = ui.dnd_drag_source(
+                                ui.id().with("DND Source"),
+                                GuiDndJob::MoveTfmStep(GuiDndJobMoveTfmStep {
+                                    src_container_id: container_id.into(),
+                                    src_obj_runtime_id: state_id,
+                                    dst_container_id_opt: None,
+                                    dst_idx_opt: None,
+                                    do_copy: false,
+                                }),
+                                |ui| {
+                                    ui.label(heading);
+                                },
+                            );
 
-                                    let mut gui_out = None;
+                            if self.doc_str() != DEFAULT_TRANSFORM_DESCRIPTION {
+                                ui.label(egui::RichText::from(egui_phosphor::bold::CIRCLE_WAVY_QUESTION).size(16.0))
+                                    .on_hover_text(self.doc_str());
+                            }
 
-                                    ui.separator();
-                                    let enable_disable_text = if is_enabled { "on" } else { "off" };
-                                    gui_out = gui_out.or(bool_to_simple_change_gui_cmd(
-                                        ui.checkbox(self.get_enabled_ref_mut(), enable_disable_text).changed(),
-                                    ));
+                            let mut gui_out = None;
 
-                                    ui.separator();
-                                    ui.scope(|ui| {
-                                        ui.set_max_width(EMBEDDED_GRAPH_MAX_WIDTH);
-                                        if draw_graph_docked_or_windowed(self, graph_states, ui) {
-                                            gui_out = Some(GuiCmd::ConfigChangeSimple);
-                                        }
-                                    });
+                            ui.separator();
+                            let enable_disable_text = if is_enabled { "on" } else { "off" };
+                            gui_out = gui_out.or(bool_to_simple_change_gui_cmd(
+                                ui.checkbox(self.get_enabled_ref_mut(), enable_disable_text).changed(),
+                            ));
 
-                                    let io_text = gui_in.2.get_style().tfm_io_info_decorate(
-                                        get_step_io_text(ui, self.common_state_ref()),
-                                        is_enabled,
-                                    );
-                                    ui.label(io_text);
-
-                                    ui.separator();
-                                    if ui
-                                        .button(egui_phosphor::bold::TRASH.to_string())
-                                        .on_hover_text("Remove step")
-                                        .clicked()
-                                    {
-                                        gui_out = Some(GuiCmd::LocalItemRemove(step_idx));
-                                    }
-                                    gui_out
-                                })
-                                .inner
-                            })
-                            .body(|ui| {
-                                if crate::config::MORE_DEBUG {
-                                    ui.label(format!("{:?}", ui.id()));
+                            ui.separator();
+                            ui.scope(|ui| {
+                                ui.set_max_width(EMBEDDED_GRAPH_MAX_WIDTH);
+                                if draw_graph_docked_or_windowed(self, gui_in.2.graph_states, ui) {
+                                    gui_out = Some(GuiCmd::ConfigChangeSimple);
                                 }
-                                if !is_enabled {
-                                    // let mut style = ui.style().as_ref().clone();
-                                    // style.visuals.widgets.inactive.fg_stroke.color =
-                                    //     style.visuals.widgets.inactive.fg_stroke.color.gamma_multiply(0.3);
-                                    // ui.set_style(style);
-                                    ui.disable();
-                                }
-
-                                // if let Some(desc) = self.description_mut() {
-                                //     ui.separator();
-                                //     if let Some(gui_out) = ui
-                                //         .collapsing("Description", |ui| desc.egui(GuiInKinds::Edit, ui))
-                                //         .body_returned
-                                //         .unwrap_or_default()
-                                //     {
-                                //         return Some(gui_out);
-                                //     }
-                                // }
-
-                                ui.separator();
-
-                                ui.scope(
-                                    // .collapsing(
-                                    //     "Parameters",
-                                    #[allow(unused)]
-                                    |ui| {
-                                        let label = self.to_string();
-                                        let in_interval = self.common_state_ref().get_in_interval();
-                                        match self {
-                                            Self::Sum(s) => {
-                                                s.egui((ArithOpType::Sum, gui_in.2.clone_and_push_hier(step_id)), ui)
-                                            }
-                                            Self::Sub(s) => {
-                                                s.egui((ArithOpType::Sub, gui_in.2.clone_and_push_hier(step_id)), ui)
-                                            }
-                                            Self::Mul(s) => {
-                                                s.egui((ArithOpType::Mul, gui_in.2.clone_and_push_hier(step_id)), ui)
-                                            }
-                                            Self::Div(s) => {
-                                                s.egui((ArithOpType::Div, gui_in.2.clone_and_push_hier(step_id)), ui)
-                                            }
-                                            Self::VelocityToDisplacement(s) => s.egui((), ui),
-                                            Self::Script(s) => s.egui(
-                                                (
-                                                    step_id,
-                                                    gui_in.2.clone_and_push_hier(step_id),
-                                                    cfg_variables,
-                                                    cfg_devices,
-                                                ),
-                                                ui,
-                                            ),
-                                            Self::Nop(_) | Self::Invert(_) => None,
-                                            Self::Integrate(s) => s.egui(&gui_in.2, ui),
-                                            Self::Steering(s) => {
-                                                ui.push_id(state_id, |ui| {
-                                                    s.egui(gui_in.2.clone_and_push_hier(step_id), ui)
-                                                })
-                                                .inner
-                                            }
-                                            Self::Clamp(s) => s.egui(&gui_in.2, ui),
-                                            Self::RaiseFall(s) => s.egui((&gui_in.2, in_interval), ui),
-                                            Self::Ema(s) => s.egui(&gui_in.2, ui),
-                                            Self::Linear(s) => s.egui(in_interval, ui),
-                                            Self::Smoothstep(_) => None,
-                                            Self::SCurve(s) => s.egui((), ui),
-                                            Self::Exp(s) => s.egui((), ui),
-                                            Self::SignedPower(s) => s.egui((), ui),
-                                            Self::OneEuro(s) => s.egui(&gui_in.2, ui), // Self::_HighPass(_) => None,
-                                                                                       // Self::_ForceFeedback(_) => None,
-                                        }
-                                    },
-                                )
-                                .inner
                             });
 
-                        header_response.1.inner.or(header_response.2.and_then(|v| v.inner))
-                    },
-                )
-                .inner
-            }
-            GuiInCommon::_Display { .. } => None,
-        }
+                            let io_text = gui_in
+                                .2
+                                .style
+                                .tfm_io_info_decorate(get_step_io_text(ui, self.common_state_ref()), is_enabled);
+                            ui.label(io_text);
+
+                            ui.separator();
+                            if ui
+                                .button(egui_phosphor::bold::TRASH.to_string())
+                                .on_hover_text("Remove step")
+                                .clicked()
+                            {
+                                gui_out = Some(GuiCmd::LocalItemRemove(step_idx));
+                            }
+                            gui_out
+                        })
+                        .inner
+                    })
+                    .body(|ui| {
+                        if crate::config::MORE_DEBUG {
+                            ui.label(format!("{:?}", ui.id()));
+                        }
+                        if !is_enabled {
+                            // let mut style = ui.style().as_ref().clone();
+                            // style.visuals.widgets.inactive.fg_stroke.color =
+                            //     style.visuals.widgets.inactive.fg_stroke.color.gamma_multiply(0.3);
+                            // ui.set_style(style);
+                            ui.disable();
+                        }
+
+                        // if let Some(desc) = self.description_mut() {
+                        //     ui.separator();
+                        //     if let Some(gui_out) = ui
+                        //         .collapsing("Description", |ui| desc.egui(GuiInKinds::Edit, ui))
+                        //         .body_returned
+                        //         .unwrap_or_default()
+                        //     {
+                        //         return Some(gui_out);
+                        //     }
+                        // }
+
+                        ui.separator();
+
+                        ui.scope(
+                            // .collapsing(
+                            //     "Parameters",
+                            #[allow(unused)]
+                            |ui| {
+                                let label = self.to_string();
+                                let in_interval = self.common_state_ref().get_in_interval();
+                                match self {
+                                    Self::Sum(s) => {
+                                        s.egui((ArithOpType::Sum, gui_in.2.clone_and_push_hier(step_id)), ui)
+                                    }
+                                    Self::Sub(s) => {
+                                        s.egui((ArithOpType::Sub, gui_in.2.clone_and_push_hier(step_id)), ui)
+                                    }
+                                    Self::Mul(s) => {
+                                        s.egui((ArithOpType::Mul, gui_in.2.clone_and_push_hier(step_id)), ui)
+                                    }
+                                    Self::Div(s) => {
+                                        s.egui((ArithOpType::Div, gui_in.2.clone_and_push_hier(step_id)), ui)
+                                    }
+                                    Self::VelocityToDisplacement(s) => s.egui((), ui),
+                                    Self::Script(s) => s.egui(
+                                        (
+                                            step_id,
+                                            gui_in.2.clone_and_push_hier(step_id),
+                                            gui_in.2.cfg_variables,
+                                            gui_in.2.cfg_devices,
+                                        ),
+                                        ui,
+                                    ),
+                                    Self::Nop(_) | Self::Invert(_) => None,
+                                    Self::Integrate(s) => s.egui(&gui_in.2, ui),
+                                    Self::Steering(s) => {
+                                        ui.push_id(state_id, |ui| s.egui(gui_in.2.clone_and_push_hier(step_id), ui))
+                                            .inner
+                                    }
+                                    Self::Clamp(s) => s.egui(&gui_in.2, ui),
+                                    Self::RaiseFall(s) => s.egui((&gui_in.2, in_interval), ui),
+                                    Self::Ema(s) => s.egui(&gui_in.2, ui),
+                                    Self::Linear(s) => s.egui(in_interval, ui),
+                                    Self::Smoothstep(_) => None,
+                                    Self::SCurve(s) => s.egui((), ui),
+                                    Self::Exp(s) => s.egui((), ui),
+                                    Self::SignedPower(s) => s.egui((), ui),
+                                    Self::OneEuro(s) => s.egui(&gui_in.2, ui), // Self::_HighPass(_) => None,
+                                                                               // Self::_ForceFeedback(_) => None,
+                                }
+                            },
+                        )
+                        .inner
+                    });
+
+                header_response.1.inner.or(header_response.2.and_then(|v| v.inner))
+            },
+        )
+        .inner
     }
 }
 
@@ -679,7 +587,7 @@ impl<'s> DrawEgui<'s> for ClampCfg {
     type Out = Option<GuiCmd>;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
-        if !gui_in.get_mode().is_reactive() && self.common_state_ref().is_out_relative() {
+        if !gui_in.mode.is_reactive() && self.common_state_ref().is_out_relative() {
             ui.label(
                 egui::RichText::new("NOTICE: with relative input in non-reactive mode clamp will not clamp!")
                     .color(egui::Color32::RED)
@@ -789,7 +697,7 @@ impl<'s> DrawEgui<'s> for IntegrateCfg {
                     current_input,
                     current_input * self.in_gain,
                     self.accumulator.port_get_interval(),
-                    self.get_delta_acc_norm(current_input * self.in_gain, gui_in.get_mode().is_reactive())
+                    self.get_delta_acc_norm(current_input * self.in_gain, gui_in.mode.is_reactive())
                 ))
                 .monospace(),
             );
@@ -1016,86 +924,84 @@ impl<'s> DrawEgui<'s> for ArithCfg {
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut gui_out = None;
-        if let GuiInCommon::Edit { .. } = gui_in.1 {
-            let step_id = self.common_state_ref().get_id();
-            let mut source_to_remove = None;
+        let step_id = self.common_state_ref().get_id();
+        let mut source_to_remove = None;
 
-            ui.label(format!("( {} ", self.common_state_ref().get_last_known_io().0));
+        ui.label(format!("( {} ", self.common_state_ref().get_last_known_io().0));
 
-            for (src_idx, src) in self.sources.iter_mut().enumerate() {
-                ui.push_id((step_id, src_idx), |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(
-                            egui::RichText::new(match gui_in.0 {
-                                ArithOpType::Sum => egui_phosphor::bold::PLUS,
-                                ArithOpType::Sub => egui_phosphor::bold::MINUS,
-                                ArithOpType::Mul => egui_phosphor::bold::ASTERISK,
-                                ArithOpType::Div => egui_phosphor::bold::DIVIDE,
-                            })
-                            .size(16.0),
-                        );
-                        src.egui(
-                            GuiInValue::Edit(GuiInValueEditParams {
-                                name: "Operand source",
-                                choice_case: Some(ValueUsageContext::TfmStepAuxSrc),
-                                allow_interval_edit: true,
-                                slider_log_scale: false,
-                                gui_common_ctx: &gui_in.1,
-                            }),
-                            ui,
-                        )
-                        .inspect(|out| gui_out = out.clone().into());
-                        ui.separator();
-                        if ui.button(egui_phosphor::bold::TRASH).clicked() {
-                            source_to_remove = Some(src_idx);
-                        }
-                    });
+        for (src_idx, src) in self.sources.iter_mut().enumerate() {
+            ui.push_id((step_id, src_idx), |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new(match gui_in.0 {
+                            ArithOpType::Sum => egui_phosphor::bold::PLUS,
+                            ArithOpType::Sub => egui_phosphor::bold::MINUS,
+                            ArithOpType::Mul => egui_phosphor::bold::ASTERISK,
+                            ArithOpType::Div => egui_phosphor::bold::DIVIDE,
+                        })
+                        .size(16.0),
+                    );
+                    src.egui(
+                        GuiInValue::Edit(GuiInValueEditParams {
+                            name: "Operand source",
+                            choice_case: Some(ValueUsageContext::TfmStepAuxSrc),
+                            allow_interval_edit: true,
+                            slider_log_scale: false,
+                            gui_common_ctx: &gui_in.1,
+                        }),
+                        ui,
+                    )
+                    .inspect(|out| gui_out = out.clone().into());
+                    ui.separator();
+                    if ui.button(egui_phosphor::bold::TRASH).clicked() {
+                        source_to_remove = Some(src_idx);
+                    }
                 });
+            });
+        }
+
+        ui.separator();
+        if ui.button("add source").clicked() {
+            self.sources.push(Default::default());
+            gui_out = bool_to_simple_change_gui_cmd(true);
+        }
+
+        ui.horizontal(|ui| {
+            if !gui_in.1.mode.is_reactive() && self.common_state_ref().is_out_relative() {
+                ui.label(").assign_out_range(");
+            } else {
+                ui.label(").clamp(");
             }
 
-            ui.separator();
-            if ui.button("add source").clicked() {
-                self.sources.push(Default::default());
+            if self.out_interval.egui(
+                GuiInInterval::Edit {
+                    max_range: MAX_SPAN_INTERVAL.make_range_inclusive(),
+                    from_label: "",
+                    to_label: "",
+                    sanitize_and_sort: true,
+                    truncate: false,
+                },
+                ui,
+            ) {
+                self.out_interval = self.out_interval.make_manual();
+                gui_out = bool_to_simple_change_gui_cmd(true);
+            };
+
+            if self.out_interval.is_manual() && ui.button(" (reset to input range) ").clicked() {
+                self.out_interval = self.out_interval.make_auto();
                 gui_out = bool_to_simple_change_gui_cmd(true);
             }
 
-            ui.horizontal(|ui| {
-                if !gui_in.1.get_mode().is_reactive() && self.common_state_ref().is_out_relative() {
-                    ui.label(").assign_out_range(");
-                } else {
-                    ui.label(").clamp(");
-                }
+            ui.label(egui::RichText::new(format!(
+                ") {} {}",
+                egui_phosphor::bold::EQUALS,
+                self.common_state_ref().get_last_known_io().1
+            )));
+        });
 
-                if self.out_interval.egui(
-                    GuiInInterval::Edit {
-                        max_range: MAX_SPAN_INTERVAL.make_range_inclusive(),
-                        from_label: "",
-                        to_label: "",
-                        sanitize_and_sort: true,
-                        truncate: false,
-                    },
-                    ui,
-                ) {
-                    self.out_interval = self.out_interval.make_manual();
-                    gui_out = bool_to_simple_change_gui_cmd(true);
-                };
-
-                if self.out_interval.is_manual() && ui.button(" (reset to input range) ").clicked() {
-                    self.out_interval = self.out_interval.make_auto();
-                    gui_out = bool_to_simple_change_gui_cmd(true);
-                }
-
-                ui.label(egui::RichText::new(format!(
-                    ") {} {}",
-                    egui_phosphor::bold::EQUALS,
-                    self.common_state_ref().get_last_known_io().1
-                )));
-            });
-
-            if let Some(src_to_remove) = source_to_remove {
-                self.sources.remove(src_to_remove);
-                gui_out = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
-            }
+        if let Some(src_to_remove) = source_to_remove {
+            self.sources.remove(src_to_remove);
+            gui_out = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
         }
 
         gui_out
@@ -1213,108 +1119,102 @@ impl<'s> DrawEgui<'s> for ForceFeedbackCfg {
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut gui_out = None;
         let gui_out_mut = &mut gui_out;
-        match gui_in {
-            GuiInCommon::Edit { .. } => {
-                let mut changed = false;
-                let mut use_custom = self.custom_source.is_some();
+        let mut changed = false;
+        let mut use_custom = self.custom_source.is_some();
 
-                ui.horizontal(|ui| {
-                    changed |= ui
-                        .checkbox(&mut use_custom, "Use custom source")
-                        .on_hover_text(self.custom_source_doc_str())
-                        .changed();
-                });
+        ui.horizontal(|ui| {
+            changed |= ui
+                .checkbox(&mut use_custom, "Use custom source")
+                .on_hover_text(self.custom_source_doc_str())
+                .changed();
+        });
 
-                ui.separator();
+        ui.separator();
 
-                if !use_custom {
-                    ui.horizontal(|ui| {
-                    ui.label("Use force feedback component from mapping destination HID device: ")
-                        .on_hover_text(
-                            "Force feedback is received in 2d space with direction (Const force effect) or bound to X or Y \
-                            component (Spring/Friction/Damper/Inertia effects). \
-                            We are using FFB readings from destination virtual HID associated with the pipeline",
-                        );
-                    changed |= ui
-                        .selectable_value(&mut self.component, ForceFeedbackComponent::X, "X")
-                        .on_hover_text("Use X component of FFB")
-                        .changed();
-                    changed |= ui
-                        .selectable_value(&mut self.component, ForceFeedbackComponent::Y, "Y")
-                        .on_hover_text("Use Y component of FFB")
-                        .changed();
-
-                        });
-                } else if let Some(ref mut custom_src) = self.custom_source {
-                    ui.horizontal(|ui| {
-                        ui.set_max_width(200.0);
-                        custom_src
-                            .egui(
-                                GuiInValue::Edit(GuiInValueEditParams {
-                                    allow_interval_edit: false,
-                                    slider_log_scale: false,
-                                    name: "Custom force feedback source",
-                                    choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
-                                    gui_common_ctx: &gui_in,
-                                }),
-                                ui,
-                            )
-                            .inspect(|out| *gui_out_mut = Some(out.clone()));
-                    })
-                    .response
-                    .on_hover_text(self.custom_source_doc_str());
-                }
-
-                if !use_custom && self.custom_source.is_some() {
-                    self.custom_source = None;
-                    changed = true;
-                } else if use_custom && self.custom_source.is_none() {
-                    self.custom_source = Some(Default::default());
-                    changed = true;
-                }
-
-                ui.separator();
-                ui.horizontal(|ui| {
-                    changed |= ui
-                        .checkbox(&mut self.invert, "Invert")
-                        .on_hover_text(self.invert_doc_str())
-                        .changed();
-                });
-
-                ui.separator();
-                ui.horizontal(|ui| {
-                    ui.label("Gain");
-                    self.gain
-                        .egui(
-                            GuiInValue::Edit(GuiInValueEditParams {
-                                allow_interval_edit: false,
-                                slider_log_scale: false,
-                                name: "FFB gain",
-                                choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
-                                gui_common_ctx: &gui_in,
-                            }),
-                            ui,
-                        )
-                        .inspect(|out| *gui_out_mut = Some(out.clone()))
-                })
-                .response
-                .on_hover_text(self.gain_doc_str());
-
-                bool_to_simple_change_gui_cmd(changed).inspect(|out| *gui_out_mut = Some(out.clone()));
-
-                ui.separator();
-                {
-                    let c = ui.collapsing("Transformation", |ui| {
-                        self.transformation
-                            .egui(gui_in.clone().clone_and_push_hier(self.transformation.id), ui)
-                    });
-                    c.header_response.on_hover_text(self.transformation_doc_str());
-                    c.body_returned.unwrap_or_default()
-                }
-                .inspect(|out| *gui_out_mut = Some(out.clone()));
-            }
-            GuiInCommon::_Display { .. } => {}
+        if !use_custom {
+            ui.horizontal(|ui| {
+                ui.label("Use force feedback component from mapping destination HID device: ")
+                    .on_hover_text(
+                        "Force feedback is received in 2d space with direction (Const force effect) or bound to X or Y \
+                    component (Spring/Friction/Damper/Inertia effects). \
+                    We are using FFB readings from destination virtual HID associated with the pipeline",
+                    );
+                changed |= ui
+                    .selectable_value(&mut self.component, ForceFeedbackComponent::X, "X")
+                    .on_hover_text("Use X component of FFB")
+                    .changed();
+                changed |= ui
+                    .selectable_value(&mut self.component, ForceFeedbackComponent::Y, "Y")
+                    .on_hover_text("Use Y component of FFB")
+                    .changed();
+            });
+        } else if let Some(ref mut custom_src) = self.custom_source {
+            ui.horizontal(|ui| {
+                ui.set_max_width(200.0);
+                custom_src
+                    .egui(
+                        GuiInValue::Edit(GuiInValueEditParams {
+                            allow_interval_edit: false,
+                            slider_log_scale: false,
+                            name: "Custom force feedback source",
+                            choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                            gui_common_ctx: &gui_in,
+                        }),
+                        ui,
+                    )
+                    .inspect(|out| *gui_out_mut = Some(out.clone()));
+            })
+            .response
+            .on_hover_text(self.custom_source_doc_str());
         }
+
+        if !use_custom && self.custom_source.is_some() {
+            self.custom_source = None;
+            changed = true;
+        } else if use_custom && self.custom_source.is_none() {
+            self.custom_source = Some(Default::default());
+            changed = true;
+        }
+
+        ui.separator();
+        ui.horizontal(|ui| {
+            changed |= ui
+                .checkbox(&mut self.invert, "Invert")
+                .on_hover_text(self.invert_doc_str())
+                .changed();
+        });
+
+        ui.separator();
+        ui.horizontal(|ui| {
+            ui.label("Gain");
+            self.gain
+                .egui(
+                    GuiInValue::Edit(GuiInValueEditParams {
+                        allow_interval_edit: false,
+                        slider_log_scale: false,
+                        name: "FFB gain",
+                        choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                        gui_common_ctx: &gui_in,
+                    }),
+                    ui,
+                )
+                .inspect(|out| *gui_out_mut = Some(out.clone()))
+        })
+        .response
+        .on_hover_text(self.gain_doc_str());
+
+        bool_to_simple_change_gui_cmd(changed).inspect(|out| *gui_out_mut = Some(out.clone()));
+
+        ui.separator();
+        {
+            let c = ui.collapsing("Transformation", |ui| {
+                self.transformation
+                    .egui(gui_in.clone().clone_and_push_hier(self.transformation.id), ui)
+            });
+            c.header_response.on_hover_text(self.transformation_doc_str());
+            c.body_returned.unwrap_or_default()
+        }
+        .inspect(|out| *gui_out_mut = Some(out.clone()));
 
         gui_out
     }
@@ -1328,13 +1228,119 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
         let mut changed_simple = false;
         let mut gui_out = None;
         let gui_out_mut = &mut gui_out;
-        match gui_in {
-            GuiInCommon::Edit { .. } => {
+        ui.separator();
+        ui.horizontal(|ui| {
+            let param_name = "Gain";
+            ui.label(param_name).on_hover_text(self.in_gain_doc_str());
+            self.in_gain
+                .egui(
+                    GuiInValue::Edit(GuiInValueEditParams {
+                        allow_interval_edit: false,
+                        slider_log_scale: false,
+                        name: param_name,
+                        choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                        gui_common_ctx: &gui_in,
+                    }),
+                    ui,
+                )
+                .inspect(|out| *gui_out_mut = Some(out.clone()));
+        })
+        .response
+        .on_hover_text(self.in_gain_doc_str());
+
+        ui.separator();
+        ui.horizontal(|ui| {
+            let param_name = "Auto-center halflife";
+            ui.label("Auto-center halflife (0 == off)")
+                .on_hover_text(self.auto_center_halflife_doc_str());
+            ui.horizontal(|ui| {
+                self.auto_center_halflife.egui(
+                    GuiInValue::Edit(GuiInValueEditParams {
+                        allow_interval_edit: false,
+                        slider_log_scale: false,
+                        name: param_name,
+                        choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                        gui_common_ctx: &gui_in,
+                    }),
+                    ui,
+                )
+            })
+            .inner
+            .inspect(|out| *gui_out_mut = Some(out.clone()));
+        });
+
+        ui.separator();
+        ui.collapsing("Hold factor", |ui| {
+            ui.separator();
+            ui.horizontal(|ui| {
+                self.hold_factor
+                    .egui(
+                        GuiInValue::Edit(GuiInValueEditParams {
+                            allow_interval_edit: false,
+                            slider_log_scale: false,
+                            name: "Choose hold factor source",
+                            choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                            gui_common_ctx: &gui_in,
+                        }),
+                        ui,
+                    )
+                    .inspect(|out| *gui_out_mut = Some(out.clone()));
+            });
+        })
+        .header_response
+        .on_hover_text(self.hold_factor_doc_str());
+
+        ui.separator();
+        ui.collapsing("Accumulator", |ui| {
+            ui.horizontal(|ui| {
+                if let Some(acc) = &mut self.accumulator {
+                    if ui.button("Use built-in accumulator").clicked() {
+                        self.accumulator = None;
+                    } else {
+                        ui.separator();
+                        acc.egui(
+                            GuiInValue::Edit(GuiInValueEditParams {
+                                allow_interval_edit: false,
+                                slider_log_scale: false,
+                                name: "Accumulator",
+                                choice_case: ValueUsageContext::TfmStepAuxXrc.into(),
+                                gui_common_ctx: &gui_in,
+                            }),
+                            ui,
+                        )
+                        .inspect(|out| *gui_out_mut = Some(out.clone()));
+                        ui.separator();
+                    }
+                } else {
+                    if ui.button("Use custom accumulator").clicked() {
+                        self.accumulator = Some(Default::default());
+                        *gui_out_mut = bool_to_simple_change_gui_cmd(true);
+                    }
+                }
+            });
+
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.collapsing("Transformation", |ui| {
+                    self.integrated_user_input_transform
+                        .egui(gui_in.clone_and_push_hier(self.integrated_user_input_transform.id), ui)
+                        .inspect(|out| *gui_out_mut = Some(out.clone()))
+                })
+                .header_response
+                .on_hover_text(self.integrated_user_input_transform_doc_str());
+            })
+        })
+        .header_response
+        .on_hover_text(self.accumulator_doc_str());
+
+        if let Some(ff) = &mut self.force_feedback {
+            if self.auto_center_halflife.port_get_numeric_value(None::<&()>) > 0.0 {
                 ui.separator();
                 ui.horizontal(|ui| {
-                    let param_name = "Gain";
-                    ui.label(param_name).on_hover_text(self.in_gain_doc_str());
-                    self.in_gain
+                    let param_name = "Auto-center + force feedback";
+                    ui.label(param_name)
+                        .on_hover_text(Self::auto_center_along_force_feedback_doc_str_static());
+                    self.auto_center_along_force_feedback
                         .egui(
                             GuiInValue::Edit(GuiInValueEditParams {
                                 allow_interval_edit: false,
@@ -1346,137 +1352,27 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                             ui,
                         )
                         .inspect(|out| *gui_out_mut = Some(out.clone()));
-                })
-                .response
-                .on_hover_text(self.in_gain_doc_str());
-
-                ui.separator();
-                ui.horizontal(|ui| {
-                    let param_name = "Auto-center halflife";
-                    ui.label("Auto-center halflife (0 == off)")
-                        .on_hover_text(self.auto_center_halflife_doc_str());
-                    ui.horizontal(|ui| {
-                        self.auto_center_halflife.egui(
-                            GuiInValue::Edit(GuiInValueEditParams {
-                                allow_interval_edit: false,
-                                slider_log_scale: false,
-                                name: param_name,
-                                choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
-                                gui_common_ctx: &gui_in,
-                            }),
-                            ui,
-                        )
-                    })
-                    .inner
-                    .inspect(|out| *gui_out_mut = Some(out.clone()));
                 });
-
-                ui.separator();
-                ui.collapsing("Hold factor", |ui| {
-                    ui.separator();
-                    ui.horizontal(|ui| {
-                        self.hold_factor
-                            .egui(
-                                GuiInValue::Edit(GuiInValueEditParams {
-                                    allow_interval_edit: false,
-                                    slider_log_scale: false,
-                                    name: "Choose hold factor source",
-                                    choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
-                                    gui_common_ctx: &gui_in,
-                                }),
-                                ui,
-                            )
-                            .inspect(|out| *gui_out_mut = Some(out.clone()));
-                    });
-                })
-                .header_response
-                .on_hover_text(self.hold_factor_doc_str());
-
-                ui.separator();
-                ui.collapsing("Accumulator", |ui| {
-                    ui.horizontal(|ui| {
-                        if let Some(acc) = &mut self.accumulator {
-                            if ui.button("Use built-in accumulator").clicked() {
-                                self.accumulator = None;
-                            } else {
-                                ui.separator();
-                                acc.egui(
-                                    GuiInValue::Edit(GuiInValueEditParams {
-                                        allow_interval_edit: false,
-                                        slider_log_scale: false,
-                                        name: "Accumulator",
-                                        choice_case: ValueUsageContext::TfmStepAuxXrc.into(),
-                                        gui_common_ctx: &gui_in,
-                                    }),
-                                    ui,
-                                )
-                                .inspect(|out| *gui_out_mut = Some(out.clone()));
-                                ui.separator();
-                            }
-                        } else {
-                            if ui.button("Use custom accumulator").clicked() {
-                                self.accumulator = Some(Default::default());
-                                *gui_out_mut = bool_to_simple_change_gui_cmd(true);
-                            }
-                        }
-                    });
-
-                    ui.separator();
-                    ui.horizontal(|ui| {
-                        ui.collapsing("Transformation", |ui| {
-                            self.integrated_user_input_transform
-                                .egui(gui_in.clone_and_push_hier(self.integrated_user_input_transform.id), ui)
-                                .inspect(|out| *gui_out_mut = Some(out.clone()))
-                        })
-                        .header_response
-                        .on_hover_text(self.integrated_user_input_transform_doc_str());
-                    })
-                })
-                .header_response
-                .on_hover_text(self.accumulator_doc_str());
-
-                if let Some(ff) = &mut self.force_feedback {
-                    if self.auto_center_halflife.port_get_numeric_value(None::<&()>) > 0.0 {
-                        ui.separator();
-                        ui.horizontal(|ui| {
-                            let param_name = "Auto-center + force feedback";
-                            ui.label(param_name)
-                                .on_hover_text(Self::auto_center_along_force_feedback_doc_str_static());
-                            self.auto_center_along_force_feedback
-                                .egui(
-                                    GuiInValue::Edit(GuiInValueEditParams {
-                                        allow_interval_edit: false,
-                                        slider_log_scale: false,
-                                        name: param_name,
-                                        choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
-                                        gui_common_ctx: &gui_in,
-                                    }),
-                                    ui,
-                                )
-                                .inspect(|out| *gui_out_mut = Some(out.clone()));
-                        });
-                    }
-                    ui.separator();
-                    ui.collapsing("Force Feedback", |ui| {
-                        ff.egui(gui_in, ui).inspect(|out| *gui_out_mut = Some(out.clone()));
-                    })
-                    .header_response
-                    .on_hover_text(self.doc_str());
-                } else {
-                    ui.separator();
-                    #[allow(clippy::field_reassign_with_default)]
-                    if ui.button("Add Force Feedback").clicked() {
-                        let mut ff = ForceFeedbackCfg::default();
-                        *ff.enabled = true;
-                        self.force_feedback = Some(ff);
-                        changed_simple |= true;
-                    }
-                }
-
-                bool_to_simple_change_gui_cmd(changed_simple).inspect(|out| *gui_out_mut = Some(out.clone()));
             }
-            GuiInCommon::_Display { .. } => {}
+            ui.separator();
+            ui.collapsing("Force Feedback", |ui| {
+                ff.egui(gui_in, ui).inspect(|out| *gui_out_mut = Some(out.clone()));
+            })
+            .header_response
+            .on_hover_text(self.doc_str());
+        } else {
+            ui.separator();
+            #[allow(clippy::field_reassign_with_default)]
+            if ui.button("Add Force Feedback").clicked() {
+                let mut ff = ForceFeedbackCfg::default();
+                *ff.enabled = true;
+                self.force_feedback = Some(ff);
+                changed_simple |= true;
+            }
         }
+
+        bool_to_simple_change_gui_cmd(changed_simple).inspect(|out| *gui_out_mut = Some(out.clone()));
+
         gui_out
     }
 }
@@ -1583,290 +1479,280 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
         let mut gui_out = None;
         let gui_out_mut = &mut gui_out;
 
-        match gui_in.1 {
-            GuiInCommon::Edit {
-                transient_script_aux_edits,
-                ..
-            } => {
-                // -----------------------------------------------
-                // -----------------------------------------------
-                // -----------------------------------------------
-                {
-                    let mut draw_aux_data_ui = |aux_kind: ScriptAuxKind| {
-                        ui.separator();
-                        ui.push_id(aux_kind, |ui| {
-                            let c = draw_collapsing_ui(
-                                ui,
-                                None::<()>,
-                                Some(match aux_kind {
-                                    ScriptAuxKind::Source => "Aux sources",
-                                    ScriptAuxKind::Destination => "Aux destinations",
-                                    ScriptAuxKind::Transformation => "Aux transformations",
-                                }),
-                                |ui| {
-                                    ui.separator();
-                                    if ui
-                                        .button(egui_phosphor::bold::LIST_PLUS.to_string())
-                                        .on_hover_text(match aux_kind {
-                                            ScriptAuxKind::Source => "add source",
-                                            ScriptAuxKind::Destination => "add destination",
-                                            ScriptAuxKind::Transformation => "add transformation",
-                                        })
-                                        .clicked()
-                                    {
-                                        match aux_kind {
-                                            ScriptAuxKind::Source => {
-                                                self.aux_srcs.insert(
-                                                    get_item_name_with_random_suffix("Src", self.aux_srcs.len() + 1),
-                                                    Default::default(),
-                                                );
-                                            }
-                                            ScriptAuxKind::Destination => {
-                                                self.aux_dsts.insert(
-                                                    get_item_name_with_random_suffix("Dst", self.aux_dsts.len() + 1),
-                                                    Default::default(),
-                                                );
-                                            }
-                                            ScriptAuxKind::Transformation => {
-                                                self.aux_transformations.insert(
-                                                    get_item_name_with_random_suffix(
-                                                        "Tfm",
-                                                        self.aux_transformations.len() + 1,
-                                                    ),
-                                                    TfmSeqCfg::new_with_manual_input_params(),
-                                                );
-                                            }
-                                        };
-                                        changed_settings_general = true;
+        // -----------------------------------------------
+        // -----------------------------------------------
+        // -----------------------------------------------
+        {
+            let mut draw_aux_data_ui = |aux_kind: ScriptAuxKind| {
+                ui.separator();
+                ui.push_id(aux_kind, |ui| {
+                    let c = draw_collapsing_ui(
+                        ui,
+                        None::<()>,
+                        Some(match aux_kind {
+                            ScriptAuxKind::Source => "Aux sources",
+                            ScriptAuxKind::Destination => "Aux destinations",
+                            ScriptAuxKind::Transformation => "Aux transformations",
+                        }),
+                        |ui| {
+                            ui.separator();
+                            if ui
+                                .button(egui_phosphor::bold::LIST_PLUS.to_string())
+                                .on_hover_text(match aux_kind {
+                                    ScriptAuxKind::Source => "add source",
+                                    ScriptAuxKind::Destination => "add destination",
+                                    ScriptAuxKind::Transformation => "add transformation",
+                                })
+                                .clicked()
+                            {
+                                match aux_kind {
+                                    ScriptAuxKind::Source => {
+                                        self.aux_srcs.insert(
+                                            get_item_name_with_random_suffix("Src", self.aux_srcs.len() + 1),
+                                            Default::default(),
+                                        );
                                     }
-                                },
-                            )
-                            .body(|ui| {
-                                ui.separator();
-
-                                let keys: Vec<String> = match aux_kind {
-                                    ScriptAuxKind::Source => self.aux_srcs.keys().cloned().collect(),
-                                    ScriptAuxKind::Destination => self.aux_dsts.keys().cloned().collect(),
-                                    ScriptAuxKind::Transformation => self.aux_transformations.keys().cloned().collect(),
+                                    ScriptAuxKind::Destination => {
+                                        self.aux_dsts.insert(
+                                            get_item_name_with_random_suffix("Dst", self.aux_dsts.len() + 1),
+                                            Default::default(),
+                                        );
+                                    }
+                                    ScriptAuxKind::Transformation => {
+                                        self.aux_transformations.insert(
+                                            get_item_name_with_random_suffix("Tfm", self.aux_transformations.len() + 1),
+                                            TfmSeqCfg::new_with_manual_input_params(),
+                                        );
+                                    }
                                 };
-                                for (idx, name) in keys.iter().enumerate() {
-                                    let key = (idx.into(), aux_kind);
+                                changed_settings_general = true;
+                            }
+                        },
+                    )
+                    .body(|ui| {
+                        ui.separator();
 
+                        let keys: Vec<String> = match aux_kind {
+                            ScriptAuxKind::Source => self.aux_srcs.keys().cloned().collect(),
+                            ScriptAuxKind::Destination => self.aux_dsts.keys().cloned().collect(),
+                            ScriptAuxKind::Transformation => self.aux_transformations.keys().cloned().collect(),
+                        };
+                        for (idx, name) in keys.iter().enumerate() {
+                            let key = (idx.into(), aux_kind);
+
+                            ui.separator();
+                            draw_collapsing_ui(ui, Some(idx), Some(name), |ui| {
+                                {
                                     ui.separator();
-                                    draw_collapsing_ui(ui, Some(idx), Some(name), |ui| {
+                                    let is_editing = gui_in.1.transient_script_aux_edits.borrow().contains_key(&key);
+                                    if !is_editing {
+                                        if ui
+                                            .button(egui_phosphor::bold::IDENTIFICATION_BADGE.to_string())
+                                            .on_hover_text("Click to rename")
+                                            .clicked()
                                         {
-                                            ui.separator();
-                                            let is_editing = transient_script_aux_edits.borrow().contains_key(&key);
-                                            if !is_editing {
-                                                if ui
-                                                    .button(egui_phosphor::bold::IDENTIFICATION_BADGE.to_string())
-                                                    .on_hover_text("Click to rename")
-                                                    .clicked()
-                                                {
-                                                    transient_script_aux_edits
-                                                        .borrow_mut()
-                                                        .insert(key, (name.clone(), name.clone()));
-                                                }
-                                            } else {
-                                                let rename_state = &mut *transient_script_aux_edits.borrow_mut();
-                                                let (old, new) = rename_state.get_mut(&key).unwrap();
-                                                ui.text_edit_singleline(new);
-                                                ui.separator();
-                                                if ui.button("done").clicked() {
-                                                    if old != new && !new.is_empty() {
-                                                        *gui_out_mut =
-                                                            Some(GuiCmd::ScriptAuxRename(GuiCmdScriptAuxRename {
-                                                                tfm_step_id,
-                                                                kind: aux_kind,
-                                                                old_key: old.clone(),
-                                                                new_key: new.clone(),
-                                                            }));
-                                                    }
-                                                    rename_state.remove(&key);
-                                                }
-                                                ui.separator();
-                                                if ui.small_button("cancel").clicked() {
-                                                    rename_state.remove(&key);
-                                                }
+                                            gui_in
+                                                .1
+                                                .transient_script_aux_edits
+                                                .borrow_mut()
+                                                .insert(key, (name.clone(), name.clone()));
+                                        }
+                                    } else {
+                                        let rename_state = &mut *gui_in.1.transient_script_aux_edits.borrow_mut();
+                                        let (old, new) = rename_state.get_mut(&key).unwrap();
+                                        ui.text_edit_singleline(new);
+                                        ui.separator();
+                                        if ui.button("done").clicked() {
+                                            if old != new && !new.is_empty() {
+                                                *gui_out_mut = Some(GuiCmd::ScriptAuxRename(GuiCmdScriptAuxRename {
+                                                    tfm_step_id,
+                                                    kind: aux_kind,
+                                                    old_key: old.clone(),
+                                                    new_key: new.clone(),
+                                                }));
                                             }
+                                            rename_state.remove(&key);
                                         }
                                         ui.separator();
-                                        let remove = ui
-                                            .button(egui_phosphor::bold::TRASH.to_string())
-                                            .on_hover_text("Remove")
-                                            .clicked();
-                                        match aux_kind {
-                                            ScriptAuxKind::Source => {
-                                                if remove {
-                                                    self.aux_srcs.remove(name);
-                                                    changed_settings_general = true;
-                                                }
-                                            }
-                                            ScriptAuxKind::Destination => {
-                                                if remove {
-                                                    self.aux_dsts.remove(name);
-                                                    changed_settings_general = true;
-                                                }
-                                            }
-                                            ScriptAuxKind::Transformation => {
-                                                if remove {
-                                                    self.aux_transformations.remove(name);
-                                                    changed_settings_general = true;
-                                                }
+                                        if ui.small_button("cancel").clicked() {
+                                            rename_state.remove(&key);
+                                        }
+                                    }
+                                }
+                                ui.separator();
+                                let remove = ui
+                                    .button(egui_phosphor::bold::TRASH.to_string())
+                                    .on_hover_text("Remove")
+                                    .clicked();
+                                match aux_kind {
+                                    ScriptAuxKind::Source => {
+                                        if remove {
+                                            self.aux_srcs.remove(name);
+                                            changed_settings_general = true;
+                                        }
+                                    }
+                                    ScriptAuxKind::Destination => {
+                                        if remove {
+                                            self.aux_dsts.remove(name);
+                                            changed_settings_general = true;
+                                        }
+                                    }
+                                    ScriptAuxKind::Transformation => {
+                                        if remove {
+                                            self.aux_transformations.remove(name);
+                                            changed_settings_general = true;
+                                        }
+                                    }
+                                }
+                            })
+                            .body(|ui| {
+                                ui.group(|ui| {
+                                    ui.horizontal(|ui| match aux_kind {
+                                        ScriptAuxKind::Source => {
+                                            if let Some(src) = self.aux_srcs.get_mut(name) {
+                                                let window_title = format!("Choose script input {} ", name);
+                                                src.egui(
+                                                    GuiInValue::Edit(GuiInValueEditParams {
+                                                        name: &window_title,
+                                                        choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                                                        allow_interval_edit: true,
+                                                        slider_log_scale: false,
+                                                        gui_common_ctx: &gui_in.1,
+                                                    }),
+                                                    ui,
+                                                )
+                                                .inspect(|out| *gui_out_mut = Some(out.clone()));
                                             }
                                         }
-                                    })
-                                    .body(|ui| {
-                                        ui.group(|ui| {
-                                            ui.horizontal(|ui| match aux_kind {
-                                                ScriptAuxKind::Source => {
-                                                    if let Some(src) = self.aux_srcs.get_mut(name) {
-                                                        let window_title = format!("Choose script input {} ", name);
-                                                        src.egui(
-                                                            GuiInValue::Edit(GuiInValueEditParams {
-                                                                name: &window_title,
-                                                                choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
-                                                                allow_interval_edit: true,
-                                                                slider_log_scale: false,
-                                                                gui_common_ctx: &gui_in.1,
-                                                            }),
-                                                            ui,
-                                                        )
-                                                        .inspect(|out| *gui_out_mut = Some(out.clone()));
-                                                    }
-                                                }
-                                                ScriptAuxKind::Destination => {
-                                                    if let Some(dst) = self.aux_dsts.get_mut(name) {
-                                                        let window_title = format!("Choose script output {} ", name);
-                                                        dst.egui(
-                                                            GuiInValue::Edit(GuiInValueEditParams {
-                                                                name: &window_title,
-                                                                choice_case: ValueUsageContext::TfmStepAuxDst.into(),
-                                                                allow_interval_edit: true,
-                                                                slider_log_scale: false,
-                                                                gui_common_ctx: &gui_in.1,
-                                                            }),
-                                                            ui,
-                                                        )
-                                                        .inspect(|out| *gui_out_mut = Some(out.clone()));
-                                                    }
-                                                }
-                                                ScriptAuxKind::Transformation => {
-                                                    if let Some(tfm) = self.aux_transformations.get_mut(name) {
-                                                        ui.push_id(idx, |ui| {
-                                                            ui.vertical(|ui| {
-                                                                tfm.egui(gui_in.1, ui)
-                                                                    .inspect(|out| *gui_out_mut = Some(out.clone()));
-                                                            });
-                                                        });
-                                                    }
-                                                }
-                                            });
-                                        });
+                                        ScriptAuxKind::Destination => {
+                                            if let Some(dst) = self.aux_dsts.get_mut(name) {
+                                                let window_title = format!("Choose script output {} ", name);
+                                                dst.egui(
+                                                    GuiInValue::Edit(GuiInValueEditParams {
+                                                        name: &window_title,
+                                                        choice_case: ValueUsageContext::TfmStepAuxDst.into(),
+                                                        allow_interval_edit: true,
+                                                        slider_log_scale: false,
+                                                        gui_common_ctx: &gui_in.1,
+                                                    }),
+                                                    ui,
+                                                )
+                                                .inspect(|out| *gui_out_mut = Some(out.clone()));
+                                            }
+                                        }
+                                        ScriptAuxKind::Transformation => {
+                                            if let Some(tfm) = self.aux_transformations.get_mut(name) {
+                                                ui.push_id(idx, |ui| {
+                                                    ui.vertical(|ui| {
+                                                        tfm.egui(gui_in.1, ui)
+                                                            .inspect(|out| *gui_out_mut = Some(out.clone()));
+                                                    });
+                                                });
+                                            }
+                                        }
                                     });
-                                }
+                                });
                             });
-
-                            c.0.on_hover_text(match aux_kind {
-                                ScriptAuxKind::Source => self.aux_srcs_doc_str(),
-                                ScriptAuxKind::Destination => self.aux_dsts_doc_str(),
-                                ScriptAuxKind::Transformation => self.aux_transformations_doc_str(),
-                            });
-                        });
-                    };
-
-                    // -----------------------------------------------
-                    // -----------------------------------------------
-                    draw_aux_data_ui(ScriptAuxKind::Source);
-                    draw_aux_data_ui(ScriptAuxKind::Destination);
-                    draw_aux_data_ui(ScriptAuxKind::Transformation);
-                }
-
-                // -------------------------------------------------------
-                // -------------------------------------------------------
-                ui.separator();
-                let mut use_custom_interval = self.output_interval.is_some();
-                changed_settings_simple |= ui
-                    .checkbox(&mut use_custom_interval, "Custom output interval")
-                    .on_hover_text(self.output_interval_doc_str())
-                    .changed();
-                if use_custom_interval {
-                    ui.separator();
-                    ui.horizontal(|ui| {
-                        if self.output_interval.is_none() {
-                            self.output_interval = Some(SYMM_UNIT_INTERVAL);
-                            changed_settings_simple = true;
-                        }
-                        if let Some(interval) = &mut self.output_interval {
-                            changed_settings_simple |= interval.egui(
-                                GuiInInterval::Edit {
-                                    max_range: HID_AXIS_MAX_RANGE,
-                                    from_label: "",
-                                    to_label: "",
-                                    sanitize_and_sort: true,
-                                    truncate: false,
-                                },
-                                ui,
-                            );
                         }
                     });
-                } else {
-                    self.output_interval = None;
-                }
 
-                ui.separator();
-                let mut use_custom_relativity = self.output_relativity.is_some();
-                changed_settings_simple |= ui
-                    .checkbox(&mut use_custom_relativity, "Custom output relativity")
-                    .on_hover_text(self.output_relativity_doc_str())
-                    .changed();
-                if use_custom_relativity {
-                    ui.separator();
-                    ui.horizontal(|ui| {
-                        if self.output_relativity.is_none() {
-                            self.output_relativity = Some(Relativity::Abs);
-                            changed_settings_simple = true;
-                        }
-                        if let Some(rel) = &mut self.output_relativity {
-                            changed_settings_simple |= ui.radio_value(rel, Relativity::Abs, "Absolute").changed();
-                            ui.separator();
-                            changed_settings_simple |= ui.radio_value(rel, Relativity::Rel, "Relative").changed();
-                        }
+                    c.0.on_hover_text(match aux_kind {
+                        ScriptAuxKind::Source => self.aux_srcs_doc_str(),
+                        ScriptAuxKind::Destination => self.aux_dsts_doc_str(),
+                        ScriptAuxKind::Transformation => self.aux_transformations_doc_str(),
                     });
-                } else {
-                    self.output_relativity = None;
-                }
-
-                ui.separator();
-                let c = draw_collapsing_ui(ui, None::<()>, Some("Script text"), |_| {}).body(|ui| {
-                    ui.separator();
-                    ui.label(egui::RichText::new(format!("Language: {}", self.lang)).strong())
-                        .on_hover_text(self.lang_doc_str());
-                    ui.separator();
-                    changed_script = ui
-                        .add(
-                            egui::TextEdit::multiline(&mut self.script)
-                                .font(egui::TextStyle::Monospace)
-                                .interactive(true)
-                                .desired_width(f32::INFINITY)
-                                .hint_text("Create your script"),
-                        )
-                        .changed()
                 });
-                c.0.on_hover_text(self.script_doc_str());
+            };
 
-                ui.separator();
-                if changed_script {
-                    self.edit_epoch += 1;
-                    gui_out = Some(GuiCmd::ConfigChangeSimple)
-                } else if changed_settings_general {
-                    gui_out = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter))
-                } else if changed_settings_simple {
-                    gui_out = Some(GuiCmd::ConfigChangeSimple)
+            // -----------------------------------------------
+            // -----------------------------------------------
+            draw_aux_data_ui(ScriptAuxKind::Source);
+            draw_aux_data_ui(ScriptAuxKind::Destination);
+            draw_aux_data_ui(ScriptAuxKind::Transformation);
+        }
+
+        // -------------------------------------------------------
+        // -------------------------------------------------------
+        ui.separator();
+        let mut use_custom_interval = self.output_interval.is_some();
+        changed_settings_simple |= ui
+            .checkbox(&mut use_custom_interval, "Custom output interval")
+            .on_hover_text(self.output_interval_doc_str())
+            .changed();
+        if use_custom_interval {
+            ui.separator();
+            ui.horizontal(|ui| {
+                if self.output_interval.is_none() {
+                    self.output_interval = Some(SYMM_UNIT_INTERVAL);
+                    changed_settings_simple = true;
                 }
-            }
-            GuiInCommon::_Display { .. } => {}
-        };
+                if let Some(interval) = &mut self.output_interval {
+                    changed_settings_simple |= interval.egui(
+                        GuiInInterval::Edit {
+                            max_range: HID_AXIS_MAX_RANGE,
+                            from_label: "",
+                            to_label: "",
+                            sanitize_and_sort: true,
+                            truncate: false,
+                        },
+                        ui,
+                    );
+                }
+            });
+        } else {
+            self.output_interval = None;
+        }
+
+        ui.separator();
+        let mut use_custom_relativity = self.output_relativity.is_some();
+        changed_settings_simple |= ui
+            .checkbox(&mut use_custom_relativity, "Custom output relativity")
+            .on_hover_text(self.output_relativity_doc_str())
+            .changed();
+        if use_custom_relativity {
+            ui.separator();
+            ui.horizontal(|ui| {
+                if self.output_relativity.is_none() {
+                    self.output_relativity = Some(Relativity::Abs);
+                    changed_settings_simple = true;
+                }
+                if let Some(rel) = &mut self.output_relativity {
+                    changed_settings_simple |= ui.radio_value(rel, Relativity::Abs, "Absolute").changed();
+                    ui.separator();
+                    changed_settings_simple |= ui.radio_value(rel, Relativity::Rel, "Relative").changed();
+                }
+            });
+        } else {
+            self.output_relativity = None;
+        }
+
+        ui.separator();
+        let c = draw_collapsing_ui(ui, None::<()>, Some("Script text"), |_| {}).body(|ui| {
+            ui.separator();
+            ui.label(egui::RichText::new(format!("Language: {}", self.lang)).strong())
+                .on_hover_text(self.lang_doc_str());
+            ui.separator();
+            changed_script = ui
+                .add(
+                    egui::TextEdit::multiline(&mut self.script)
+                        .font(egui::TextStyle::Monospace)
+                        .interactive(true)
+                        .desired_width(f32::INFINITY)
+                        .hint_text("Create your script"),
+                )
+                .changed()
+        });
+        c.0.on_hover_text(self.script_doc_str());
+
+        ui.separator();
+        if changed_script {
+            self.edit_epoch += 1;
+            gui_out = Some(GuiCmd::ConfigChangeSimple)
+        } else if changed_settings_general {
+            gui_out = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter))
+        } else if changed_settings_simple {
+            gui_out = Some(GuiCmd::ConfigChangeSimple)
+        }
 
         gui_out
     }
