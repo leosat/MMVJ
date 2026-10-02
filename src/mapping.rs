@@ -35,6 +35,7 @@ use std::collections::HashMap;
 use std::fs;
 #[cfg(not(feature = "midi"))]
 use std::marker::PhantomData;
+use std::ops::Not;
 use std::sync::atomic::Ordering::Relaxed;
 use tokio::select;
 use tokio::time::{MissedTickBehavior, interval};
@@ -204,13 +205,10 @@ impl<
     fn init(&mut self) -> Result<()> {
         info!("Initializing mapping engine router.");
 
+        // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         self.idle_tick_mappings_reset();
-
-        // ---
         self.router_index_sysdev_and_ctl_type_to_cms_and_mappings.clear();
         self.scheduled_mappings_other.clear();
-
-        // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         self.reset_rel_ctls_cache();
 
         // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -222,33 +220,40 @@ impl<
 
         let mut collect_enabled_mappings_for_dmk_and_cm =
             |dmk: &str, cm_id: ObjId, cm_idx, mappings: &mut Vec<Vec<usize>>, opened_device_id: ObjId| {
-                for (mapping_idx, mapping) in self.cfg.mappings.iter().enumerate().filter(|(_, m)| *m.enabled) {
-                    for source in collect_dynamic_value_matchers(mapping, |ctx| {
-                        ctx.contains(DynValFilter::Control | DynValFilter::Src)
-                    })
+                if mappings.get(cm_idx).is_none() {
+                    mappings.resize(cm_idx + 1, Vec::new());
+                };
+
+                self.cfg
+                    .mappings
                     .iter()
-                    .map(|v| match v {
-                        DynValueRefs::DeviceControlMatcher(dcm) => dcm.clone(),
-                        _ => unreachable!(),
-                    })
-                    .collect::<Vec<_>>()
-                    {
-                        if source.device_matcher_key == *dmk && source.control_matcher.get_id() == cm_id {
-                            if mappings.get(cm_idx).is_none() {
-                                mappings.resize(cm_idx + 1, Vec::new());
-                            };
-                            let q: &mut Vec<usize> = mappings.get_mut(cm_idx).unwrap();
-                            q.push(mapping_idx);
-                            q.sort();
-                            q.dedup();
+                    .enumerate()
+                    .filter(|(_, m)| *m.enabled)
+                    .for_each(|(mapping_idx, mapping)| {
+                        collect_dynamic_value_matchers(mapping, |ctx| {
+                            ctx.contains(DynValFilter::Control | DynValFilter::Src)
+                        })
+                        .iter()
+                        .map(|v| match v {
+                            DynValueRefs::DeviceControlMatcher(dcm) => dcm.clone(),
+                            _ => unreachable!(),
+                        })
+                        .filter(|src| src.device_matcher_key == *dmk && src.control_matcher.get_id() == cm_id)
+                        .collect::<Vec<_>>()
+                        .is_empty()
+                        .not()
+                        .then(|| {
+                            let cm_sourcing_mappings: &mut Vec<usize> = mappings.get_mut(cm_idx).unwrap();
+                            cm_sourcing_mappings.push(mapping_idx);
+                            cm_sourcing_mappings.sort();
+                            cm_sourcing_mappings.dedup();
 
                             info_sysdev_to_enabled_mappings
                                 .entry(opened_device_id)
                                 .or_default()
                                 .push(mapping_idx);
-                        }
-                    }
-                }
+                        });
+                    });
             };
 
         for available_hid_device_info in &available_hid_devices {
@@ -326,6 +331,9 @@ impl<
             }
         }
 
+        self.router_index_sysdev_and_ctl_type_to_cms_and_mappings
+            .retain(|_, v| v.1.iter().any(|v| !v.is_empty()));
+
         for v in info_sysdev_to_enabled_mappings.values_mut() {
             v.sort();
             v.dedup();
@@ -344,9 +352,10 @@ impl<
             );
         }
 
-        // Run all mappings once on init.
-        self.scheduled_mappings_other.extend(
-            self.cfg
+        // Run all enabled mappings once on init.
+        self.run_mappings(
+            &self
+                .cfg
                 .mappings
                 .iter()
                 .enumerate()
@@ -354,8 +363,6 @@ impl<
                 .map(|(i, _)| i)
                 .collect::<Vec<_>>(),
         );
-        self.run_mappings(&self.scheduled_mappings_other);
-        self.scheduled_mappings_other.clear();
 
         Ok(())
     }
