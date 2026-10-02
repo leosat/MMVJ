@@ -448,7 +448,8 @@ impl DeviceManagerCommon for HidManager {
                 opened_device_id: opened_device.borrow().get_id(),
                 available_device_info: device_info.clone(),
             })
-        } else if let Ok(mut d) = HidDevice::open_from_path(device_info.path.to_str().unwrap(), None, self.debug) {
+        } else if let Ok(mut d) = HidDevice::open_from_path(device_info.path.to_str().unwrap(), None, None, self.debug)
+        {
             log::info!(
                 "Opened device {} (matched config key {})",
                 device_info.name,
