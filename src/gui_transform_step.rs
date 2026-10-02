@@ -396,7 +396,6 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
                     && let Some(step) = step_to_add.inner.flatten()
                 {
                     self.steps.push(step);
-                    self.recompute_metadata_and_sanitize_recursive(None);
                     *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
                 }
 
@@ -421,7 +420,7 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
 
                 ui.push_id(step.get_id(), |ui| {
                     step.egui((step_idx, *self.id, gui_in), ui)
-                        .inspect(|out| *gui_out_mut = Some(out.clone()))
+                        .inspect(|out| *gui_out_mut = gui_out_mut.clone().or(Some(out.clone())))
                 });
             }
 
@@ -455,7 +454,7 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
                         } else {
                             self.steps.insert(*dst_obj_idx, dnd_job.lock().unwrap().step.clone());
                         }
-                        gui_out = gui_out.or(Some(GuiCmd::ConfigChangeSimple));
+                        gui_out = gui_out.or(Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter)));
                     }
                 }
             }
@@ -469,6 +468,7 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
                 self.recompute_metadata_and_sanitize_recursive(None);
             }
 
+            // dbg!(&gui_out);
             gui_out
         } else {
             unreachable!()
