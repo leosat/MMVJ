@@ -497,7 +497,7 @@ impl<'s> DrawEgui<'s> for ValueXrcs {
 // -------------------------------------
 impl<'s> DrawEgui<'s> for Relativity {
     type In = GuiInKinds;
-    type Out = bool;
+    type Out = Option<GuiCmd>;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut changed = false;
@@ -510,7 +510,7 @@ impl<'s> DrawEgui<'s> for Relativity {
                 ui.label(format!("{self:?}"));
             }
         };
-        changed
+        bool_to_simple_change_gui_cmd(changed)
     }
 }
 

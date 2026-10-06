@@ -263,7 +263,7 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
 
                 ui.separator();
                 ui.label("Input relativity:");
-                changed |= in_meta.relativity.egui(GuiInKinds::Edit, ui);
+                changed |= in_meta.relativity.egui(GuiInKinds::Edit, ui).is_some();
             });
 
             if changed {
@@ -1004,6 +1004,41 @@ impl<'s> DrawEgui<'s> for ArithCfg {
             gui_out = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
         }
 
+        ui.separator();
+        ui.horizontal(|ui| {
+            ui.label("Output relativity: ")
+                .on_hover_text("... either set manually or automatically relative if any operand is relative");
+            self.out_relativity.egui(GuiInKinds::Edit, ui).inspect(|out| {
+                gui_out = Some(out.clone());
+            });
+        });
+
+        if gui_out.is_some() {
+            self.sanitize_inplace(());
+        }
+        gui_out
+    }
+}
+
+impl<'s, InnerT, InnerDrawEguiIn> DrawEgui<'s> for AutoOrManual<InnerT>
+where
+    InnerT: Clone + Default + DrawEgui<'s, In = InnerDrawEguiIn, Out = Option<GuiCmd>>,
+{
+    type In = InnerDrawEguiIn;
+    type Out = <InnerT as DrawEgui<'s>>::Out;
+
+    fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+        let mut gui_out = self.inner_mut().egui(gui_in, ui);
+        if gui_out.is_some() {
+            *self = self.clone().make_manual();
+        }
+        if self.is_manual() {
+            ui.separator();
+            if ui.button("reset to auto").clicked() {
+                *self = self.clone().make_auto();
+                gui_out = bool_to_simple_change_gui_cmd(true);
+            }
+        }
         gui_out
     }
 }

@@ -1466,6 +1466,7 @@ impl<T: Default> AutoOrManual<T> {
     }
 
     #[allow(unused)]
+    #[must_use]
     pub(crate) fn make_auto(self) -> AutoOrManual<T> {
         match self {
             Self::Manual(m) => Self::Auto(m),
@@ -1474,6 +1475,7 @@ impl<T: Default> AutoOrManual<T> {
     }
 
     #[allow(unused)]
+    #[must_use]
     pub(crate) fn make_manual(self) -> AutoOrManual<T> {
         match self {
             Self::Manual(_) => self,
