@@ -541,7 +541,7 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                     Self::Div(s) => {
                                         s.egui((ArithOpType::Div, gui_in.2.clone_and_push_hier(step_id)), ui)
                                     }
-                                    Self::VelocityToDisplacement(s) => s.egui((), ui),
+                                    Self::VelocityToDisplacement(s) => s.egui(gui_in.2, ui),
                                     Self::Script(s) => s.egui(
                                         (
                                             step_id,
@@ -1044,17 +1044,24 @@ where
 }
 
 impl<'s> DrawEgui<'s> for VelocityToDisplacementCfg {
-    type In = ();
+    type In = GuiInCommon<'s>;
     type Out = Option<GuiCmd>;
 
-    fn egui(&mut self, _gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+    fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut gui_out = None;
         ui.separator();
         ui.horizontal(|ui| {
             ui.label("Scale by:");
-            if ui.add(egui::DragValue::new(&mut self.multiplier)).changed() {
-                gui_out = bool_to_simple_change_gui_cmd(true);
-            };
+            gui_out = self.multiplier.egui(
+                GuiInValue::Edit(GuiInValueEditParams {
+                    name: "Scalar",
+                    choice_case: Some(ValueUsageContext::TfmStepAuxSrc),
+                    allow_interval_edit: true,
+                    slider_log_scale: false,
+                    gui_common_ctx: &gui_in,
+                }),
+                ui,
+            );
         });
         ui.separator();
         ui.horizontal(|ui| {
