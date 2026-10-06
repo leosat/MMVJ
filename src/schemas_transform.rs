@@ -363,15 +363,32 @@ pub(crate) struct ArithCfg {
     #[garde(skip)]
     #[sanitize_inplace(skip)]
     pub(crate) out_interval: AutoOrManual<NumInterval<BaseNumT>>,
+    #[garde(skip)]
+    #[traverse(skip)]
+    #[sanitize_inplace(skip)]
+    #[serde(skip_serializing_if = "AutoOrManual::is_auto", default)]
+    pub(crate) out_relativity: AutoOrManual<Relativity>,
 }
 
 impl ArithCfg {
     fn sanitize_inplace_epilogue(&mut self) {
-        if self.sources.iter().all(|src| src.port_get_relativity().is_relative()) {
-            self.common_state_mut().set_out_relativity(Relativity::Rel);
+        if self.out_relativity.is_auto() {
+            self.out_relativity = AutoOrManual::Auto(
+                if self.common_state_ref().is_in_relative()
+                    || self.sources.iter().any(|src| src.port_get_relativity().is_relative())
+                {
+                    Relativity::Rel
+                } else {
+                    Relativity::Abs
+                },
+            );
         }
+
+        let out_relativity = *self.out_relativity;
         let out_interval = self.out_interval;
         let in_interval = self.common_state.get_in_interval();
+
+        self.common_state_mut().set_out_relativity(out_relativity);
         self.common_state_mut().set_out_interval(if out_interval.is_manual() {
             *out_interval
         } else {
