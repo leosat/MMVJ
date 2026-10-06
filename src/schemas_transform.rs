@@ -438,10 +438,9 @@ pub(crate) struct VelocityToDisplacementCfg {
     #[traverse(skip)]
     #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
     pub(crate) enabled: EnabledFlagCfg,
-    #[traverse(skip)]
-    #[serde(default = "default_one")]
+    #[serde(default)]
     #[garde(skip)]
-    pub(crate) multiplier: BaseNumT,
+    pub(crate) multiplier: ValuePort<V2DMultiplier, SanPolicyNone, RemapPolicyUserDefined, TfmPolicyDisabled>,
     #[traverse(skip)]
     #[serde(
         default = "default_symm_unit_interval",
@@ -452,6 +451,17 @@ pub(crate) struct VelocityToDisplacementCfg {
     )]
     #[garde(skip)]
     pub(crate) out_interval: NumInterval<BaseNumT>,
+}
+
+make_input_port_inner_nutype!(
+    V2DMultiplier,
+    default: velocity_to_displacement_default_multiplier(),
+    san-doc: "",
+    san-exe: |v: BaseNumT| { v }
+);
+
+fn velocity_to_displacement_default_multiplier() -> ValueSrcs {
+    make_static_value_src(1.0, num_interval!(-100.0, 100.0))
 }
 
 fn default_cell_instant_now() -> Cell<std::time::Instant> {
