@@ -693,7 +693,7 @@ impl<'s> DrawEgui<'s> for IntegrateCfg {
             };
             ui.label(
                 egui::RichText::new(format!(
-                    ") * {:+011.04} -> {:+011.04} -> map to acc. range {} -> {:+011.04}",
+                    ") * ({:+011.04} -> {:+011.04} -> map to acc. range {} -> {:+011.04})",
                     current_input,
                     current_input * self.in_gain,
                     self.accumulator.port_get_interval(),
@@ -1269,6 +1269,27 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
             .inspect(|out| *gui_out_mut = Some(out.clone()));
         });
 
+        if self.auto_center_halflife.port_get_numeric_value(None::<&()>) > 0.0 {
+            ui.separator();
+            ui.horizontal(|ui| {
+                let param_name = "Auto-center + force feedback";
+                ui.label(param_name)
+                    .on_hover_text(Self::auto_center_along_force_feedback_doc_str_static());
+                self.auto_center_along_force_feedback
+                    .egui(
+                        GuiInValue::Edit(GuiInValueEditParams {
+                            allow_interval_edit: false,
+                            slider_log_scale: false,
+                            name: param_name,
+                            choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                            gui_common_ctx: &gui_in,
+                        }),
+                        ui,
+                    )
+                    .inspect(|out| *gui_out_mut = Some(out.clone()));
+            });
+        }
+
         ui.separator();
         ui.collapsing("Hold factor", |ui| {
             ui.separator();
@@ -1334,27 +1355,6 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
         .on_hover_text(self.accumulator_doc_str());
 
         if let Some(ff) = &mut self.force_feedback {
-            if self.auto_center_halflife.port_get_numeric_value(None::<&()>) > 0.0 {
-                ui.separator();
-                ui.horizontal(|ui| {
-                    let param_name = "Auto-center + force feedback";
-                    ui.label(param_name)
-                        .on_hover_text(Self::auto_center_along_force_feedback_doc_str_static());
-                    self.auto_center_along_force_feedback
-                        .egui(
-                            GuiInValue::Edit(GuiInValueEditParams {
-                                allow_interval_edit: false,
-                                slider_log_scale: false,
-                                name: param_name,
-                                choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
-                                gui_common_ctx: &gui_in,
-                            }),
-                            ui,
-                        )
-                        .inspect(|out| *gui_out_mut = Some(out.clone()));
-                });
-            }
-            ui.separator();
             ui.collapsing("Force Feedback", |ui| {
                 ff.egui(gui_in, ui).inspect(|out| *gui_out_mut = Some(out.clone()));
             })
