@@ -54,7 +54,7 @@ pub(crate) trait ValuePortIface:
     fn port_get_relativity(&self) -> Relativity;
 
     fn port_get_default_interval_from_inner(&self) -> NumInterval<<Self::InnerT as WithNumericValue>::ValueT>;
-    fn _port_get_identity_str(&self) -> String;
+    // fn _port_get_identity_str(&self) -> String;
 
     fn port_set_numeric_value_and_flush_to_devices(
         &self,
@@ -552,9 +552,9 @@ where
         InnerT::default().get_interval()
     }
 
-    fn _port_get_identity_str(&self) -> String {
-        self.inner.value_identity()
-    }
+    // fn _port_get_identity_str(&self) -> String {
+    //     self.inner.value_identity()
+    // }
 
     fn port_set_numeric_value_and_flush_to_devices(&self, value: InnerT::ValueT, ctx: &impl TfmExecCtx)
     where
@@ -771,6 +771,7 @@ macro_rules! make_port_inner_nutype {
                 self.as_ref().value_is_xrc_sink()
             }
 
+            #[cfg(feature = "gui")]
             fn value_identity(&self) -> String {
                 self.as_ref().value_identity()
             }
