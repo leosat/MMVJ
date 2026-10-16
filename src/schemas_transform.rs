@@ -166,8 +166,12 @@ impl WithLastKnownIOSettable for TfmStepCommonState {
     type LastKnownIOSettableValueT = (Option<BaseNumT>, Option<BaseNumT>);
 
     fn set_last_known_io(&self, value: Self::LastKnownIOSettableValueT) {
-        value.0.map(|v| self.last_in.store(v, Relaxed));
-        value.1.map(|v| self.last_out.store(v, Relaxed));
+        if let Some(v) = value.0 {
+            self.last_in.store(v, Relaxed)
+        }
+        if let Some(v) = value.1 {
+            self.last_out.store(v, Relaxed)
+        }
     }
 }
 
@@ -175,8 +179,8 @@ impl Default for TfmStepCommonState {
     fn default() -> Self {
         Self {
             id: Default::default(),
-            intervals: (NumInterval::default().into(), NumInterval::default().into()),
-            relativity: (Relativity::Abs.into(), Relativity::Abs.into()),
+            intervals: (NumInterval::default(), NumInterval::default()),
+            relativity: (Relativity::Abs, Relativity::Abs),
             #[cfg(feature = "gui")]
             gui_trace_graph_opened: Default::default(),
             trace_channel: None,
@@ -249,7 +253,7 @@ impl TfmStepCommonState {
         out_interval: NumInterval<BaseNumT>,
     ) -> Self {
         Self {
-            intervals: (in_interval.into(), out_interval.into()),
+            intervals: (in_interval, out_interval),
             ..Default::default()
         }
     }
@@ -1431,7 +1435,7 @@ impl Default for LinearCfg {
     }
 }
 
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, WithSelfSanitize)]
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, WithSelfSanitize, Default)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct SmoothstepCfg {
     #[serde(skip)]
@@ -1452,16 +1456,6 @@ impl TfmCfgDuplicateWithNewState for SmoothstepCfg {
         let mut s = self.clone();
         s.common_state = Default::default();
         s
-    }
-}
-
-impl Default for SmoothstepCfg {
-    fn default() -> Self {
-        Self {
-            enabled: Default::default(),
-            desc: Default::default(),
-            common_state: Default::default(),
-        }
     }
 }
 

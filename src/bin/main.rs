@@ -68,10 +68,10 @@ async fn main() -> Result<()> {
     }
 
     if cli.license {
-        print!("\nLicense:\n\n{}", &*crate::config::LICENSE);
+        print!("\nLicense:\n\n{}", *crate::config::LICENSE);
         print!(
             "\nThird-party components license info:\n\n{}",
-            &*crate::config::LICENSE_THIRDPARTY
+            *crate::config::LICENSE_THIRDPARTY
         );
         std::process::exit(0);
     }
