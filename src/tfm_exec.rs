@@ -279,10 +279,9 @@ impl WithTfmExec for VelocityToDisplacementCfg {
         if branches::unlikely(!*self.enabled) {
             return value;
         }
+        let dt = (std::time::Instant::now() - self.last_time.get()).as_secs_f32() as BaseNumT;
         value = self.out_interval.map_from(
-            value
-                * self.multiplier.port_get_numeric_value(Some(ctx))
-                * (std::time::Instant::now() - self.last_time.get()).as_secs_f32() as BaseNumT,
+            value * self.multiplier.port_get_numeric_value(Some(ctx)) * clamp_dt_by_min_and_max_period(dt),
             &self.common_state_ref().get_in_interval(),
             get_out_of_range_policy(Relativity::Rel, ctx.is_reactive_mode()),
         );
