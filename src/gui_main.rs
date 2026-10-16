@@ -672,7 +672,7 @@ impl<'s> DrawEgui<'s> for MapperMode {
 
     fn egui(&mut self, _gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut changed = false;
-        ui.label(format!("Current mode: "))
+        ui.label("Current mode: ".to_string())
             .on_hover_text(mapper_mode_to_desc((&*self).into()));
         ui.label(mapper_mode_to_icon((&*self).into()))
             .on_hover_text(mapper_mode_to_desc((&*self).into()));
@@ -725,7 +725,7 @@ impl<'s> DrawEgui<'s> for MapperMode {
         }
 
         ui.separator();
-        ui.label(format!(" Switch to: "));
+        ui.label(" Switch to: ".to_string());
         if !self.is_reactive()
             && ui
                 .button(mapper_mode_to_icon(MapperModeKind::Reactive))

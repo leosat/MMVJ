@@ -512,12 +512,11 @@ impl ConfigManager {
         if let Some(target_dir) = self
             .cfg_file_path_canon
             .as_ref()
-            .map(|cfg_file| {
+            .and_then(|cfg_file| {
                 cfg_file
                     .parent()
                     .map(|cfg_file_parent_dir| cfg_file_parent_dir.to_path_buf())
             })
-            .flatten()
             .or(std::env::current_dir().ok())
         {
             let schema_path = target_dir.join(APP_CONFIG_SCHEMA_FILE_CFG_RELATIVE);
@@ -602,18 +601,15 @@ impl ConfigManager {
 
     pub(crate) fn load_demo(&mut self) -> Result<&mut Self> {
         log::info!("Loading default bundled demo config");
-        Ok(self
-            .load(
-                DEMO_CFG
-                    .lock()
-                    .unwrap()
-                    .iter()
-                    .nth(0)
-                    .map(|v| (v.0.clone(), v.1.clone()))
-                    .context("Can't get bundled demo config")?
-                    .into(),
-            )
-            .context("Loading demo config failed")?)
+        self.load(
+            DEMO_CFG
+                .lock()
+                .unwrap()
+                .first()
+                .map(|v| (v.0.clone(), v.1.clone()))
+                .context("Can't get bundled demo config")?,
+        )
+        .context("Loading demo config failed")
     }
 
     pub(crate) fn load(&mut self, cfg: (String, Config)) -> Result<&mut Self> {
@@ -692,62 +688,57 @@ pub(crate) static PREDEF_CONTROLS: LazyLock<ControlsPredefinedCfg> = LazyLock::n
     serde_saphyr::from_str(&s).expect("Failed to parse built-in predefined controls")
 });
 
+#[allow(clippy::type_complexity)]
 pub(crate) static DEMO_CFG: LazyLock<Arc<std::sync::Mutex<Vec<(String, Config)>>>> = LazyLock::new(|| {
-    let mut demo_cfg: Vec<(String, Config)> = Default::default();
-
-    demo_cfg.push((
-        "Keyboard and mouse steering, no-script".into(),
-        serde_saphyr::from_str(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/conf/example-kbd-or-ms-steering-noscript.yaml"
-        )))
-        .expect(""),
-    ));
-
-    demo_cfg.push((
-        "Mouse steering only".into(),
-        serde_saphyr::from_str(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/conf/example-default.yaml"
-        )))
-        .expect(""),
-    ));
-
-    demo_cfg.push((
-        "G29-like joystick, mouse steering only".into(),
-        serde_saphyr::from_str(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/conf/example-g29-like-joystick-mouse-steering.yaml"
-        )))
-        .expect(""),
-    ));
-
-    demo_cfg.push((
-        "Keyboard and mouse steering, Lua script".into(),
-        serde_saphyr::from_str(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/conf/example-kbd-or-ms-steering-lua.yaml"
-        )))
-        .expect(""),
-    ));
-
-    demo_cfg.push((
-        "Mouse steering or MIDI-controlled joystick".into(),
-        serde_saphyr::from_str(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/conf/example-midi-or-mouse-steering.yaml"
-        )))
-        .expect(""),
-    ));
-
-    demo_cfg.push((
-        "Abstract Lua scripting demo".into(),
-        serde_saphyr::from_str(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/conf/example-scripting-lua.yaml"
-        )))
-        .expect(""),
-    ));
-
+    let demo_cfg: Vec<(String, Config)> = vec![
+        (
+            "Keyboard and mouse steering, no-script".into(),
+            serde_saphyr::from_str(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/conf/example-kbd-or-ms-steering-noscript.yaml"
+            )))
+            .unwrap(),
+        ),
+        (
+            "Mouse steering only".into(),
+            serde_saphyr::from_str(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/conf/example-default.yaml"
+            )))
+            .unwrap(),
+        ),
+        (
+            "G29-like joystick, mouse steering only".into(),
+            serde_saphyr::from_str(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/conf/example-g29-like-joystick-mouse-steering.yaml"
+            )))
+            .unwrap(),
+        ),
+        (
+            "Keyboard and mouse steering, Lua script".into(),
+            serde_saphyr::from_str(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/conf/example-kbd-or-ms-steering-lua.yaml"
+            )))
+            .unwrap(),
+        ),
+        (
+            "Mouse steering or MIDI-controlled joystick".into(),
+            serde_saphyr::from_str(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/conf/example-midi-or-mouse-steering.yaml"
+            )))
+            .unwrap(),
+        ),
+        (
+            "Abstract Lua scripting demo".into(),
+            serde_saphyr::from_str(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/conf/example-scripting-lua.yaml"
+            )))
+            .unwrap(),
+        ),
+    ];
     Arc::new(demo_cfg.into())
 });

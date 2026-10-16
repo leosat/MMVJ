@@ -546,7 +546,7 @@ impl<
         }
     }
 
-    fn run_mappings(&self, mappings: &Vec<usize>) {
+    fn run_mappings(&self, mappings: &[usize]) {
         for mapping_idx in mappings.iter() {
             let mapping = &self.cfg.mappings[*mapping_idx];
             let input_value = mapping.src.get_numeric_value();

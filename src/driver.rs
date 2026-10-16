@@ -334,7 +334,7 @@ pub async fn run(
         }
 
         if let Some(rate) = update_rate_hz {
-            mapping_engine.set_mode(cfg_mgr.cfg_ref().global.mode.clone().set_idle_rate(rate).clone());
+            mapping_engine.set_mode(*cfg_mgr.cfg_ref().global.mode.clone().set_idle_rate(rate));
         }
 
         // if debug.is_on() {
@@ -584,7 +584,7 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                                         .unwrap()
                                         .iter()
                                         .find(|v| v.0 == demo_name)
-                                        .map(|v| v.clone())
+                                        .cloned()
                                         .expect("Failed to get requested demo config"),
                                 )
                                 .inspect_err(|e| log::error!("{e}"));

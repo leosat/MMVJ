@@ -510,7 +510,7 @@ where
                     tfm.get_out_interval(),
                 )
             } else {
-                (tfm.get_last_known_io().1.into(), tfm.get_out_interval())
+                (tfm.get_last_known_io().1, tfm.get_out_interval())
             }
         } else {
             (

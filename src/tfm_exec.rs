@@ -159,7 +159,7 @@ impl WithTfmExec for TfmSeqCfg {
                 log::error!(
                     "In-pipeline non-finite value produced, transform execution interrupted to prevent propagation.\n\
                     Non-finite value produced by step {} with runtime id {}",
-                    step.to_string(),
+                    step,
                     step.get_id()
                 );
                 return input;
