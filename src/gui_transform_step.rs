@@ -841,12 +841,12 @@ impl<'s> DrawEgui<'s> for LinearCfg {
                     .logarithmic(false),
             )
             .changed();
-        changed |= ui
-            .checkbox(
-                &mut self.center_symmetric,
-                "Apply symmetrically around center of the value interval",
-            )
-            .changed();
+        ui.horizontal(|ui| {
+            changed |= self
+                .center_symmetric
+                .egui("Apply symmetrically around center of the value interval", ui)
+                .is_some();
+        });
         bool_to_simple_change_gui_cmd(changed)
     }
 }
@@ -856,7 +856,7 @@ impl<'s> DrawEgui<'s> for SCurveCfg {
     type Out = Option<GuiCmd>;
 
     fn egui(&mut self, _state: Self::In, ui: &mut egui::Ui) -> Self::Out {
-        let changed = ui
+        let mut changed = ui
             .add(
                 // TODO: intervals, validation!
                 egui::Slider::new(&mut self.steepness, 1.0..=30.0)
@@ -864,6 +864,13 @@ impl<'s> DrawEgui<'s> for SCurveCfg {
                     .logarithmic(false),
             )
             .changed();
+        ui.separator();
+        ui.horizontal(|ui| {
+            changed |= self
+                .center_symmetric
+                .egui("Apply symmetrically around center of the value interval", ui)
+                .is_some();
+        });
         bool_to_simple_change_gui_cmd(changed)
     }
 }
@@ -881,12 +888,12 @@ impl<'s> DrawEgui<'s> for NormExpCfg {
                     .logarithmic(true),
             )
             .changed();
-        changed |= ui
-            .checkbox(
-                &mut self.center_symmetric,
-                "Apply symmetrically around center of the value interval",
-            )
-            .changed();
+        ui.horizontal(|ui| {
+            changed |= self
+                .center_symmetric
+                .egui("Apply symmetrically around center of the value interval", ui)
+                .is_some();
+        });
         if changed {
             Some(GuiCmd::ConfigChangeSimple)
         } else {
@@ -908,12 +915,12 @@ impl<'s> DrawEgui<'s> for SignedPowerCfg {
                     .logarithmic(true),
             )
             .changed();
-        changed |= ui
-            .checkbox(
-                &mut self.center_symmetric,
-                "Apply symmetrically around center of the value interval",
-            )
-            .changed();
+        ui.horizontal(|ui| {
+            changed |= self
+                .center_symmetric
+                .egui("Apply symmetrically around center of the value interval", ui)
+                .is_some();
+        });
         bool_to_simple_change_gui_cmd(changed)
     }
 }
@@ -1020,6 +1027,15 @@ impl<'s> DrawEgui<'s> for ArithCfg {
     }
 }
 
+impl<'s> DrawEgui<'s> for bool {
+    type In = &'s str;
+    type Out = Option<GuiCmd>;
+
+    fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+        bool_to_simple_change_gui_cmd(ui.checkbox(self, gui_in).changed())
+    }
+}
+
 impl<'s, InnerT, InnerDrawEguiIn> DrawEgui<'s> for AutoOrManual<InnerT>
 where
     InnerT: Clone + Default + DrawEgui<'s, In = InnerDrawEguiIn, Out = Option<GuiCmd>>,
@@ -1032,12 +1048,14 @@ where
         if gui_out.is_some() {
             *self = self.clone().make_manual();
         }
+        ui.separator();
         if self.is_manual() {
-            ui.separator();
             if ui.button("reset to auto").clicked() {
                 *self = self.clone().make_auto();
                 gui_out = bool_to_simple_change_gui_cmd(true);
             }
+        } else {
+            ui.label("(automatically deduced)");
         }
         gui_out
     }

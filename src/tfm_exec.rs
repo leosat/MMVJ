@@ -468,7 +468,7 @@ impl WithTfmExec for SignedPowerCfg {
     type OutputT = Self::InputT;
     fn exec(&self, mut value: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
         let interval = self.common_state_ref().get_in_interval();
-        value = if self.center_symmetric {
+        value = if *self.center_symmetric {
             apply_center_symmetric_with_abs_value(
                 value,
                 interval,
@@ -496,7 +496,7 @@ impl WithTfmExec for NormExpCfg {
     type OutputT = Self::InputT;
     fn exec(&self, mut value: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
         let interval = self.common_state_ref().get_in_interval();
-        value = if self.center_symmetric {
+        value = if *self.center_symmetric {
             apply_center_symmetric_with_abs_value(
                 value,
                 interval,
@@ -524,16 +524,25 @@ impl WithTfmExec for SCurveCfg {
     type OutputT = Self::InputT;
     fn exec(&self, mut value: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
         let interval = self.common_state_ref().get_in_interval();
-        value = interval.map_from_unit(
-            s_curve(
-                interval.map_to_unit(
-                    value,
-                    get_out_of_range_policy(self.common_state_ref().get_in_relativity(), ctx.is_reactive_mode()),
+        value = if *self.center_symmetric {
+            apply_center_symmetric_with_abs_value(
+                value,
+                interval,
+                |v_abs| s_curve(v_abs, self.steepness),
+                get_out_of_range_policy(self.common_state_ref().get_in_relativity(), ctx.is_reactive_mode()),
+            )
+        } else {
+            interval.map_from_unit(
+                s_curve(
+                    interval.map_to_unit(
+                        value,
+                        get_out_of_range_policy(self.common_state_ref().get_in_relativity(), ctx.is_reactive_mode()),
+                    ),
+                    self.steepness,
                 ),
-                self.steepness,
-            ),
-            get_out_of_range_policy(self.common_state_ref().get_in_relativity(), ctx.is_reactive_mode()),
-        );
+                get_out_of_range_policy(self.common_state_ref().get_in_relativity(), ctx.is_reactive_mode()),
+            )
+        };
         value
     }
 }
@@ -558,7 +567,7 @@ impl WithTfmExec for LinearCfg {
     type InputT = BaseNumT;
     type OutputT = Self::InputT;
     fn exec(&self, value: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
-        if self.center_symmetric {
+        if *self.center_symmetric {
             let interval = self.common_state_ref().get_in_interval();
             apply_center_symmetric_with_abs_value(
                 value,
