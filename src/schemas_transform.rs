@@ -51,11 +51,6 @@ fn skip_serializing_value_port(port: &impl ValuePortIface) -> bool {
 }
 
 // =================================================
-
-const fn default_on_idle() -> bool {
-    true
-}
-
 const fn default_ff_gain() -> ValueSrcs {
     make_static_value_src(1.0, NumInterval { from: 0.0, to: 3.0 })
 }
@@ -1389,10 +1384,6 @@ pub(crate) struct LinearCfg {
     #[serde(default)]
     #[sanitize_inplace(skip)]
     pub(crate) center_symmetric: bool,
-    #[serde(default = "default_on_idle")]
-    #[serde(skip_serializing_if = "is_true")]
-    #[sanitize_inplace(skip)]
-    pub(crate) on_idle: bool,
 }
 
 impl TfmCfgDuplicateWithNewState for LinearCfg {
@@ -1410,7 +1401,6 @@ impl Default for LinearCfg {
             shift_x: Default::default(),
             shift_y: Default::default(),
             center_symmetric: Default::default(),
-            on_idle: default_on_idle(),
             desc: Default::default(),
             common_state: Default::default(),
         }
@@ -1431,10 +1421,6 @@ pub(crate) struct SmoothstepCfg {
     #[sanitize_inplace(skip)]
     #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
     pub(crate) enabled: EnabledFlagCfg,
-    #[serde(default = "default_on_idle")]
-    #[serde(skip_serializing_if = "is_true")]
-    #[sanitize_inplace(skip)]
-    pub(crate) on_idle: bool,
 }
 
 impl TfmCfgDuplicateWithNewState for SmoothstepCfg {
@@ -1449,7 +1435,6 @@ impl Default for SmoothstepCfg {
     fn default() -> Self {
         Self {
             enabled: Default::default(),
-            on_idle: default_on_idle(),
             desc: Default::default(),
             common_state: Default::default(),
         }
@@ -1477,11 +1462,6 @@ pub(crate) struct SCurveCfg {
     #[garde(range(min = 0.0))]
     #[sanitize_inplace(skip)]
     pub(crate) steepness: BaseNumT,
-    #[serde(default = "default_on_idle")]
-    #[serde(skip_serializing_if = "is_true")]
-    #[garde(skip)]
-    #[sanitize_inplace(skip)]
-    pub(crate) on_idle: bool,
 }
 
 impl TfmCfgDuplicateWithNewState for SCurveCfg {
@@ -1496,7 +1476,6 @@ impl Default for SCurveCfg {
         Self {
             enabled: Default::default(),
             steepness: default_scurve_steepness(),
-            on_idle: default_on_idle(),
             desc: Default::default(),
             common_state: Default::default(),
         }
@@ -1534,11 +1513,6 @@ pub(crate) struct NormExpCfg {
     #[garde(skip)]
     #[sanitize_inplace(skip)]
     pub(crate) center_symmetric: bool,
-    #[serde(default = "default_on_idle")]
-    #[serde(skip_serializing_if = "is_true")]
-    #[garde(skip)]
-    #[sanitize_inplace(skip)]
-    pub(crate) on_idle: bool,
 }
 
 impl TfmCfgDuplicateWithNewState for NormExpCfg {
@@ -1555,7 +1529,6 @@ impl Default for NormExpCfg {
             enabled: Default::default(),
             base: default_norm_exp_base(),
             center_symmetric: Default::default(),
-            on_idle: default_on_idle(),
             desc: Default::default(),
             common_state: Default::default(),
         }
@@ -1588,11 +1561,6 @@ pub(crate) struct SignedPowerCfg {
     #[garde(skip)]
     #[sanitize_inplace(skip)]
     pub(crate) center_symmetric: bool,
-    #[serde(default = "default_on_idle")]
-    #[serde(skip_serializing_if = "is_true")]
-    #[garde(skip)]
-    #[sanitize_inplace(skip)]
-    pub(crate) on_idle: bool,
 }
 
 impl TfmCfgDuplicateWithNewState for SignedPowerCfg {
@@ -1609,7 +1577,6 @@ impl Default for SignedPowerCfg {
             enabled: Default::default(),
             power: 1.0,
             center_symmetric: Default::default(),
-            on_idle: default_on_idle(),
             desc: Default::default(),
             common_state: Default::default(),
         }
@@ -1632,10 +1599,6 @@ pub(crate) struct _HighPassCfg {
     pub(crate) enabled: EnabledFlagCfg,
     #[garde(range(min = 0.0))]
     pub(crate) cutoff: BaseNumT,
-    #[serde(default = "default_on_idle")]
-    #[serde(skip_serializing_if = "is_true")]
-    #[garde(skip)]
-    pub(crate) on_idle: bool,
 }
 
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate, Traversable, TraversableMut)]
@@ -2854,10 +2817,5 @@ mod tests {
         clamp_cfg.range = (100.0..100.0).into();
         clamp_cfg.sanitize_inplace(());
         assert!(clamp_cfg.range.from == 4.0);
-    }
-
-    #[test]
-    fn default_on_idle_is_true() {
-        assert!(is_true(&default_on_idle()));
     }
 }
