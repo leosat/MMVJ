@@ -1357,8 +1357,25 @@ impl Default for OneEuroFilterCfg {
     }
 }
 
+macro_rules! sanitize_center_symmetric {
+    ($self:ident) => {{
+        let input_interval = $self.common_state_ref().get_in_interval();
+        let is_symm_around_zero = input_interval.is_symm_around_zero();
+        if $self.center_symmetric.is_auto() {
+            *$self.center_symmetric = is_symm_around_zero;
+        } else if is_symm_around_zero && !*$self.center_symmetric {
+            log::warn!(
+                "Curve input interval {} is symmetric around 0, but the manually \
+            set handling mode is not center-symmetric",
+                input_interval
+            );
+        }
+    }};
+}
+
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, WithSelfSanitize)]
 #[serde(deny_unknown_fields)]
+#[sanitize_inplace_with_epilogue]
 pub(crate) struct LinearCfg {
     #[serde(skip)]
     #[garde(skip)]
@@ -1381,9 +1398,16 @@ pub(crate) struct LinearCfg {
     #[serde(default)]
     #[sanitize_inplace(skip)]
     pub(crate) shift_y: BaseNumT,
-    #[serde(default)]
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "AutoOrManual::is_auto")]
     #[sanitize_inplace(skip)]
-    pub(crate) center_symmetric: bool,
+    pub(crate) center_symmetric: AutoOrManual<bool>,
+}
+
+impl LinearCfg {
+    fn sanitize_inplace_epilogue(&mut self) {
+        sanitize_center_symmetric!(self);
+    }
 }
 
 impl TfmCfgDuplicateWithNewState for LinearCfg {
@@ -1443,6 +1467,7 @@ impl Default for SmoothstepCfg {
 
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Validate, WithSelfSanitize)]
 #[serde(deny_unknown_fields)]
+#[sanitize_inplace_with_epilogue]
 pub(crate) struct SCurveCfg {
     #[serde(skip)]
     #[garde(skip)]
@@ -1462,6 +1487,16 @@ pub(crate) struct SCurveCfg {
     #[garde(range(min = 0.0))]
     #[sanitize_inplace(skip)]
     pub(crate) steepness: BaseNumT,
+    #[garde(skip)]
+    #[serde(default, skip_serializing_if = "AutoOrManual::is_auto")]
+    #[sanitize_inplace(skip)]
+    pub(crate) center_symmetric: AutoOrManual<bool>,
+}
+
+impl SCurveCfg {
+    fn sanitize_inplace_epilogue(&mut self) {
+        sanitize_center_symmetric!(self)
+    }
 }
 
 impl TfmCfgDuplicateWithNewState for SCurveCfg {
@@ -1478,6 +1513,7 @@ impl Default for SCurveCfg {
             steepness: default_scurve_steepness(),
             desc: Default::default(),
             common_state: Default::default(),
+            center_symmetric: Default::default(),
         }
     }
 }
@@ -1489,6 +1525,7 @@ impl Default for SCurveCfg {
 // pub(crate) struct NormExpBase(BaseNumericT);
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Validate, WithSelfSanitize)]
 #[serde(deny_unknown_fields)]
+#[sanitize_inplace_with_epilogue]
 pub(crate) struct NormExpCfg {
     #[serde(skip)]
     #[garde(skip)]
@@ -1509,10 +1546,16 @@ pub(crate) struct NormExpCfg {
     #[garde(range(min = 0.0))]
     #[sanitize_inplace(skip)]
     pub(crate) base: BaseNumT,
-    #[serde(default)]
     #[garde(skip)]
+    #[serde(default, skip_serializing_if = "AutoOrManual::is_auto")]
     #[sanitize_inplace(skip)]
-    pub(crate) center_symmetric: bool,
+    pub(crate) center_symmetric: AutoOrManual<bool>,
+}
+
+impl NormExpCfg {
+    fn sanitize_inplace_epilogue(&mut self) {
+        sanitize_center_symmetric!(self);
+    }
 }
 
 impl TfmCfgDuplicateWithNewState for NormExpCfg {
@@ -1537,6 +1580,7 @@ impl Default for NormExpCfg {
 
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, Validate, WithSelfSanitize)]
 #[serde(deny_unknown_fields)]
+#[sanitize_inplace_with_epilogue]
 pub(crate) struct SignedPowerCfg {
     #[serde(skip)]
     #[garde(skip)]
@@ -1557,10 +1601,16 @@ pub(crate) struct SignedPowerCfg {
     /// Power must be positive
     #[sanitize_inplace(skip)]
     pub(crate) power: BaseNumT,
-    #[serde(default)]
     #[garde(skip)]
+    #[serde(default, skip_serializing_if = "AutoOrManual::is_auto")]
     #[sanitize_inplace(skip)]
-    pub(crate) center_symmetric: bool,
+    pub(crate) center_symmetric: AutoOrManual<bool>,
+}
+
+impl SignedPowerCfg {
+    fn sanitize_inplace_epilogue(&mut self) {
+        sanitize_center_symmetric!(self);
+    }
 }
 
 impl TfmCfgDuplicateWithNewState for SignedPowerCfg {

@@ -1,6 +1,6 @@
 use crate::base_num::*;
 use anyhow::{Result, bail};
-use num_traits::{Bounded, Float, FromPrimitive, Num, NumCast, ToPrimitive, Zero};
+use num_traits::{Bounded, Float, FromPrimitive, Num, NumCast, Signed, ToPrimitive, Zero};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::backtrace::Backtrace;
@@ -299,7 +299,6 @@ impl<T: NumIntervalValue> NumInterval<T> {
         }
     }
 
-    #[allow(unused)]
     pub(crate) fn is_zero(&self) -> bool {
         self.from.is_zero() && self.to.is_zero()
     }
@@ -436,6 +435,16 @@ impl<T: NumIntervalValue> NumInterval<T> {
 
     pub(crate) fn is_unit(&self) -> bool {
         self.from == T::zero() && self.to == T::one()
+    }
+
+    pub(crate) fn is_symm_around_zero(&self) -> bool
+    where
+        T: Signed,
+    {
+        self.is_zero()
+            || (self.from < T::zero()
+                && self.to > T::zero()
+                && (self.from.abs() == self.to.abs() || self.from == T::min_value() && self.to() == T::max_value()))
     }
 
     pub(crate) fn is_symm_unit(&self) -> bool {
@@ -1006,7 +1015,7 @@ mod tests {
             NumInterval::new(-10, 100),
             NumInterval::new(100, -10),
             "Ranges with r1.from == r2.to and r1.to == r2.from should compare as equal
-            (because spans are equal and 'from' and 'to' members are set on constructions 
+            (because spans are equal and 'from' and 'to' members are set on constructions
             such that from < to)."
         );
         assert!(
