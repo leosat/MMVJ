@@ -30,6 +30,7 @@ use crate::schemas_value::{DynValueRefs, ValueDsts, WithNumInterval, WithRelativ
 use crate::schemas_value::{TfmValue, WithNumericValue};
 
 use crate::schemas_value_port::ValuePortIface;
+use crate::stats::StatsIface;
 #[cfg(feature = "gui")]
 use crate::tracing::GraphDisplayStyle;
 #[cfg(feature = "gui")]
@@ -50,12 +51,39 @@ pub(crate) trait TfmExeState {
 }
 
 impl TfmExecCtx for () {}
+impl StatsIface for () {
+    type In = ();
+    type Out = BaseNumT;
+    fn with_threshold_from(self, _threshold: Self::In) -> Self {}
+    fn with_mean_alpha(self, _alpha: Self::In) -> Self {}
+    fn record(&self, _: Self::In) {}
+    fn get_mean(&self) -> Self::Out {
+        0.0
+    }
+    fn get_max(&self) -> Self::Out {
+        0.0
+    }
+    fn get_min(&self) -> Self::Out {
+        0.0
+    }
+    fn get_last(&self) -> Self::Out {
+        0.0
+    }
+}
 
 #[allow(unused)]
 pub(crate) trait TfmExecCtx {
     // fn get_dt(&self) -> std::time::Duration {
     //     std::time::Duration::ZERO
     // }
+
+    fn get_events_dt_stats(&self) -> Option<&impl StatsIface> {
+        None::<&()>
+    }
+
+    fn is_immediate_mapping(&self) -> bool {
+        false
+    }
 
     fn is_reactive_mode(&self) -> bool {
         true
@@ -259,13 +287,30 @@ impl WithTfmExec for ArithCfg {
     }
 }
 
+fn limit_dt(dt: BaseNumT, _ctx: &impl TfmExecCtx) -> BaseNumT {
+    clamp_dt_by_min_and_max_period(dt)
+    // let dt = if ctx.is_immediate_mapping() {
+    //     ctx.get_events_dt_stats()
+    //         .map(|s| s.get_mean().into())
+    //         .unwrap_or(dt)
+    //         .min(0.3)
+    // } else {
+    //     clamp_dt_by_min_and_max_period(dt)
+    // };
+    // dbg!(dt);
+    // dt
+}
+
 impl WithTfmExec for VelocityToDisplacementCfg {
     type InputT = BaseNumT;
     type OutputT = Self::InputT;
     fn exec(&self, mut value: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
-        let dt = (std::time::Instant::now() - self.last_time.get()).as_secs_f32() as BaseNumT;
+        let dt = limit_dt(
+            (std::time::Instant::now() - self.last_time.get()).as_secs_f32() as BaseNumT,
+            ctx,
+        );
         value = self.out_interval.map_from(
-            value * self.multiplier.port_get_numeric_value(Some(ctx)) * clamp_dt_by_min_and_max_period(dt),
+            value * self.multiplier.port_get_numeric_value(Some(ctx)) * dt,
             &self.common_state_ref().get_in_interval(),
             get_out_of_range_policy(Relativity::Rel, ctx.is_reactive_mode()),
         );
@@ -981,7 +1026,7 @@ impl WithTfmExec for SteeringCfg {
 
         let auto_center_along_force_feedback = self.auto_center_along_force_feedback.port_get_numeric_value(Some(ctx));
 
-        let dt = clamp_dt_by_min_and_max_period((now - state.last_time).as_secs_f32() as BaseNumT);
+        let dt = limit_dt((now - state.last_time).as_secs_f32() as BaseNumT, ctx);
 
         let delta_raw = in_interval.map_to_symm_unit::<BaseNumT>(
             value,
