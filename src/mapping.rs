@@ -93,6 +93,7 @@ pub(crate) struct MappingEngine<
     // ---
     idle_tick_mappings: Vec<usize>,
     lua: &'d mlua::Lua,
+    mapped_events_dt_stats: MappingEngineStats,
 }
 
 pub(crate) trait Mapper<'d> {
@@ -180,6 +181,9 @@ impl<
             // ---
             idle_tick_mappings: Default::default(),
             lua,
+            mapped_events_dt_stats: MappingEngineStats::default()
+                .with_mean_alpha(0.3)
+                .with_threshold_from(1e-6),
         })
     }
 
@@ -383,19 +387,29 @@ impl<
         let mode = self.cfg.global.mode;
         let is_reactive: bool = mode.is_reactive();
         let is_capped: bool = mode.is_capped();
-        let mapping_tick_period = mode.calc_mapping_tick_period();
+        let target_mapping_tick_dt = mode.calc_mapping_tick_period();
 
         let mut idle_ticker = interval(mode.calc_idle_tick_period());
-        let mut mapping_ticker = interval(mapping_tick_period);
+        let mut mapping_ticker = interval(target_mapping_tick_dt);
 
         idle_ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
         mapping_ticker.set_missed_tick_behavior(MissedTickBehavior::Burst);
 
         //-------------------------------- MAIN LOOP ----------------------------------
-        const DEBUG_MAIN_LOOP_LATENCY: bool = false; // TODO: generalized stats data, observable via Gui.
-        let mut last_main_loop_period = std::time::Duration::ZERO;
+        const DBG_MAIN_LOOP_TIMING: bool = false;
+        const DBG_CAPPED_MODE: bool = false;
+
+        let main_loop_processing_time_stats = MappingEngineStats::default();
+        let mut last_event_time = std::time::Instant::now();
+
         while self.running {
             let main_loop_iter_start = std::time::Instant::now();
+
+            let mut update_mapped_events_stat = |stats: &MappingEngineStats| {
+                stats.record((main_loop_iter_start - last_event_time).as_secs_f32().into());
+                last_event_time = main_loop_iter_start;
+            };
+
             select! {
             biased;
             // Any scheduled mappings must execute first.
@@ -404,33 +418,53 @@ impl<
             _ = async {
                 select! {
                     event = {#[cfg(feature = "midi")] {self.midi_mgr.consume_any_opened_device_event()}
-                             #[cfg(not(feature = "midi"))] std::future::pending::<()>()}
-                    => {#[cfg(feature = "midi")] {
-                        match event {Some(event) => self.map_midi_event(event),
-                                     None => { log::error!("MIDI manager connection is gone");
-                                     self.running = false; }}}},
+                             #[cfg(not(feature = "midi"))] std::future::pending::<()>()} =>
+                    {#[cfg(feature = "midi")] {
+                        match event {Some(event) => {
+                            if self.map_midi_event(event) {
+                                update_mapped_events_stat(&self.mapped_events_dt_stats);
+                            };
+                        },
+                        None => { log::error!("MIDI manager connection is gone");
+                        self.running = false; }}}},
                     event = self.hid_mgr.consume_any_opened_device_event() =>
-                        match event {Some(event) => self.map_hid_event(event),
-                                     None => { log::error!("HID manager connection is gone");
-                                     self.running = false; }},
+                        match event {
+                            Some(event) => {
+                                if self.map_hid_event(event) {
+                                    update_mapped_events_stat(&self.mapped_events_dt_stats);
+                                };
+                            },
+                            None => { log::error!("HID manager connection is gone");
+                            self.running = false; }},
                 }
             } => {
-                // Immediate-priority mappings are being run... immediately, irrespective to execution mode.
-                self.process_mappings_immediate();
-                // If the mode is reactive or capped and the frequency is below the threshold,
-                // execute mappings immediately.
-                if is_reactive || (is_capped && last_main_loop_period > mapping_tick_period) {
+                self.process_mappings_immediate(); // Immediate-priority mappings are being run... immediately, irrespective to execution mode.
+                // If the mode is reactive or capped and the frequency is below the threshold, execute mappings immediately.
+                if is_reactive {
                     self.process_mappings_other();
+                }
+                if is_capped {
+                    if self.mapped_events_dt_stats.get_mean() > target_mapping_tick_dt.as_secs_f32() as BaseNumT  {
+                        self.process_mappings_other();
+                        if DBG_CAPPED_MODE {
+                            dbg!("Capped mode: mappings run");
+                        }
+                    } else if DBG_CAPPED_MODE {
+                        dbg!("Capped mode: mappings throttled");
+                        dbg!(&self.mapped_events_dt_stats);
+                    }
                 }
             },
             // Lastly we check to run idle tick, which bursts if we skip it due to any of the above.
             _ = idle_ticker.tick() => self.process_idle_tick()
             }
 
-            last_main_loop_period = std::time::Instant::now() - main_loop_iter_start;
-            if DEBUG_MAIN_LOOP_LATENCY {
-                dbg!(last_main_loop_period, mapping_tick_period);
+            if DBG_MAIN_LOOP_TIMING {
+                dbg!(&main_loop_processing_time_stats, target_mapping_tick_dt);
             }
+
+            main_loop_processing_time_stats
+                .record((std::time::Instant::now() - main_loop_iter_start).as_secs_f32() as BaseNumT);
         }
     }
 
@@ -445,6 +479,76 @@ impl<
 
     fn get_mode(&self) -> &MapperMode {
         &self.cfg.global.mode
+    }
+}
+
+trait StatsIface {
+    type In;
+    type Out;
+    fn with_threshold_from(self, threshold: Self::In) -> Self;
+    fn with_mean_alpha(self, alpha: Self::In) -> Self;
+    fn record(&self, v: Self::In);
+    fn get_mean(&self) -> Self::Out;
+    #[allow(unused)]
+    fn get_max(&self) -> Self::Out;
+    #[allow(unused)]
+    fn get_min(&self) -> Self::Out;
+    #[allow(unused)]
+    fn get_last(&self) -> Self::Out;
+}
+
+#[derive(Clone, Debug, Default)]
+struct MappingEngineStats {
+    threshold_from: BaseNumT,
+    mean_alpha: BaseNumT,
+    last: std::cell::Cell<BaseNumT>,
+    mean: std::cell::Cell<BaseNumT>,
+    min: std::cell::Cell<BaseNumT>,
+    max: std::cell::Cell<BaseNumT>,
+}
+
+impl StatsIface for MappingEngineStats {
+    type In = BaseNumT;
+    type Out = BaseNumT;
+
+    fn record(&self, v: Self::In) {
+        if v >= self.threshold_from {
+            self.mean
+                .set(self.mean.get() * (1.0 - self.mean_alpha) + v * self.mean_alpha);
+            if self.max.get() < v {
+                self.max.set(v);
+            }
+            if self.min.get() == 0.0 || self.min.get() > v {
+                self.min.set(v);
+            }
+            self.last.set(v);
+        }
+    }
+
+    fn get_mean(&self) -> Self::Out {
+        self.mean.get().into()
+    }
+
+    fn get_max(&self) -> Self::Out {
+        self.max.get().into()
+    }
+
+    fn get_min(&self) -> Self::Out {
+        self.min.get().into()
+    }
+
+    fn get_last(&self) -> Self::Out {
+        self.last.get().into()
+    }
+
+    fn with_threshold_from(mut self, threshold: Self::In) -> Self {
+        self.threshold_from = threshold;
+        self
+    }
+
+    fn with_mean_alpha(mut self, alpha: Self::In) -> Self {
+        self.mean_alpha = alpha;
+        self
     }
 }
 
@@ -488,7 +592,9 @@ impl<
     }
 
     #[cfg(feature = "midi")]
-    fn map_midi_event(&mut self, event: MidiDeviceEvent) {
+    #[must_use]
+    fn map_midi_event(&mut self, event: MidiDeviceEvent) -> bool {
+        let mut mapped = false;
         if let Some((cms, mappings)) = self
             .router_index_sysdev_and_ctl_type_to_cms_and_mappings
             .get(&(event.device_id, event.data.message_type.into()))
@@ -502,6 +608,7 @@ impl<
                 .for_each(|(cm_idx, cm)| {
                     cm.set_numeric_value(event.data.get_operational_value());
                     if !mappings.is_empty() {
+                        mapped = true;
                         if event.data.message_type.is_a_button() {
                             self.scheduled_mappings_immediate.extend(&mappings[cm_idx]);
                         } else {
@@ -510,6 +617,7 @@ impl<
                     }
                 });
         }
+        mapped
     }
 
     fn dedup_and_shuffle<T: PartialEq + Ord>(v: &mut Vec<T>, dedup: bool, shuffle: bool) {
@@ -522,7 +630,9 @@ impl<
         }
     }
 
-    fn map_hid_event(&mut self, event: HidDeviceEvent) {
+    #[must_use]
+    fn map_hid_event(&mut self, event: HidDeviceEvent) -> bool {
+        let mut mapped = false;
         if let Some((cms, mappings)) = self
             .router_index_sysdev_and_ctl_type_to_cms_and_mappings
             .get(&(event.device_id, event.data.control_type))
@@ -536,6 +646,7 @@ impl<
                 });
 
                 if !mappings.is_empty() {
+                    mapped = true;
                     if event.data.control_type.is_button() || event.data.control_type.is_key() {
                         self.scheduled_mappings_immediate.extend(&mappings[cm_idx]);
                     } else {
@@ -544,6 +655,7 @@ impl<
                 }
             });
         }
+        mapped
     }
 
     fn run_mappings(&self, mappings: &[usize]) {
@@ -650,7 +762,7 @@ impl<
         if vd.relativity.is_absolute() && !vd.interval.contains_value_closed(vd.value) {
             warn!(
                 "The value (={}) read from device {} \
-                        is out of configured interval ({:?}), clamping it.",
+                            is out of configured interval ({:?}), clamping it.",
                 vd.value,
                 if is_idle_tick {
                     "idle tick"
