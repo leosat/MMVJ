@@ -20,6 +20,8 @@ use crate::schemas_hid::HidDeviceCfg;
 use crate::schemas_hid::HidDeviceClassificationCfg;
 use crate::schemas_hid::HidFfEffect;
 use crate::schemas_hid::HidVirtualParamsCfg;
+use crate::schemas_hid::default_ffb_axis_x;
+use crate::schemas_hid::default_ffb_axis_y;
 use anyhow::Context;
 use crossbeam_utils::CachePadded;
 
@@ -106,23 +108,48 @@ pub(crate) const _MOUSE_HIRES_CONTROL_RANGE: std::ops::RangeInclusive<BaseNumT> 
 #[derive(Debug)]
 pub(crate) struct OwnedVirtualHIDDeviceThreadIO {
     pub(crate) force_sum: Arc<[CachePadded<BaseAtomicT>; 2]>,
-    pub(crate) axis_pos_symm_norm: [CachePadded<BaseAtomicT>; 2],
+    pub(crate) ffb_axis_info: [(MappedCtls, NumInterval<BaseNumT>); 2],
 }
 
 impl OwnedVirtualHIDDeviceThreadIO {
-    fn new(ff_cfg: Option<&HIDDeviceForceFeedbackCfg>) -> Self {
+    fn new(cfg: &HidDeviceCfg) -> Self {
         Self {
-            force_sum: if let Some(ff) = &ff_cfg {
+            force_sum: if let Some(ff) = cfg.virtual_device_force_feedback_info_ref() {
                 {
-                    ff.state_xy
+                    ff.ffb_sum_xy
                         .iter()
                         .for_each(|v| v.store(0.0, std::sync::atomic::Ordering::Relaxed));
-                    ff.state_xy.clone()
+                    ff.ffb_sum_xy.clone()
                 }
             } else {
                 Arc::default()
             },
-            axis_pos_symm_norm: [CachePadded::default(), CachePadded::default()],
+            ffb_axis_info: cfg
+                .virtual_device_force_feedback_info_ref()
+                .map(|ff| {
+                    [
+                        (
+                            ff.cond_effects_axis_x,
+                            cfg.controls
+                                .iter()
+                                .find(|ctl| ctl.1.r#type == ff.cond_effects_axis_x)
+                                .map(|ctl| ctl.1.range)
+                                .unwrap_or(HID_AXIS_MAX_INTERVAL),
+                        ),
+                        (
+                            ff.cond_effects_axis_y,
+                            cfg.controls
+                                .iter()
+                                .find(|ctl| ctl.1.r#type == ff.cond_effects_axis_y)
+                                .map(|ctl| ctl.1.range)
+                                .unwrap_or(HID_AXIS_MAX_INTERVAL),
+                        ),
+                    ]
+                })
+                .unwrap_or([
+                    (default_ffb_axis_x(), HID_AXIS_MAX_INTERVAL),
+                    (default_ffb_axis_y(), HID_AXIS_MAX_INTERVAL),
+                ]),
         }
     }
 }
@@ -375,9 +402,8 @@ impl HidDevice {
         if creation_spec.cfg_spec.virtual_device_is_ff_enabled() {
             // --- Objects remaining in local state ---
             let cancellation_token = CancellationToken::new();
-            owned_virtual_device_thread_io = Some(Arc::new(OwnedVirtualHIDDeviceThreadIO::new(
-                creation_spec.cfg_spec.virtual_device_force_feedback_info_ref(),
-            )));
+            owned_virtual_device_thread_io =
+                Some(Arc::new(OwnedVirtualHIDDeviceThreadIO::new(&creation_spec.cfg_spec)));
             ctl_states = Some(Arc::new(std::array::from_fn(|_| Default::default())));
             // --- Clones to be moved to the thread ---
             let thread_ctl_states = ctl_states.as_ref().unwrap().clone();
@@ -600,10 +626,6 @@ impl HidDevice {
         }
     }
 
-    pub(crate) fn ff_is_a_condition_effect_enabled(&self) -> bool {
-        self.ff_is_a_condition_effect_enabled
-    }
-
     pub(crate) fn owned_virtual_device_thread_io(&self) -> &Option<Arc<OwnedVirtualHIDDeviceThreadIO>> {
         &self.owned_virtual_device_thread_io
     }
@@ -773,12 +795,14 @@ fn test_virtual_joystick_internal(with_ff: bool) {
                     bus: Default::default(),
                     force_feedback: if with_ff {
                         Some(HIDDeviceForceFeedbackCfg {
-                            state_xy: Default::default(),
+                            ffb_sum_xy: Default::default(),
                             enabled: Default::default(),
                             effects: vec![HidFfEffect::Constant],
                             max_effects: 16,
-                            gain: 0.1,
                             fake_accepting_all_effects: false,
+                            cond_effects_axis_x: default_ffb_axis_x(),
+                            cond_effects_axis_y: default_ffb_axis_y(),
+                            gain: 0.1,
                             autocenter: false,
                         })
                     } else {

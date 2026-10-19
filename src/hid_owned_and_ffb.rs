@@ -4,7 +4,7 @@ use num_traits::Zero;
 use tokio::time::MissedTickBehavior;
 use tokio_util::future::FutureExt;
 
-use crate::num_interval::SYMM_UNIT_INTERVAL;
+use crate::num_interval::{OutOfRangePolicy, SYMM_UNIT_INTERVAL};
 
 use crate::base_num::BaseNumT;
 use crate::device_and_device_manager::DeviceEvent;
@@ -482,7 +482,10 @@ pub(crate) async fn owned_hid_device_thread(
                 for axis_idx in AXIS_IDX_LIST {
                     // dbg!(owned_virtual_device_thread_io.axis_pos_symm_norm[axis_idx].load(Ordering::Relaxed));
                     jk_axis_pos_filtered[axis_idx] = jk_axis_pos_filters[axis_idx].filter(
-                        owned_virtual_device_thread_io.axis_pos_symm_norm[axis_idx].load(Ordering::Relaxed) as BaseNumT,
+                        SYMM_UNIT_INTERVAL.map_from(
+                            ctl_states[owned_virtual_device_thread_io.ffb_axis_info[axis_idx].0 as usize].load(Ordering::Relaxed) as BaseNumT,
+                            &owned_virtual_device_thread_io.ffb_axis_info[axis_idx].1,
+                            OutOfRangePolicy::Clamp),
                         Instant::now(),
                         40.0,
                         0.007,

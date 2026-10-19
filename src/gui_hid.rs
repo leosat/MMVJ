@@ -1,3 +1,4 @@
+use crate::config::WithSelfSanitize;
 use crate::device_and_device_manager::WithDeviceClassification;
 use crate::gui_common::GuiDeviceClassifications;
 use crate::gui_common::{DrawEgui, GuiCmd, GuiCmdControlMatcherChange, GuiCmdControlMatcherRemove, draw_collapsing_ui};
@@ -6,6 +7,7 @@ use crate::gui_value::GuiInInterval;
 use crate::hid_device::HID_AXIS_MAX_RANGE;
 use crate::hid_manager::AvailableHIDDeviceInfo;
 use crate::hid_owned_and_ffb::{X_AXIS_IDX, Y_AXIS_IDX};
+use crate::mapped_controls::MappedCtls;
 use crate::schemas_control_matcher::ControlMatchers;
 use crate::schemas_hid::{HIDDeviceForceFeedbackCfg, HidControlMatcherCfg, HidDeviceCfg};
 use crate::schemas_value::WithLastKnownIO;
@@ -13,19 +15,45 @@ use regex::Regex;
 use strum::IntoEnumIterator;
 
 impl<'s> DrawEgui<'s> for HIDDeviceForceFeedbackCfg {
-    type In = ();
+    type In = &'s [MappedCtls];
     type Out = bool;
-    fn egui(&mut self, _state: Self::In, ui: &mut egui::Ui) -> Self::Out {
+    fn egui(&mut self, available_abs_ctls: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut changed = false;
 
         ui.separator();
         changed |= ui.checkbox(&mut self.enabled, "Enabled").changed();
-        ui.separator();
+
+        let select_new_cond_effects_axis = |text: &str, target: &mut MappedCtls, ui: &mut egui::Ui| -> bool {
+            ui.push_id(text, |ui| {
+                ui.label(text);
+                ui.separator();
+                if let Some(axis) = {
+                    let mut new_axis = None;
+                    egui::ComboBox::from_label(egui_phosphor::bold::LINK.to_string())
+                        .selected_text("Change linked axis to...")
+                        .show_ui(ui, |ui| {
+                            for axis in available_abs_ctls {
+                                if ui.button(axis.to_string()).clicked() {
+                                    new_axis = Some(axis);
+                                }
+                            }
+                        });
+                    new_axis
+                } && *target != *axis
+                {
+                    *target = *axis;
+                    return true;
+                }
+                return false;
+            })
+            .inner
+        };
 
         // changed |= ui.checkbox(&mut self.autocenter,"Autocenter").changed();
         // changed |= ui
         //     .add(egui::Slider::new(&mut self.gain, 0.0..=1.0))
         //     .changed();
+        ui.separator();
         ui.label("Max effects:");
         changed |= ui.add(egui::Slider::new(&mut self.max_effects, 1..=96)).changed();
 
@@ -71,6 +99,32 @@ impl<'s> DrawEgui<'s> for HIDDeviceForceFeedbackCfg {
                 changed = true;
             }
         });
+
+        ui.separator();
+        ui.collapsing("Conditional effects axis linkage", |ui| {
+            ui.horizontal(|ui| {
+                changed |= select_new_cond_effects_axis(
+                    &format!("Component X linked to: {}", self.cond_effects_axis_x),
+                    &mut self.cond_effects_axis_x,
+                    ui,
+                );
+            });
+
+            ui.separator();
+            ui.horizontal(|ui| {
+                changed |= select_new_cond_effects_axis(
+                    &format!("Component Y linked to: {}", self.cond_effects_axis_y),
+                    &mut self.cond_effects_axis_y,
+                    ui,
+                );
+            });
+        })
+        .header_response
+        .on_hover_text(
+            "Conditional effects such as Spring, Inertia, Damper and Friction \
+            are played with respect to relevant axis position \
+            or movement. This section displayes current assignment.",
+        );
 
         ui.separator();
         changed
@@ -169,16 +223,22 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                         });
                     }
 
-                    if let Some(ff) = &mut self.virtual_device_force_feedback_info_mut() {
+                    let available_abs_ctls = self
+                        .controls
+                        .iter()
+                        .map(|ctl| ctl.1.r#type)
+                        .filter(|t| t.is_absolute())
+                        .collect::<Vec<_>>();
+                    if let Some(ff) = self.virtual_device_force_feedback_info_mut() {
                         ui.separator();
-                        ui.collapsing("Force feedback settings:", |ui| {
+                        ui.collapsing("Force feedback", |ui| {
                             ui.separator();
                             ui.horizontal(|ui| {
                                 ui.label("Cur. X force sum: ");
                                 ui.label(
                                     egui::RichText::from(format!(
                                         "{:+09.4}",
-                                        ff.state_xy[X_AXIS_IDX].load(std::sync::atomic::Ordering::Relaxed)
+                                        ff.ffb_sum_xy[X_AXIS_IDX].load(std::sync::atomic::Ordering::Relaxed)
                                     ))
                                     // .color(Color32::CYAN)
                                     .monospace(),
@@ -188,7 +248,7 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                                 ui.label(
                                     egui::RichText::from(format!(
                                         "{:+09.4}",
-                                        ff.state_xy[Y_AXIS_IDX].load(std::sync::atomic::Ordering::Relaxed)
+                                        ff.ffb_sum_xy[Y_AXIS_IDX].load(std::sync::atomic::Ordering::Relaxed)
                                     ))
                                     // .color(Color32::CYAN)
                                     .monospace(),
@@ -196,7 +256,7 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                                 ui.separator();
                             });
 
-                            if ff.egui((), ui) {
+                            if ff.egui(&available_abs_ctls, ui) {
                                 changed = true;
                             }
                         });
@@ -211,8 +271,6 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                                 *ff.enabled = true;
                                 ff.gain = 1.0;
                                 ff.max_effects = 16;
-                            } else {
-                                unreachable!();
                             }
                         }
                     }
@@ -313,13 +371,19 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
 
                 ui.separator();
 
+                gui_out = gui_out.or_else(|| {
+                    if changed {
+                        Some(GuiCmd::ConfigChangeDriverRestart)
+                    } else {
+                        None
+                    }
+                });
+
                 if gui_out.is_some() {
-                    gui_out
-                } else if changed {
-                    Some(GuiCmd::ConfigChangeDriverRestart)
-                } else {
-                    None
+                    self.sanitize_inplace(());
                 }
+
+                gui_out
             }
         }
     }
