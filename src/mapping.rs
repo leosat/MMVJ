@@ -27,6 +27,7 @@ use crate::schemas_value::{
 use crate::schemas_value::{TfmValue, WithNumericValue};
 use crate::schemas_value::{ValueSrcs, WithRelativity};
 
+use crate::stats::StatsIface;
 use crate::tfm_exec::{TfmExecCtx, WithTfmExec};
 use anyhow::Result;
 use log::{debug, info, warn};
@@ -140,6 +141,13 @@ impl<
     }
 }
 
+#[derive(Clone, Copy)]
+enum MapppingSchedContext {
+    Normal,
+    IdleTick,
+    Immediate,
+}
+
 impl<
     'd,
     HidManagerT: MappedHidManager,
@@ -182,7 +190,7 @@ impl<
             idle_tick_mappings: Default::default(),
             lua,
             mapped_events_dt_stats: MappingEngineStats::default()
-                .with_mean_alpha(0.3)
+                .with_mean_alpha(0.7)
                 .with_threshold_from(1e-6),
         })
     }
@@ -366,6 +374,7 @@ impl<
                 .filter(|(_, m)| *m.enabled)
                 .map(|(i, _)| i)
                 .collect::<Vec<_>>(),
+            MapppingSchedContext::Normal,
         );
 
         Ok(())
@@ -421,7 +430,7 @@ impl<
                              #[cfg(not(feature = "midi"))] std::future::pending::<()>()} =>
                     {#[cfg(feature = "midi")] {
                         match event {Some(event) => {
-                            if self.map_midi_event(event) {
+                            if self.on_midi_event(event) {
                                 update_mapped_events_stat(&self.mapped_events_dt_stats);
                             };
                         },
@@ -430,7 +439,7 @@ impl<
                     event = self.hid_mgr.consume_any_opened_device_event() =>
                         match event {
                             Some(event) => {
-                                if self.map_hid_event(event) {
+                                if self.on_hid_event(event) {
                                     update_mapped_events_stat(&self.mapped_events_dt_stats);
                                 };
                             },
@@ -442,8 +451,7 @@ impl<
                 // If the mode is reactive or capped and the frequency is below the threshold, execute mappings immediately.
                 if is_reactive {
                     self.process_mappings_other();
-                }
-                if is_capped {
+                } else if is_capped {
                     if self.mapped_events_dt_stats.get_mean() > target_mapping_tick_dt.as_secs_f32() as BaseNumT  {
                         self.process_mappings_other();
                         if DBG_CAPPED_MODE {
@@ -480,21 +488,6 @@ impl<
     fn get_mode(&self) -> &MapperMode {
         &self.cfg.global.mode
     }
-}
-
-trait StatsIface {
-    type In;
-    type Out;
-    fn with_threshold_from(self, threshold: Self::In) -> Self;
-    fn with_mean_alpha(self, alpha: Self::In) -> Self;
-    fn record(&self, v: Self::In);
-    fn get_mean(&self) -> Self::Out;
-    #[allow(unused)]
-    fn get_max(&self) -> Self::Out;
-    #[allow(unused)]
-    fn get_min(&self) -> Self::Out;
-    #[allow(unused)]
-    fn get_last(&self) -> Self::Out;
 }
 
 #[derive(Clone, Debug, Default)]
@@ -593,7 +586,7 @@ impl<
 
     #[cfg(feature = "midi")]
     #[must_use]
-    fn map_midi_event(&mut self, event: MidiDeviceEvent) -> bool {
+    fn on_midi_event(&mut self, event: MidiDeviceEvent) -> bool {
         let mut mapped = false;
         if let Some((cms, mappings)) = self
             .router_index_sysdev_and_ctl_type_to_cms_and_mappings
@@ -620,18 +613,8 @@ impl<
         mapped
     }
 
-    fn dedup_and_shuffle<T: PartialEq + Ord>(v: &mut Vec<T>, dedup: bool, shuffle: bool) {
-        if dedup {
-            v.sort();
-            v.dedup();
-        }
-        if shuffle {
-            fastrand::shuffle(v);
-        }
-    }
-
     #[must_use]
-    fn map_hid_event(&mut self, event: HidDeviceEvent) -> bool {
+    fn on_hid_event(&mut self, event: HidDeviceEvent) -> bool {
         let mut mapped = false;
         if let Some((cms, mappings)) = self
             .router_index_sysdev_and_ctl_type_to_cms_and_mappings
@@ -658,13 +641,23 @@ impl<
         mapped
     }
 
-    fn run_mappings(&self, mappings: &[usize]) {
+    fn dedup_and_shuffle<T: PartialEq + Ord>(v: &mut Vec<T>, dedup: bool, shuffle: bool) {
+        if dedup {
+            v.sort();
+            v.dedup();
+        }
+        if shuffle {
+            fastrand::shuffle(v);
+        }
+    }
+
+    fn run_mappings(&self, mappings: &[usize], sched_ctx: MapppingSchedContext) {
         for mapping_idx in mappings.iter() {
             let mapping = &self.cfg.mappings[*mapping_idx];
             let input_value = mapping.src.get_numeric_value();
 
             mapping.set_last_known_io((Some(input_value), None));
-            let final_value = self.apply_transformation_for_mapping(mapping, input_value, false);
+            let final_value = self.apply_transformation_for_mapping(mapping, input_value, sched_ctx);
             mapping.set_last_known_io((None, Some(final_value)));
 
             if let Some(d) = &mapping.dst.get_device_control_matcher_ref() {
@@ -696,7 +689,7 @@ impl<
         let dedup = true;
         let shuffle = self.scheduled_mappings_other.len() > 1;
         Self::dedup_and_shuffle(&mut self.scheduled_mappings_other, dedup, shuffle);
-        self.run_mappings(&self.scheduled_mappings_other);
+        self.run_mappings(&self.scheduled_mappings_other, MapppingSchedContext::Normal);
         self.scheduled_mappings_other.clear();
         self.clear_rel_ctls();
     }
@@ -708,7 +701,7 @@ impl<
         let dedup = true;
         let shuffle = self.scheduled_mappings_immediate.len() > 1;
         Self::dedup_and_shuffle(&mut self.scheduled_mappings_immediate, dedup, shuffle);
-        self.run_mappings(&self.scheduled_mappings_immediate);
+        self.run_mappings(&self.scheduled_mappings_immediate, MapppingSchedContext::Immediate);
         self.scheduled_mappings_immediate.clear();
         // We do not reset relative controls after processing immediate mappings.
     }
@@ -740,7 +733,8 @@ impl<
 
             mapping.set_last_known_io((Some(idle_in_value), None));
 
-            let final_value = self.apply_transformation_for_mapping(mapping, idle_in_value, true);
+            let final_value =
+                self.apply_transformation_for_mapping(mapping, idle_in_value, MapppingSchedContext::IdleTick);
 
             mapping.set_last_known_io((None, Some(final_value)));
 
@@ -752,7 +746,12 @@ impl<
         }
     }
 
-    fn apply_transformation_for_mapping(&self, mapping: &Mapping, value: BaseNumT, is_idle_tick: bool) -> BaseNumT {
+    fn apply_transformation_for_mapping(
+        &self,
+        mapping: &Mapping,
+        value: BaseNumT,
+        sched_ctx: MapppingSchedContext,
+    ) -> BaseNumT {
         let mut vd = TfmValue::<BaseNumT> {
             value,
             interval: mapping.src.get_interval(),
@@ -764,7 +763,7 @@ impl<
                 "The value (={}) read from device {} \
                             is out of configured interval ({:?}), clamping it.",
                 vd.value,
-                if is_idle_tick {
+                if matches!(sched_ctx, MapppingSchedContext::IdleTick) {
                     "idle tick"
                 } else {
                     "input-triggered mapping"
@@ -780,8 +779,8 @@ impl<
                 mapping_engine: self,
                 current_mapping_src: Some(&mapping.src),
                 current_mapping_dst: Some(&mapping.dst),
-                is_idle_tick,
                 lua: Some(self.lua),
+                sched_ctx: sched_ctx,
             },
         );
 
@@ -836,7 +835,7 @@ pub(crate) struct MappingTfmExecCtx<
     #[allow(unused)]
     current_mapping_src: Option<&'m ValueSrcs>,
     current_mapping_dst: Option<&'m ValueDsts>,
-    is_idle_tick: bool,
+    sched_ctx: MapppingSchedContext,
     lua: Option<&'m mlua::Lua>,
 }
 
@@ -848,6 +847,14 @@ impl<
     #[cfg(not(feature = "midi"))] MidiManagerT,
 > TfmExecCtx for MappingTfmExecCtx<'m, 'd, HidManagerT, MidiManagerT>
 {
+    fn get_events_dt_stats(&self) -> Option<&impl StatsIface> {
+        Some(&self.mapping_engine.mapped_events_dt_stats)
+    }
+
+    fn is_immediate_mapping(&self) -> bool {
+        matches!(self.sched_ctx, MapppingSchedContext::Immediate)
+    }
+
     fn is_reactive_mode(&self) -> bool {
         self.mapping_engine.get_mode().is_reactive()
     }
@@ -877,7 +884,7 @@ impl<
     }
 
     fn is_idle_tick(&self) -> bool {
-        self.is_idle_tick
+        matches!(self.sched_ctx, MapppingSchedContext::IdleTick)
     }
 
     fn get_idle_tick_rate(&self) -> u32 {

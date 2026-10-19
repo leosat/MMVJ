@@ -5,6 +5,7 @@
 pub mod config;
 pub mod debug;
 pub mod driver;
+pub mod stats;
 pub use debug::DebugLevel;
 
 // --------------------------
