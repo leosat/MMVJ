@@ -9,7 +9,7 @@ use crate::curves_and_linear::*;
 use crate::debug::get_debug_level;
 #[cfg(feature = "gui")]
 use crate::gui_transform_step::TfmStepTraceStage;
-use crate::num_interval::{NumInterval, OutOfRangePolicy};
+use crate::num_interval::OutOfRangePolicy;
 use crate::relativity::Relativity;
 
 use crate::schemas_common::WithRuntimeId;
@@ -114,22 +114,6 @@ pub(crate) trait TfmExecCtx {
 
     fn get_ff_y(&self, device_matcher_key: &str) -> BaseNumT {
         Default::default()
-    }
-
-    fn set_ff_x_axis_pos(
-        &self,
-        device_matcher_key: &str,
-        device_control_matcher_key: &str,
-        normalize_from: NumInterval<BaseNumT>,
-    ) {
-    }
-
-    fn set_ff_y_axis_pos(
-        &self,
-        device_matcher_key: &str,
-        device_control_matcher_key: &str,
-        normalize_from: NumInterval<BaseNumT>,
-    ) {
     }
 }
 
@@ -1113,22 +1097,8 @@ impl WithTfmExec for SteeringCfg {
                             .and_then(|dst| {
                                 if let ValueDsts::Dynamic(DynValueRefs::DeviceControlMatcher(d)) = dst {
                                     match ff_config.component {
-                                        ForceFeedbackComponent::X => {
-                                            ctx.set_ff_x_axis_pos(
-                                                &d.device_matcher_key,
-                                                &d.control_matcher_key,
-                                                dst.get_interval(),
-                                            );
-                                            ctx.get_ff_x(&d.device_matcher_key).into()
-                                        }
-                                        ForceFeedbackComponent::Y => {
-                                            ctx.set_ff_y_axis_pos(
-                                                &d.device_matcher_key,
-                                                &d.control_matcher_key,
-                                                dst.get_interval(),
-                                            );
-                                            ctx.get_ff_y(&d.device_matcher_key).into()
-                                        }
+                                        ForceFeedbackComponent::X => ctx.get_ff_x(&d.device_matcher_key).into(),
+                                        ForceFeedbackComponent::Y => ctx.get_ff_y(&d.device_matcher_key).into(),
                                     }
                                 } else {
                                     None

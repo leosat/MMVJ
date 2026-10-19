@@ -175,8 +175,6 @@ mod default_config_tests {
     }
 
     impl DeviceManagerWithFfb for MockHidManager {
-        fn ff_set_x_axis_pos(&self, _dev_key: &str, _ctl_key: &str, _control_interval: NumInterval<BaseNumT>) {}
-        fn ff_set_y_axis_pos(&self, _dev_key: &str, _ctl_key: &str, _control_interval: NumInterval<BaseNumT>) {}
         fn ff_get_x_sum_symm_norm(&self, _dev_key: &str) -> BaseNumT {
             if !self.ff_spring_enabled.load(Ordering::Relaxed) {
                 return 0.0;

@@ -9,7 +9,7 @@ use crate::device_and_device_manager::{DeviceKind, OpenedDeviceInfoIface};
 use crate::mapped_controls::MappedCtls;
 #[cfg(feature = "midi")]
 use crate::midi::MidiDeviceEvent;
-use crate::num_interval::{NumInterval, OutOfRangePolicy};
+use crate::num_interval::OutOfRangePolicy;
 use crate::schemas_cfg::Config;
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_control_matcher::ControlMatchers;
@@ -873,14 +873,6 @@ impl<
 
     fn device_control_matcher_ref_write(&self, dcm: &DeviceControlMatcherRef, value: BaseNumT) {
         self.mapping_engine.dcm_write_to_devices(dcm, value, get_debug_level());
-    }
-
-    fn set_ff_x_axis_pos(&self, dk: &str, ck: &str, ivl: NumInterval<BaseNumT>) {
-        self.mapping_engine.hid_mgr.ff_set_x_axis_pos(dk, ck, ivl);
-    }
-
-    fn set_ff_y_axis_pos(&self, dk: &str, ck: &str, ivl: NumInterval<BaseNumT>) {
-        self.mapping_engine.hid_mgr.ff_set_y_axis_pos(dk, ck, ivl);
     }
 
     fn is_idle_tick(&self) -> bool {

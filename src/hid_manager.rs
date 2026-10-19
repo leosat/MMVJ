@@ -7,8 +7,6 @@ use crate::device_and_device_manager::{
     DeviceManagerWithFfb, OpenedDeviceInfo, OpenedDeviceInfoIface, WithDeviceClassification,
 };
 use crate::hid_device::{HidDevice, HidDeviceEvent, HidVirtualDeviceCreationSpec};
-use crate::hid_owned_and_ffb::{X_AXIS_IDX, Y_AXIS_IDX};
-use crate::num_interval::{NumInterval, OutOfRangePolicy};
 use crate::schemas_common::ObjId;
 use crate::schemas_hid::{HidDeviceCfg, HidDeviceClassificationCfg, HidVirtualOrMatcherParamsCfg};
 use anyhow::{Result, bail};
@@ -18,7 +16,6 @@ use std::collections::HashMap;
 use std::future::poll_fn;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::atomic::Ordering;
 use unchecked_refcell::UncheckedRefCell;
 
 // ---------------------------
@@ -84,7 +81,7 @@ impl HidManager {
             });
     }
 
-    pub(crate) fn get_control_value(&self, device_key: &str, ctl_key: &str) -> BaseNumT {
+    pub(crate) fn _get_control_value(&self, device_key: &str, ctl_key: &str) -> BaseNumT {
         if let Some(devices) = self.device_key_to_devices.borrow().get(device_key)
             && let Some(ctl) = devices[0].1.controls.get(ctl_key)
         {
@@ -110,42 +107,6 @@ impl HidManager {
             per_device_event_notification_tx: tx,
             all_devices_rx: UncheckedRefCell::new(rx),
         })
-    }
-
-    pub(crate) fn ff_update_axis_pos(
-        &self,
-        device_key: &str,
-        ctl_key: &str,
-        control_interval: NumInterval<BaseNumT>,
-        axis_idx: usize,
-    ) {
-        match self.device_key_to_devices.borrow().get(device_key) {
-            Some(d) if d[0].0.borrow_mut().ff_is_a_condition_effect_enabled() => {
-                // dbg!("Updating axis position due to conditional effect enabled on virtual HID");
-                if let Some(io) = d[0].0.borrow().owned_virtual_device_thread_io() {
-                    io.axis_pos_symm_norm[axis_idx].store(
-                        control_interval.map_to_symm_unit(
-                            self.get_control_value(device_key, ctl_key),
-                            OutOfRangePolicy::WarnIfDebugAndClamp,
-                        ),
-                        Ordering::Relaxed,
-                    );
-                }
-            }
-            Some(_) => (),
-            _ => log::warn!(
-                "Device '{}' not found among opened, is it enabled in config?",
-                device_key
-            ),
-        }
-    }
-
-    pub(crate) fn ff_set_x_axis_pos(&self, device_key: &str, ctl_key: &str, control_interval: NumInterval<BaseNumT>) {
-        self.ff_update_axis_pos(device_key, ctl_key, control_interval, X_AXIS_IDX);
-    }
-
-    pub(crate) fn ff_set_y_axis_pos(&self, device_key: &str, ctl_key: &str, control_interval: NumInterval<BaseNumT>) {
-        self.ff_update_axis_pos(device_key, ctl_key, control_interval, Y_AXIS_IDX);
     }
 
     pub(crate) fn ff_get_x_sum_symm_norm(&self, device_key: &str) -> BaseNumT {
@@ -587,14 +548,6 @@ impl DeviceManagerCommon for HidManager {
 }
 
 impl DeviceManagerWithFfb for HidManager {
-    fn ff_set_x_axis_pos(&self, device_key: &str, ctl_key: &str, control_interval: NumInterval<BaseNumT>) {
-        self.ff_set_x_axis_pos(device_key, ctl_key, control_interval);
-    }
-
-    fn ff_set_y_axis_pos(&self, device_key: &str, ctl_key: &str, control_interval: NumInterval<BaseNumT>) {
-        self.ff_set_y_axis_pos(device_key, ctl_key, control_interval);
-    }
-
     fn ff_get_x_sum_symm_norm(&self, device_key: &str) -> BaseNumT {
         self.ff_get_x_sum_symm_norm(device_key)
     }

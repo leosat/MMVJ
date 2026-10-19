@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::base_num::BaseNumT;
 
-use crate::num_interval::NumInterval;
 use crate::schemas_common::ObjId;
 use std::path::Path;
 
@@ -129,8 +128,6 @@ pub(crate) trait DeviceManagerCommon {
 }
 
 pub(crate) trait DeviceManagerWithFfb {
-    fn ff_set_x_axis_pos(&self, dev_key: &str, ctl_key: &str, control_interval: NumInterval<BaseNumT>);
-    fn ff_set_y_axis_pos(&self, dev_key: &str, ctl_key: &str, control_interval: NumInterval<BaseNumT>);
     fn ff_get_x_sum_symm_norm(&self, dev_key: &str) -> BaseNumT;
     fn ff_get_y_sum_symm_norm(&self, dev_key: &str) -> BaseNumT;
 }

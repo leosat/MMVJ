@@ -1,7 +1,8 @@
 use crate::{
     base_num::{BaseAtomicT, BaseNumT},
+    config::WithSelfSanitize,
     device_and_device_manager::{DeviceClassification, WithDeviceClassification},
-    hid_device::HID_AXIS_MAX_INTERVAL,
+    hid_device::{HID_AXIS_MAX_INTERVAL, sanitize_hid_name},
     mapped_controls::MappedCtls,
     num_interval::NumInterval,
     schemas_cfg::DescriptionCfg,
@@ -152,6 +153,24 @@ pub(crate) struct HidDeviceCfg {
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_jk_device_controls")]
     pub(crate) controls: BTreeMap<String, HidControlMatcherCfg>,
+}
+
+impl WithSelfSanitize for HidDeviceCfg {
+    type SanInputT = ();
+
+    fn sanitize_inplace(&mut self, _: Self::SanInputT) {
+        if let Some(name) = self.virtual_device_name_mut() {
+            *name = sanitize_hid_name(name).to_string();
+        }
+        if let Some(ff) = self.virtual_device_force_feedback_info_mut() {
+            if !ff.cond_effects_axis_x.is_absolute() {
+                ff.cond_effects_axis_x = default_ffb_axis_x()
+            }
+            if !ff.cond_effects_axis_y.is_absolute() {
+                ff.cond_effects_axis_y = default_ffb_axis_y()
+            }
+        }
+    }
 }
 
 impl HidDeviceCfg {
@@ -525,12 +544,20 @@ pub(crate) struct HidDeviceBusSpecCfg {
     pub(crate) version: u16,
 }
 
+pub(crate) fn default_ffb_axis_x() -> MappedCtls {
+    MappedCtls::AbsX
+}
+
+pub(crate) fn default_ffb_axis_y() -> MappedCtls {
+    MappedCtls::AbsY
+}
+
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct HIDDeviceForceFeedbackCfg {
     #[serde(skip)]
     #[garde(skip)]
-    pub(crate) state_xy: Arc<[CachePadded<BaseAtomicT>; 2]>,
+    pub(crate) ffb_sum_xy: Arc<[CachePadded<BaseAtomicT>; 2]>,
     #[garde(skip)]
     #[serde(default)]
     #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
@@ -542,6 +569,12 @@ pub(crate) struct HIDDeviceForceFeedbackCfg {
     #[garde(range(min = 1))]
     /// Must support at least 1 effect if enabled
     pub(crate) max_effects: usize,
+    #[serde(default = "default_ffb_axis_x")]
+    #[garde(skip)]
+    pub(crate) cond_effects_axis_x: MappedCtls,
+    #[serde(default = "default_ffb_axis_y")]
+    #[garde(skip)]
+    pub(crate) cond_effects_axis_y: MappedCtls,
     #[serde(default = "default_gain")]
     #[serde(skip)]
     #[allow(unused)]
@@ -561,13 +594,15 @@ pub(crate) struct HIDDeviceForceFeedbackCfg {
 impl Default for HIDDeviceForceFeedbackCfg {
     fn default() -> Self {
         Self {
-            state_xy: Default::default(),
+            ffb_sum_xy: Default::default(),
             enabled: Default::default(),
             effects: Default::default(),
             max_effects: 16,
+            fake_accepting_all_effects: false,
+            cond_effects_axis_x: default_ffb_axis_x(),
+            cond_effects_axis_y: default_ffb_axis_y(),
             gain: 1.0,
             autocenter: false,
-            fake_accepting_all_effects: false,
         }
     }
 }
