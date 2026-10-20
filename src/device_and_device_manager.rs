@@ -148,3 +148,7 @@ pub(crate) trait Device {
     #[allow(unused)]
     fn get_filesystem_path(&self) -> &Path;
 }
+
+pub(crate) trait CommonDeviceCfgIface {
+    fn matches_available_device(&self, available_device_info: &impl AvailableDeviceInfoIface) -> bool;
+}
