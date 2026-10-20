@@ -426,6 +426,18 @@ pub(crate) enum HidFfEffect {
 }
 
 impl HidFfEffect {
+    pub(crate) fn is_supported(&self) -> bool {
+        matches!(self, |HidFfEffect::Constant| HidFfEffect::Ramp
+            | HidFfEffect::Spring
+            //| HidFfEffect::Intertia
+            //| HidFfEffect::Damper
+            | HidFfEffect::Friction)
+    }
+    pub(crate) fn is_conditional(&self) -> bool {
+        matches!(self, |HidFfEffect::Spring| HidFfEffect::Intertia
+            | HidFfEffect::Damper
+            | HidFfEffect::Friction)
+    }
     pub(crate) fn is_periodic(&self) -> bool {
         matches!(
             self,

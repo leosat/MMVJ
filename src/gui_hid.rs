@@ -9,7 +9,7 @@ use crate::hid_manager::AvailableHIDDeviceInfo;
 use crate::hid_owned_and_ffb::{X_AXIS_IDX, Y_AXIS_IDX};
 use crate::mapped_controls::MappedCtls;
 use crate::schemas_control_matcher::ControlMatchers;
-use crate::schemas_hid::{HIDDeviceForceFeedbackCfg, HidControlMatcherCfg, HidDeviceCfg};
+use crate::schemas_hid::{HIDDeviceForceFeedbackCfg, HidControlMatcherCfg, HidDeviceCfg, HidFfEffect};
 use crate::schemas_value::WithLastKnownIO;
 use regex::Regex;
 use strum::IntoEnumIterator;
@@ -82,7 +82,15 @@ impl<'s> DrawEgui<'s> for HIDDeviceForceFeedbackCfg {
             let mut idx_to_remove = None;
             for (i, effect) in self.effects.iter().enumerate() {
                 ui.horizontal(|ui| {
-                    ui.label(effect.to_string());
+                    ui.label(format!(
+                        "{} {}",
+                        effect.to_string(),
+                        if effect.is_supported() {
+                            egui_phosphor::regular::MAGIC_WAND
+                        } else {
+                            " (unsupported, but will fake acceptance)"
+                        }
+                    ));
                     ui.add_space(4.0);
                     if ui
                         .button(egui_phosphor::bold::TRASH.to_string())
@@ -98,35 +106,51 @@ impl<'s> DrawEgui<'s> for HIDDeviceForceFeedbackCfg {
                 self.effects.remove(idx);
                 changed = true;
             }
-        });
-
-        ui.separator();
-        ui.collapsing("Conditional effects axis linkage", |ui| {
-            ui.horizontal(|ui| {
-                changed |= select_new_cond_effects_axis(
-                    &format!("Component X linked to: {}", self.cond_effects_axis_x),
-                    &mut self.cond_effects_axis_x,
-                    ui,
-                );
-            });
 
             ui.separator();
-            ui.horizontal(|ui| {
-                changed |= select_new_cond_effects_axis(
-                    &format!("Component Y linked to: {}", self.cond_effects_axis_y),
-                    &mut self.cond_effects_axis_y,
-                    ui,
-                );
-            });
-        })
-        .header_response
-        .on_hover_text(
-            "Conditional effects such as Spring, Inertia, Damper and Friction \
-            are played with respect to relevant axis position \
-            or movement. This section displayes current assignment.",
-        );
+            let cond_effects_enabled = self.effects.iter().any(|eff| eff.is_conditional());
+            let cond_effects = "Spring, Damper, Friction, Inertia";
+            // HidFfEffect::iter()
+            //     .filter(|eff| eff.is_conditional())
+            //     .map(|eff| eff.to_string())
+            //     .collect::<Vec<_>>()
+            //     .join(",");
 
-        ui.separator();
+            ui.scope(|ui| {
+                if !cond_effects_enabled {
+                    ui.label(format!(
+                        "Conditional effects ({cond_effects}) axis linkage params are not enabled since \
+                        no conditional effects are configured for the device.",
+                    ));
+                    ui.disable();
+                }
+                ui.collapsing("Conditional effects axis linkage", |ui| {
+                    ui.horizontal(|ui| {
+                        changed |= select_new_cond_effects_axis(
+                            &format!("Component X linked to: {}", self.cond_effects_axis_x),
+                            &mut self.cond_effects_axis_x,
+                            ui,
+                        );
+                    });
+
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        changed |= select_new_cond_effects_axis(
+                            &format!("Component Y linked to: {}", self.cond_effects_axis_y),
+                            &mut self.cond_effects_axis_y,
+                            ui,
+                        );
+                    });
+                })
+                .header_response
+                .on_hover_text_at_pointer(format!(
+                    "Conditional effects ({cond_effects}) \
+                            are played with respect to relevant axis position \
+                            or movement. This section displays current assignment.",
+                ));
+            });
+        });
+
         changed
     }
 }
