@@ -400,10 +400,7 @@ pub async fn run(
         info!("{}", "Press Ctrl+C to stop.".green().bold());
         info!("{}", "=".repeat(50));
 
-        info!(
-            "Mapping engine running at {} Hz ... ",
-            mapping_engine.get_mode().get_idle_tick_rate()
-        );
+        display_mapper_exe_mode_banner(&mapping_engine);
 
         loop {
             #[rustfmt::skip]
@@ -487,6 +484,13 @@ pub async fn run(
             }
         }
     }
+}
+
+fn display_mapper_exe_mode_banner<'d>(mapper: &impl Mapper<'d>) {
+    info!(
+        "Mapping engine running. Execution mode: {} ",
+        mapper.get_mode().display_full()
+    );
 }
 
 #[derive(Debug)]
@@ -610,6 +614,7 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                 DriverCmd::ChangeMappingMode { mode } => {
                     cfg_mgr.cfg_mut().global.mode = mode;
                     mapping_engine.set_mode(mode);
+                    display_mapper_exe_mode_banner(mapping_engine);
                 }
                 DriverCmd::ChangeVirtualHid {
                     cfg,
