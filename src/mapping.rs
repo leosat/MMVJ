@@ -237,10 +237,6 @@ impl<
         self.reset_rel_ctls_cache();
 
         // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-        let available_hid_devices = self.hid_mgr.enumerate_available_devices(Some(
-            (DeviceKind::Mouse | DeviceKind::Keyboard | DeviceKind::Gamepad | DeviceKind::Joystick).into(),
-        ));
-
         let mut info_sysdev_to_enabled_mappings: HashMap<ObjId, Vec<usize>> = Default::default();
 
         let mut collect_enabled_mappings_for_dmk_and_cm =
@@ -281,7 +277,9 @@ impl<
                     });
             };
 
-        for available_hid_device_info in &available_hid_devices {
+        for available_hid_device_info in &self.hid_mgr.enumerate_available_devices(Some(
+            (DeviceKind::Mouse | DeviceKind::Keyboard | DeviceKind::Gamepad | DeviceKind::Joystick).into(),
+        )) {
             for (dmk, dm) in self
                 .cfg
                 .devices
@@ -292,8 +290,10 @@ impl<
                 })
                 .collect::<Vec<(_, _)>>()
             {
-                let opened_device_info = self.hid_mgr.open_device(available_hid_device_info, dmk, dm)?;
-                let opened_device_id = opened_device_info.get_opened_device_id();
+                let opened_device_id = self
+                    .hid_mgr
+                    .open_device(available_hid_device_info, dmk, dm)?
+                    .get_opened_device_id();
 
                 for cm in dm.controls.values() {
                     let (cms, mappings) = self
@@ -313,9 +313,7 @@ impl<
         }
 
         #[cfg(feature = "midi")]
-        let available_midi_devices = self.midi_mgr.enumerate_available_devices(None);
-        #[cfg(feature = "midi")]
-        for available_midi_device_info in &available_midi_devices {
+        for available_midi_device_info in &self.midi_mgr.enumerate_available_devices(None) {
             for (dmk, dm) in self
                 .cfg
                 .devices
