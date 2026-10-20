@@ -6,8 +6,8 @@ use crate::{
     num_interval::NumInterval,
     schemas_cfg::DescriptionCfg,
     schemas_common::{
-        EnabledFlagCfg, IdleTickEnabledFlag, MarkedAsFromPredefinedControl, ObjId, WithRuntimeId,
-        deserialize_device_controls,
+        ControlCfgCommonIface, EnabledFlagCfg, IdleTickEnabledFlag, MarkedAsFromPredefinedControl, ObjId,
+        WithRuntimeId, deserialize_device_controls,
     },
     schemas_predefined::MidiControlPredefined,
     schemas_value::{_WithDstRefCount, WithNumericValue},
@@ -306,7 +306,12 @@ pub(crate) struct MidiControlMatcherCfg {
     _dst_refs_count: Arc<CachePadded<AtomicUsize>>,
 }
 
-#[cfg(feature = "midi")]
+impl ControlCfgCommonIface for MidiControlMatcherCfg {
+    fn get_ctl_type(&self) -> MappedCtls {
+        self.midi_message.r#type.into()
+    }
+}
+
 impl WithNumericValueSettable for MidiControlMatcherCfg {
     fn set_numeric_value(&self, v: Self::ValueT) {
         self.current_value.store(v, Relaxed);
