@@ -144,8 +144,21 @@ impl<
 #[derive(Clone, Copy)]
 enum MapppingSchedContext {
     Normal,
-    IdleTick,
+    Idle,
     Immediate,
+}
+
+impl MapppingSchedContext {
+    fn is_idle(&self) -> bool {
+        matches!(self, MapppingSchedContext::Idle)
+    }
+    #[allow(unused)]
+    fn is_immediate(&self) -> bool {
+        matches!(self, MapppingSchedContext::Immediate)
+    }
+    fn is_normal(&self) -> bool {
+        matches!(self, MapppingSchedContext::Normal)
+    }
 }
 
 impl<
@@ -414,16 +427,14 @@ impl<
         while self.running {
             let main_loop_iter_start = std::time::Instant::now();
 
-            let mut update_mapped_events_stat = |stats: &MappingEngineStats| {
+            let mut update_mapped_events_dt_stat = |stats: &MappingEngineStats| {
                 stats.record((main_loop_iter_start - last_event_time).as_secs_f32().into());
                 last_event_time = main_loop_iter_start;
             };
 
             select! {
             biased;
-            // Any scheduled mappings must execute first.
-            _ = mapping_ticker.tick(), if !is_reactive => self.process_mappings_other(),
-            // Then we choose between equally prioritized midi or hid  input events.
+            _ = mapping_ticker.tick(), if !is_reactive => self.process_and_run_mappings(MapppingSchedContext::Normal),
             _ = async {
                 select! {
                     event = {#[cfg(feature = "midi")] {self.midi_mgr.consume_any_opened_device_event()}
@@ -431,7 +442,7 @@ impl<
                     {#[cfg(feature = "midi")] {
                         match event {Some(event) => {
                             if self.on_midi_event(event) {
-                                update_mapped_events_stat(&self.mapped_events_dt_stats);
+                                update_mapped_events_dt_stat(&self.mapped_events_dt_stats);
                             };
                         },
                         None => { log::error!("MIDI manager connection is gone");
@@ -440,31 +451,27 @@ impl<
                         match event {
                             Some(event) => {
                                 if self.on_hid_event(event) {
-                                    update_mapped_events_stat(&self.mapped_events_dt_stats);
+                                    update_mapped_events_dt_stat(&self.mapped_events_dt_stats);
                                 };
                             },
                             None => { log::error!("HID manager connection is gone");
                             self.running = false; }},
                 }
             } => {
-                self.process_mappings_immediate(); // Immediate-priority mappings are being run... immediately, irrespective to execution mode.
-                // If the mode is reactive or capped and the frequency is below the threshold, execute mappings immediately.
+                self.process_and_run_mappings(MapppingSchedContext::Immediate);
                 if is_reactive {
-                    self.process_mappings_other();
+                    self.process_and_run_mappings(MapppingSchedContext::Normal);
                 } else if is_capped {
                     if self.mapped_events_dt_stats.get_mean() > target_mapping_tick_dt.as_secs_f32() as BaseNumT  {
-                        self.process_mappings_other();
-                        if DBG_CAPPED_MODE {
-                            dbg!("Capped mode: mappings run");
-                        }
+                        self.process_and_run_mappings(MapppingSchedContext::Normal);
+                        if DBG_CAPPED_MODE { dbg!("Capped mode: mappings run"); }
                     } else if DBG_CAPPED_MODE {
                         dbg!("Capped mode: mappings throttled");
                         dbg!(&self.mapped_events_dt_stats);
                     }
                 }
             },
-            // Lastly we check to run idle tick, which bursts if we skip it due to any of the above.
-            _ = idle_ticker.tick() => self.process_idle_tick()
+            _ = idle_ticker.tick() => self.process_and_run_mappings(MapppingSchedContext::Idle)
             }
 
             if DBG_MAIN_LOOP_TIMING {
@@ -566,6 +573,7 @@ impl<
         self.rel_ctls = rel_ctls;
     }
 
+    // TODO: idle tick shadowing.
     fn set_idle_tick_enabled_on_device_control_for_mapping(&self, mapping: &Mapping) {
         if let Some(flag) = mapping.dst.get_idle_tick_enabled_flag()
             && let Ok(prev) = flag.compare_exchange(
@@ -654,6 +662,16 @@ impl<
     fn run_mappings(&self, mappings: &[usize], sched_ctx: MapppingSchedContext) {
         for mapping_idx in mappings.iter() {
             let mapping = &self.cfg.mappings[*mapping_idx];
+
+            if sched_ctx.is_idle() {
+                // TODO: idle tick shadowing.
+                if let Some(flag) = mapping.dst.get_idle_tick_enabled_flag()
+                    && !flag.load(Relaxed)
+                {
+                    continue;
+                }
+            }
+
             let input_value = mapping.src.get_numeric_value();
 
             mapping.set_last_known_io((Some(input_value), None));
@@ -661,17 +679,22 @@ impl<
             mapping.set_last_known_io((None, Some(final_value)));
 
             if let Some(d) = &mapping.dst.get_device_control_matcher_ref() {
-                self.dcm_write_to_devices(d, final_value, self.debug);
+                self.dcm_write_to_devices(
+                    d,
+                    final_value,
+                    if sched_ctx.is_idle() {
+                        self.debug_idle_tick.into()
+                    } else {
+                        self.debug
+                    },
+                );
                 self.set_idle_tick_enabled_on_device_control_for_mapping(mapping);
             } else {
                 mapping.dst.set_numeric_value(final_value);
             }
 
             if self.debug.is_on() {
-                debug!(
-                    "Mapped {} ({}): {} -> {}",
-                    mapping.name, mapping, input_value, final_value
-                );
+                debug!("Mapped {} ({mapping}): {input_value} -> {final_value}", mapping.name);
             }
         }
     }
@@ -682,67 +705,56 @@ impl<
         });
     }
 
-    fn process_mappings_other(&mut self) {
-        if self.scheduled_mappings_other.is_empty() {
-            return;
+    fn mappings_by_ctx_mut(&mut self, sched_ctx: MapppingSchedContext) -> &mut Vec<usize> {
+        match sched_ctx {
+            MapppingSchedContext::Idle => &mut self.idle_tick_mappings,
+            MapppingSchedContext::Normal => &mut self.scheduled_mappings_other,
+            MapppingSchedContext::Immediate => &mut self.scheduled_mappings_immediate,
         }
-        let dedup = true;
-        let shuffle = self.scheduled_mappings_other.len() > 1;
-        Self::dedup_and_shuffle(&mut self.scheduled_mappings_other, dedup, shuffle);
-        self.run_mappings(&self.scheduled_mappings_other, MapppingSchedContext::Normal);
-        self.scheduled_mappings_other.clear();
-        self.clear_rel_ctls();
     }
 
-    fn process_mappings_immediate(&mut self) {
-        if self.scheduled_mappings_immediate.is_empty() {
-            return;
+    fn mappings_by_ctx_ref(&self, sched_ctx: MapppingSchedContext) -> &Vec<usize> {
+        match sched_ctx {
+            MapppingSchedContext::Idle => &self.idle_tick_mappings,
+            MapppingSchedContext::Normal => &self.scheduled_mappings_other,
+            MapppingSchedContext::Immediate => &self.scheduled_mappings_immediate,
         }
-        let dedup = true;
-        let shuffle = self.scheduled_mappings_immediate.len() > 1;
-        Self::dedup_and_shuffle(&mut self.scheduled_mappings_immediate, dedup, shuffle);
-        self.run_mappings(&self.scheduled_mappings_immediate, MapppingSchedContext::Immediate);
-        self.scheduled_mappings_immediate.clear();
-        // We do not reset relative controls after processing immediate mappings.
     }
 
-    fn process_idle_tick(&self) {
-        if !(self.scheduled_mappings_immediate.is_empty() && self.scheduled_mappings_other.is_empty()) {
+    fn process_and_run_mappings(&mut self, sched_ctx: MapppingSchedContext) {
+        let mappings = self.mappings_by_ctx_mut(sched_ctx);
+        if mappings.is_empty() {
             return;
         }
-        // self.clear_rel_ctls();
-        // debug_assert!(
-        //     self.scheduled_mappings_immediate.is_empty() && self.scheduled_mappings_other.is_empty(),
-        //     "All the input-triggered mappings must be executed by the time idle tick processing is triggered."
-        // );
-        // debug_assert!(
-        //     self.rel_ctls
-        //         .iter()
-        //         .all(|ctl| unsafe { &**ctl }.get_numeric_value().is_zero()),
-        //     "All the relative control matcher values must be reset to 0 (after mappings execution) by the time idle tick processing is triggered."
-        // );
-        for idx in &self.idle_tick_mappings {
-            let mapping = &self.cfg.mappings[*idx];
-            if let Some(flag) = mapping.dst.get_idle_tick_enabled_flag()
-                && !flag.load(Relaxed)
-            {
-                continue;
+
+        if sched_ctx.is_idle() {
+            if branches::unlikely(
+                !(/*self.scheduled_mappings_immediate.is_empty() &&*/self.scheduled_mappings_other.is_empty()),
+            ) {
+                return;
             }
+            debug_assert!(
+                self.scheduled_mappings_immediate.is_empty() && self.scheduled_mappings_other.is_empty(),
+                "All the input-triggered mappings must be executed by the time of idle tick processing."
+            );
+            debug_assert!(
+                self.rel_ctls
+                    .iter()
+                    .all(|ctl| unsafe { &**ctl }.get_numeric_value() == 0.0 as BaseNumT),
+                "All the relative control matcher values must be reset to 0 (after mappings execution) by the time idle tick processing is triggered."
+            );
+        } else {
+            Self::dedup_and_shuffle(mappings, true, mappings.len() > 1);
+        }
 
-            let idle_in_value = mapping.src.get_numeric_value();
+        self.run_mappings(self.mappings_by_ctx_ref(sched_ctx), sched_ctx);
 
-            mapping.set_last_known_io((Some(idle_in_value), None));
+        if !sched_ctx.is_idle() {
+            self.mappings_by_ctx_mut(sched_ctx).clear();
+        }
 
-            let final_value =
-                self.apply_transformation_for_mapping(mapping, idle_in_value, MapppingSchedContext::IdleTick);
-
-            mapping.set_last_known_io((None, Some(final_value)));
-
-            if let Some(d) = &mapping.dst.get_device_control_matcher_ref() {
-                self.dcm_write_to_devices(d, final_value, self.debug_idle_tick.into());
-            } else {
-                mapping.dst.set_numeric_value(final_value);
-            }
+        if sched_ctx.is_normal() {
+            self.clear_rel_ctls();
         }
     }
 
@@ -763,7 +775,7 @@ impl<
                 "The value (={}) read from device {} \
                             is out of configured interval ({:?}), clamping it.",
                 vd.value,
-                if matches!(sched_ctx, MapppingSchedContext::IdleTick) {
+                if matches!(sched_ctx, MapppingSchedContext::Idle) {
                     "idle tick"
                 } else {
                     "input-triggered mapping"
@@ -876,7 +888,7 @@ impl<
     }
 
     fn is_idle_tick(&self) -> bool {
-        matches!(self.sched_ctx, MapppingSchedContext::IdleTick)
+        matches!(self.sched_ctx, MapppingSchedContext::Idle)
     }
 
     fn get_idle_tick_rate(&self) -> u32 {
