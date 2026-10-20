@@ -9,7 +9,7 @@ use crate::hid_manager::AvailableHIDDeviceInfo;
 use crate::hid_owned_and_ffb::{X_AXIS_IDX, Y_AXIS_IDX};
 use crate::mapped_controls::MappedCtls;
 use crate::schemas_control_matcher::ControlMatchers;
-use crate::schemas_hid::{HIDDeviceForceFeedbackCfg, HidControlMatcherCfg, HidDeviceCfg, HidFfEffect};
+use crate::schemas_hid::{HIDDeviceForceFeedbackCfg, HidControlMatcherCfg, HidDeviceCfg};
 use crate::schemas_value::WithLastKnownIO;
 use regex::Regex;
 use strum::IntoEnumIterator;

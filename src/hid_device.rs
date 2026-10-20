@@ -1,6 +1,8 @@
 use crate::base_num::BaseAtomicT;
 use crate::base_num::BaseNumT;
 use crate::debug::DebugLevel;
+use crate::device_and_device_manager::AvailableDeviceInfoIface;
+use crate::device_and_device_manager::CommonDeviceCfgIface;
 use crate::device_and_device_manager::Device;
 use crate::device_and_device_manager::DeviceEvent;
 use crate::device_and_device_manager::DeviceKind;
@@ -235,6 +237,20 @@ pub(crate) struct HidDevice {
     owned_virtual_device_thread_io: Option<Arc<OwnedVirtualHIDDeviceThreadIO>>,
     owned_virtual_device_thread_cancellation: Option<CancellationToken>,
     ff_is_a_condition_effect_enabled: bool,
+}
+
+impl CommonDeviceCfgIface for HidDeviceCfg {
+    fn matches_available_device(&self, available_device_info: &impl AvailableDeviceInfoIface) -> bool {
+        self.matcher_name_regex_ref()
+            .map(|r| r.is_match(available_device_info.get_name()))
+            .or(self
+                .virtual_device_name_ref()
+                .map(|n| crate::hid_device::sanitize_hid_name(n) == available_device_info.get_name()))
+            .unwrap_or_default()
+            && self
+                .get_classification()
+                .intersects(available_device_info.get_classification())
+    }
 }
 
 impl HidDevice {

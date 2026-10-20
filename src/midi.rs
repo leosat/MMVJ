@@ -1,7 +1,8 @@
 use crate::base_num::BaseNumT;
 use crate::debug::DebugLevel;
 use crate::device_and_device_manager::{
-    AvailableDeviceInfoIface, DeviceEvent, DeviceKind, DeviceManagerCommon, OpenedDeviceInfo, OpenedDeviceInfoIface,
+    AvailableDeviceInfoIface, CommonDeviceCfgIface, DeviceEvent, DeviceKind, DeviceManagerCommon, OpenedDeviceInfo,
+    OpenedDeviceInfoIface,
 };
 use crate::interner::intern_str;
 use crate::mapped_controls::MappedCtlsMidi;
@@ -43,6 +44,12 @@ pub(crate) enum MidiMessagePayload {
 impl Default for MidiMessagePayload {
     fn default() -> Self {
         Self::Value(Default::default())
+    }
+}
+
+impl CommonDeviceCfgIface for MidiMatcherCfg {
+    fn matches_available_device(&self, available_device_info: &impl AvailableDeviceInfoIface) -> bool {
+        self.match_name_regex.is_match(available_device_info.get_name())
     }
 }
 

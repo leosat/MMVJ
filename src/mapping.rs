@@ -3,9 +3,9 @@ use crate::hid_device::HidDeviceEvent;
 
 use crate::debug::DebugLevel;
 use crate::debug::get_debug_level;
-use crate::device_and_device_manager::WithDeviceClassification;
-use crate::device_and_device_manager::{AvailableDeviceInfoIface, DeviceManagerCommon, DeviceManagerWithFfb};
+use crate::device_and_device_manager::CommonDeviceCfgIface;
 use crate::device_and_device_manager::{DeviceKind, OpenedDeviceInfoIface};
+use crate::device_and_device_manager::{DeviceManagerCommon, DeviceManagerWithFfb};
 use crate::mapped_controls::MappedCtls;
 #[cfg(feature = "midi")]
 use crate::midi::MidiDeviceEvent;
@@ -287,18 +287,8 @@ impl<
                 .devices
                 .hid
                 .iter()
-                .filter(|(_, v)| {
-                    // TODO: logic for matching available devices with device matchers
-                    // TODO: will go to a reusable routine for reuse in other parts, e.g. in Gui.
-                    v.is_enabled()
-                        && v.matcher_name_regex_ref()
-                            .map(|r| r.is_match(available_hid_device_info.get_name()))
-                            .or(v.virtual_device_name_ref().map(|n| {
-                                crate::hid_device::sanitize_hid_name(n) == available_hid_device_info.get_name()
-                            }))
-                            .unwrap_or_default()
-                        && v.get_classification()
-                            .intersects(available_hid_device_info.get_classification())
+                .filter(|(_, hid_cfg)| {
+                    hid_cfg.is_enabled() && hid_cfg.matches_available_device(available_hid_device_info)
                 })
                 .collect::<Vec<(_, _)>>()
             {
@@ -331,7 +321,9 @@ impl<
                 .devices
                 .midi
                 .iter()
-                .filter(|(_, v)| v.is_enabled() && v.match_name_regex.is_match(available_midi_device_info.get_name()))
+                .filter(|(_, midi_cfg)| {
+                    midi_cfg.is_enabled() && midi_cfg.matches_available_device(available_midi_device_info)
+                })
                 .collect::<Vec<(_, _)>>()
             {
                 let opened_device_id = self
