@@ -11,6 +11,7 @@ use crate::mapped_controls::MappedCtls;
 use crate::midi::MidiDeviceEvent;
 use crate::num_interval::OutOfRangePolicy;
 use crate::schemas_cfg::Config;
+use crate::schemas_common::ControlCfgCommonIface;
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_control_matcher::ControlMatchers;
 
@@ -277,73 +278,56 @@ impl<
                     });
             };
 
+        macro_rules! setup_mapping_metadata_for {
+            ($available_device_info:ident, $cfg:expr, $device_manager:expr, $cms_variant:expr) => {{
+                for (dmk, dm) in $cfg
+                    .iter()
+                    .filter(|(_, device_cfg)| {
+                        device_cfg.is_enabled() && device_cfg.matches_available_device($available_device_info)
+                    })
+                    .collect::<Vec<(_, _)>>()
+                {
+                    let opened_device_id = $device_manager
+                        .open_device($available_device_info, dmk, dm)?
+                        .get_opened_device_id();
+
+                    for cm in dm.controls.values() {
+                        let (cms, mappings) = self
+                            .router_index_sysdev_and_ctl_type_to_cms_and_mappings
+                            .entry((opened_device_id, cm.get_ctl_type()))
+                            .or_default();
+                        cms.push($cms_variant(cm.clone()));
+                        collect_enabled_mappings_for_dmk_and_cm(
+                            dmk,
+                            cm.get_id(),
+                            cms.len() - 1,
+                            mappings,
+                            opened_device_id,
+                        );
+                    }
+                }
+            }};
+        }
+
         for available_hid_device_info in &self.hid_mgr.enumerate_available_devices(Some(
             (DeviceKind::Mouse | DeviceKind::Keyboard | DeviceKind::Gamepad | DeviceKind::Joystick).into(),
         )) {
-            for (dmk, dm) in self
-                .cfg
-                .devices
-                .hid
-                .iter()
-                .filter(|(_, hid_cfg)| {
-                    hid_cfg.is_enabled() && hid_cfg.matches_available_device(available_hid_device_info)
-                })
-                .collect::<Vec<(_, _)>>()
-            {
-                let opened_device_id = self
-                    .hid_mgr
-                    .open_device(available_hid_device_info, dmk, dm)?
-                    .get_opened_device_id();
-
-                for cm in dm.controls.values() {
-                    let (cms, mappings) = self
-                        .router_index_sysdev_and_ctl_type_to_cms_and_mappings
-                        .entry((opened_device_id, cm.r#type))
-                        .or_default();
-                    cms.push(ControlMatchers::Hid(cm.clone()));
-                    collect_enabled_mappings_for_dmk_and_cm(
-                        dmk,
-                        cm.get_id(),
-                        cms.len() - 1,
-                        mappings,
-                        opened_device_id,
-                    );
-                }
-            }
+            setup_mapping_metadata_for!(
+                available_hid_device_info,
+                self.cfg.devices.hid,
+                self.hid_mgr,
+                ControlMatchers::Hid
+            );
         }
 
         #[cfg(feature = "midi")]
         for available_midi_device_info in &self.midi_mgr.enumerate_available_devices(None) {
-            for (dmk, dm) in self
-                .cfg
-                .devices
-                .midi
-                .iter()
-                .filter(|(_, midi_cfg)| {
-                    midi_cfg.is_enabled() && midi_cfg.matches_available_device(available_midi_device_info)
-                })
-                .collect::<Vec<(_, _)>>()
-            {
-                let opened_device_id = self
-                    .midi_mgr
-                    .open_device(available_midi_device_info, dmk, dm)?
-                    .get_opened_device_id();
-
-                for cm in dm.controls.values() {
-                    let (cms, mappings) = self
-                        .router_index_sysdev_and_ctl_type_to_cms_and_mappings
-                        .entry((opened_device_id, cm.midi_message.r#type.into()))
-                        .or_default();
-                    cms.push(ControlMatchers::Midi(cm.clone()));
-                    collect_enabled_mappings_for_dmk_and_cm(
-                        dmk,
-                        cm.get_id(),
-                        cms.len() - 1,
-                        mappings,
-                        opened_device_id,
-                    );
-                }
-            }
+            setup_mapping_metadata_for!(
+                available_midi_device_info,
+                self.cfg.devices.midi,
+                self.midi_mgr,
+                ControlMatchers::Midi
+            );
         }
 
         self.router_index_sysdev_and_ctl_type_to_cms_and_mappings

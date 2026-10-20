@@ -7,8 +7,8 @@ use crate::{
     num_interval::NumInterval,
     schemas_cfg::DescriptionCfg,
     schemas_common::{
-        EnabledFlagCfg, IdleTickEnabledFlag, MarkedAsFromPredefinedControl, ObjId, WithRuntimeId,
-        deserialize_device_controls, is_false, is_none_or_default, is_zero,
+        ControlCfgCommonIface, EnabledFlagCfg, IdleTickEnabledFlag, MarkedAsFromPredefinedControl, ObjId,
+        WithRuntimeId, deserialize_device_controls, is_false, is_none_or_default, is_zero,
     },
     schemas_predefined::HidControlPredefined,
     schemas_value::{
@@ -513,6 +513,14 @@ pub(crate) struct HidDeviceBusSpecCfg {
     pub(crate) version: u16,
 }
 
+pub(crate) fn is_default_ffb_axis_x(ctl: &MappedCtls) -> bool {
+    *ctl == default_ffb_axis_x()
+}
+
+pub(crate) fn is_default_ffb_axis_y(ctl: &MappedCtls) -> bool {
+    *ctl == default_ffb_axis_y()
+}
+
 pub(crate) fn default_ffb_axis_x() -> MappedCtls {
     MappedCtls::AbsX
 }
@@ -538,10 +546,10 @@ pub(crate) struct HIDDeviceForceFeedbackCfg {
     #[garde(range(min = 1))]
     /// Must support at least 1 effect if enabled
     pub(crate) max_effects: usize,
-    #[serde(default = "default_ffb_axis_x")]
+    #[serde(default = "default_ffb_axis_x", skip_serializing_if = "is_default_ffb_axis_x")]
     #[garde(skip)]
     pub(crate) cond_effects_axis_x: MappedCtls,
-    #[serde(default = "default_ffb_axis_y")]
+    #[serde(default = "default_ffb_axis_y", skip_serializing_if = "is_default_ffb_axis_y")]
     #[garde(skip)]
     pub(crate) cond_effects_axis_y: MappedCtls,
     #[serde(default = "default_gain")]
@@ -613,6 +621,12 @@ pub(crate) struct HidControlMatcherCfg {
     #[serde(skip)]
     #[traverse(skip)]
     _dst_refs_count: Arc<CachePadded<AtomicUsize>>,
+}
+
+impl ControlCfgCommonIface for HidControlMatcherCfg {
+    fn get_ctl_type(&self) -> MappedCtls {
+        self.r#type
+    }
 }
 
 impl WithLastKnownIOSettable for HidControlMatcherCfg {

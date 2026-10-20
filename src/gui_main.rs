@@ -316,7 +316,6 @@ impl eframe::App for GuiMain {
                         FilePickingAction::Save => {
                             self.file_dialog.update(ui.ctx());
                             if let Some(path) = self.file_dialog.take_picked() {
-                                dbg!("Seving", Some(&path));
                                 self.submit_post_draw_cmd(GuiCmd::SaveCfg(Some(path), None));
                                 self.file_picking_action_in_progress = FilePickingAction::None;
                             }

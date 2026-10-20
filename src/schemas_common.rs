@@ -12,7 +12,7 @@ use num_traits::Zero;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::base_num::BaseNumT;
+use crate::{base_num::BaseNumT, mapped_controls::MappedCtls};
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct ObjId(usize);
@@ -159,6 +159,11 @@ pub(crate) fn deserialize_device_controls<
 pub(crate) trait WithRuntimeId {
     fn get_id(&self) -> ObjId;
     fn assign_new_id(&mut self);
+}
+
+// ----------------------------
+pub(crate) trait ControlCfgCommonIface {
+    fn get_ctl_type(&self) -> MappedCtls;
 }
 
 // ----------------------------
