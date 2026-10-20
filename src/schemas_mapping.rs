@@ -177,6 +177,20 @@ impl WithSelfSanitize for MapperMode {
 }
 
 impl MapperMode {
+    pub(crate) fn display_full(&self) -> String {
+        format!(
+            "{} ({} {})",
+            &self.to_string(),
+            &format!("idle tick rate: {} Hz", self.get_idle_tick_rate()),
+            &self
+                .get_mapping_rate()
+                .map(|rate| format!(
+                    ", mapping {} rate: {rate} Hz",
+                    if self.is_stable() { "stable" } else { "max" }
+                ))
+                .unwrap_or_default()
+        )
+    }
     pub(crate) fn make_reactive(&mut self) {
         *self = Self::Reactive {
             idle_rate: self.get_idle_tick_rate(),
