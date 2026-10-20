@@ -1415,6 +1415,7 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
         .on_hover_text(self.accumulator_doc_str());
 
         if let Some(ff) = &mut self.force_feedback {
+            ui.separator();
             ui.collapsing("Force Feedback", |ui| {
                 ff.egui(gui_in, ui).inspect(|out| *gui_out_mut = Some(out.clone()));
             })
