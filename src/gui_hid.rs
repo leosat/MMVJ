@@ -44,7 +44,7 @@ impl<'s> DrawEgui<'s> for HIDDeviceForceFeedbackCfg {
                     *target = *axis;
                     return true;
                 }
-                return false;
+                false
             })
             .inner
         };
@@ -84,7 +84,7 @@ impl<'s> DrawEgui<'s> for HIDDeviceForceFeedbackCfg {
                 ui.horizontal(|ui| {
                     ui.label(format!(
                         "{} {}",
-                        effect.to_string(),
+                        effect,
                         if effect.is_supported() {
                             egui_phosphor::regular::MAGIC_WAND
                         } else {

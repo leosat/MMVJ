@@ -402,7 +402,7 @@ impl<
             let main_loop_iter_start = std::time::Instant::now();
 
             let mut update_mapped_events_dt_stat = |stats: &MappingEngineStats| {
-                stats.record((main_loop_iter_start - last_event_time).as_secs_f32().into());
+                stats.record((main_loop_iter_start - last_event_time).as_secs_f32() as BaseNumT);
                 last_event_time = main_loop_iter_start;
             };
 
@@ -413,21 +413,20 @@ impl<
                 select! {
                     event = {#[cfg(feature = "midi")] {self.midi_mgr.consume_any_opened_device_event()}
                              #[cfg(not(feature = "midi"))] std::future::pending::<()>()} =>
-                    {#[cfg(feature = "midi")] {
-                        match event {Some(event) => {
-                            if self.on_midi_event(event) {
-                                update_mapped_events_dt_stat(&self.mapped_events_dt_stats);
-                            };
-                        },
-                        None => { log::error!("MIDI manager connection is gone");
-                        self.running = false; }}}},
+                        {#[cfg(feature = "midi")] {
+                        match event {
+                            Some(event) =>
+                                if self.on_midi_event(event) {
+                                    update_mapped_events_dt_stat(&self.mapped_events_dt_stats);
+                                },
+                            None => { log::error!("MIDI manager connection is gone");
+                            self.running = false; }}}},
                     event = self.hid_mgr.consume_any_opened_device_event() =>
                         match event {
-                            Some(event) => {
+                            Some(event) =>
                                 if self.on_hid_event(event) {
                                     update_mapped_events_dt_stat(&self.mapped_events_dt_stats);
-                                };
-                            },
+                                },
                             None => { log::error!("HID manager connection is gone");
                             self.running = false; }},
                 }
@@ -500,19 +499,19 @@ impl StatsIface for MappingEngineStats {
     }
 
     fn get_mean(&self) -> Self::Out {
-        self.mean.get().into()
+        self.mean.get()
     }
 
     fn get_max(&self) -> Self::Out {
-        self.max.get().into()
+        self.max.get()
     }
 
     fn get_min(&self) -> Self::Out {
-        self.min.get().into()
+        self.min.get()
     }
 
     fn get_last(&self) -> Self::Out {
-        self.last.get().into()
+        self.last.get()
     }
 
     fn with_threshold_from(mut self, threshold: Self::In) -> Self {
@@ -758,7 +757,7 @@ impl<
                 current_mapping_src: Some(&mapping.src),
                 current_mapping_dst: Some(&mapping.dst),
                 lua: Some(self.lua),
-                sched_ctx: sched_ctx,
+                sched_ctx,
             },
         );
 
