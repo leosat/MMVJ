@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 use crate::num_interval::NumIntervalValue;
 use crate::schemas_transform::TfmSeqCfg;
 use crate::schemas_value::{
-    AutoOrManual, InputValueMetadata, TfmValue, ValueDsts, ValueIface, ValueSrcs, ValueXrcs,
-    WithDeviceControlMatcherRef, WithLastKnownIO,
+    AutoOrManual, InputValueMetadata, ValueDsts, ValueIface, ValueSrcs, ValueXrcs, WithDeviceControlMatcherRef,
+    WithLastKnownIO,
 };
 use crate::tfm_exec::{TfmExecCtx, WithTfmExec, get_out_of_range_policy};
 use crate::{config::WithSelfSanitize, schemas_value::WithRelativity};
@@ -498,15 +498,7 @@ where
         let (mut value, interval) = if let Some(tfm) = self.port_transformation_ref() {
             if let Some(ctx) = ctx {
                 (
-                    tfm.exec(
-                        TfmValue {
-                            value: self.inner.get_numeric_value().into(),
-                            interval: self.inner.get_interval().cast().unwrap(),
-                            relativity: self.inner.get_relativity(),
-                        },
-                        ctx,
-                    )
-                    .value,
+                    tfm.exec(self.inner.get_numeric_value().into(), ctx),
                     tfm.get_out_interval(),
                 )
             } else {

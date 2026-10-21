@@ -25,9 +25,10 @@ use crate::schemas_transform::{
 };
 
 use crate::schemas_value::DeviceControlMatcherRef;
+use crate::schemas_value::DynValueRefs;
 use crate::schemas_value::WithLastKnownIOSettable;
-use crate::schemas_value::{DynValueRefs, ValueDsts, WithNumInterval, WithRelativity};
-use crate::schemas_value::{TfmValue, WithNumericValue};
+use crate::schemas_value::WithNumericValue;
+use crate::schemas_value::{ValueDsts, WithNumInterval};
 
 use crate::schemas_value_port::ValuePortIface;
 use crate::stats::StatsIface;
@@ -136,21 +137,9 @@ pub(crate) fn get_out_of_range_policy(rel: Relativity, is_reactive: bool) -> Out
 // ----------------------------------------------------------
 
 impl WithTfmExec for TfmSeqCfg {
-    type InputT = TfmValue<BaseNumT>;
+    type InputT = BaseNumT;
     type OutputT = Self::InputT;
-    fn exec(&self, mut input: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
-        let in_interval = self.get_in_interval();
-        if branches::unlikely(input.interval != in_interval) {
-            input.value = in_interval.map_from(
-                input.value,
-                &input.interval,
-                get_out_of_range_policy(input.relativity, ctx.is_reactive_mode()),
-            );
-            input.interval = in_interval;
-        }
-
-        let mut value = input.value;
-
+    fn exec(&self, mut value: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
         if branches::unlikely(!value.is_finite()) {
             // TODO: use malfunction reporting when added.
             log::error!(
@@ -158,35 +147,28 @@ impl WithTfmExec for TfmSeqCfg {
                     affected transformation runtime id {}",
                 self.get_id()
             );
-            return input;
+            return Self::InputT::default();
         }
 
         self.set_last_known_io((Some(value), None));
         for step in &self.steps {
             value = step.exec(value, ctx);
             if branches::unlikely(!value.is_finite()) {
-                // TODO?: currently such output is expected only after script transform, where a user-defined logic can produce
-                //       NaN or infinity, however, for generality, for now, will check after every step.
                 // TODO: use malfunction reporting when added.
+                // NB: currently such output is expected only after script transform,
+                //     where a user-defined logic can produce NaN or infinity,
+                //     however, for generality (for now) will check after every step.
                 log::error!(
                     "In-pipeline non-finite value produced, transform execution interrupted to prevent propagation.\n\
                     Non-finite value produced by step {} with runtime id {}",
                     step,
                     step.get_id()
                 );
-                return input;
+                return Self::InputT::default();
             }
         }
         self.set_last_known_io((None, Some(value)));
-
-        input.interval = self.get_out_interval();
-        input.relativity = self.get_out_relativity();
-        if ctx.is_reactive_mode() || input.relativity.is_absolute() {
-            input.value = input.interval.clamp(value);
-        } else {
-            input.value = value;
-        }
-        input
+        value
     }
 }
 
@@ -805,15 +787,7 @@ impl WithTfmExec for ScriptCfg {
                                                   args: (String, BaseNumT)|
                           -> std::result::Result<BaseNumT, mlua::Error> {
                         if let Some(tfm) = self.aux_transformations.get(&args.0) {
-                            let ret = tfm.exec(
-                                TfmValue {
-                                    value: args.1,
-                                    interval: tfm.get_interval(),
-                                    relativity: tfm.get_relativity(),
-                                },
-                                ctx,
-                            );
-                            Ok(ret.value)
+                            Ok(tfm.exec(args.1, ctx))
                         } else {
                             Err(mlua::Error::RuntimeError(format!(
                                 "Can't find transformation with key {}",
@@ -1053,17 +1027,7 @@ impl WithTfmExec for SteeringCfg {
 
         '_User_input_filtering_and_curving_pre_FFB_and_autocentering: {
             if !self.integrated_user_input_transform.steps.is_empty() {
-                post_filter = self
-                    .integrated_user_input_transform
-                    .exec(
-                        TfmValue {
-                            value: state.pre_filter,
-                            interval: SYMM_UNIT_INTERVAL,
-                            relativity: Relativity::Abs,
-                        },
-                        ctx,
-                    )
-                    .value;
+                post_filter = self.integrated_user_input_transform.exec(state.pre_filter, ctx);
             } else {
                 post_filter = state.pre_filter;
             }
@@ -1108,16 +1072,7 @@ impl WithTfmExec for SteeringCfg {
                     };
 
                     let filtered_force = if !ff_config.transformation.steps.is_empty() {
-                        let ret = ff_config.transformation.exec(
-                            TfmValue {
-                                value: raw_force,
-                                interval: SYMM_UNIT_INTERVAL,
-                                relativity: Relativity::Rel,
-                            },
-                            ctx,
-                        );
-                        // debug_assert!(ret.relativity == Relativity::Rel); TODO: check once on metadata recalculation
-                        ret.value
+                        ff_config.transformation.exec(raw_force, ctx)
                     } else {
                         raw_force
                     };

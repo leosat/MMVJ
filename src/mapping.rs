@@ -9,7 +9,6 @@ use crate::device_and_device_manager::{DeviceManagerCommon, DeviceManagerWithFfb
 use crate::mapped_controls::MappedCtls;
 #[cfg(feature = "midi")]
 use crate::midi::MidiDeviceEvent;
-use crate::num_interval::OutOfRangePolicy;
 use crate::schemas_cfg::Config;
 use crate::schemas_common::ControlCfgCommonIface;
 use crate::schemas_common::{ObjId, WithRuntimeId};
@@ -21,14 +20,15 @@ use crate::schemas_mapping::Mapping;
 #[cfg(feature = "midi")]
 use crate::schemas_midi::MidiMatcherCfg;
 use crate::schemas_transform::{DynValFilter, collect_dynamic_value_matchers};
+use crate::schemas_value::WithNumericValue;
 use crate::schemas_value::{
     DeviceControlMatcherRef, DynValueRefs, ValueDsts, WithDeviceControlMatcherRef, WithLastKnownIOSettable,
     WithNumInterval, WithNumericValueSettable,
 };
-use crate::schemas_value::{TfmValue, WithNumericValue};
 use crate::schemas_value::{ValueSrcs, WithRelativity};
 
 use crate::stats::StatsIface;
+use crate::tfm_exec::get_out_of_range_policy;
 use crate::tfm_exec::{TfmExecCtx, WithTfmExec};
 use anyhow::Result;
 use log::{debug, info, warn};
@@ -735,32 +735,24 @@ impl<
     fn apply_transformation_for_mapping(
         &self,
         mapping: &Mapping,
-        value: BaseNumT,
+        mut value: BaseNumT,
         sched_ctx: MapppingSchedContext,
     ) -> BaseNumT {
-        let mut vd = TfmValue::<BaseNumT> {
-            value,
-            interval: mapping.src.get_interval(),
-            relativity: mapping.src.get_relativity(),
-        };
-
-        if vd.relativity.is_absolute() && !vd.interval.contains_value_closed(vd.value) {
+        if mapping.src.get_relativity().is_absolute() && !mapping.src.get_interval().contains_value_closed(value) {
             warn!(
-                "The value (={}) read from device {} \
-                            is out of configured interval ({:?}), clamping it.",
-                vd.value,
+                "The value (={value}) read from device {} is out of configured interval ({:?}), clamping it.",
                 if matches!(sched_ctx, MapppingSchedContext::Idle) {
                     "idle tick"
                 } else {
                     "input-triggered mapping"
                 },
-                vd.interval
+                mapping.src.get_interval()
             );
-            vd.value = vd.interval.clamp(vd.value);
+            value = mapping.src.get_interval().clamp(value);
         }
 
-        vd = mapping.transformation.exec(
-            vd,
+        value = mapping.transformation.exec(
+            value,
             &MappingTfmExecCtx {
                 mapping_engine: self,
                 current_mapping_src: Some(&mapping.src),
@@ -770,20 +762,47 @@ impl<
             },
         );
 
-        let dst_interval = mapping.dst.get_interval();
-        if vd.interval != dst_interval {
-            vd.value = dst_interval.map_from(
-                vd.value,
-                &vd.interval,
-                if vd.relativity.is_absolute() {
-                    OutOfRangePolicy::WarnIfDebugAndClamp
-                } else {
-                    OutOfRangePolicy::Allow
-                },
+        let mapping_dst_interval = mapping.dst.get_interval();
+        let tfm_out_interval = mapping.transformation.get_out_interval();
+
+        // TODO: Currently only two points of writeback are possible: mapping destination and
+        //        script tfm destination ports. The below remapping+clamp is only done for mapping dst,
+        //        but not for script dst, where user is supposed to do it manually.
+        //        In case more writeback points (e.g. write/tee tfm step) are added,
+        //        will need to move this logic to common writeback routine.
+        if tfm_out_interval != mapping_dst_interval {
+            value = mapping_dst_interval.map_from(
+                value,
+                &tfm_out_interval,
+                get_out_of_range_policy(
+                    mapping.transformation.get_out_relativity(),
+                    self.get_mode().is_reactive(),
+                ),
             );
         }
 
-        vd.value
+        // TODO:
+        //
+        // Reinterpreting relative output as absolute control position
+        // e.g. in case of a joystick axis may or may not be feasible.
+        // for a physical device that could result in abrupt movements.
+        //
+        // Currently it is allowed.
+        // The mode of "clever" remapping of Rel to Abs is being proposed.
+        // Alternatively, we may further mark such conigurations as invalid,
+        // discarding writebacks.
+        //
+        // While allowed, in non-reactive mode relative delta can overshoot the
+        // range of abs dst control which may or may not be handled properly
+        // by the further processing logic.
+        if !self.get_mode().is_reactive()
+            && mapping.transformation.get_out_relativity().is_relative()
+            && mapping.dst.get_relativity().is_absolute()
+        {
+            value = mapping_dst_interval.clamp(value);
+        }
+
+        value
     }
 
     fn dcm_write_to_devices(&self, d: &DeviceControlMatcherRef, value: BaseNumT, debug: DebugLevel) {

@@ -7,8 +7,8 @@ mod steering_tfm_deserialization_and_exec_tests {
     use crate::schemas_transform::{TfmSeqCfg, TfmStepCfg};
     use crate::schemas_value::AutoOrManual;
     use crate::schemas_value::DeviceControlMatcherRef;
+    use crate::schemas_value::InputValueMetadata;
     use crate::schemas_value::ValueDsts;
-    use crate::schemas_value::{InputValueMetadata, TfmValue};
     use crate::schemas_value_port::ValuePortIface;
     use crate::tfm_exec::TfmExeState;
     use crate::tfm_exec::{TfmExecCtx, WithTfmExec};
@@ -75,22 +75,9 @@ mod steering_tfm_deserialization_and_exec_tests {
         }
     }
 
-    /// Simulate a mouse REL_X event (range [-127, 127], relative).
-    fn mouse_rel_x(value: BaseNumT) -> TfmValue<BaseNumT> {
-        TfmValue {
-            value,
-            interval: NumInterval::new(-127.0, 127.0),
-            relativity: Relativity::Rel,
-        }
-    }
-
     /// Simulate a zero-input idle tick.
-    fn idle_input() -> TfmValue<BaseNumT> {
-        TfmValue {
-            value: 0.0,
-            interval: NumInterval::new(-127.0, 127.0),
-            relativity: Relativity::Rel,
-        }
+    fn idle_input() -> BaseNumT {
+        0.0 as BaseNumT
     }
 
     /// Set up pipeline metadata the same way `Mapping::recompute_metadata`
@@ -175,14 +162,14 @@ mod steering_tfm_deserialization_and_exec_tests {
         setup_mouse_metadata(&mut tfm);
 
         let ctx = MockCtx::active();
-        let out = tfm.exec(mouse_rel_x(50.0), &ctx);
+        let out = tfm.exec(50.0, &ctx);
 
-        assert_eq!(out.interval, SYMM_UNIT_INTERVAL, "output interval = [-1, 1]");
-        assert_eq!(out.relativity, Relativity::Abs, "steering output is absolute");
-        assert!(out.value > 0.0, "rightward mouse → positive wheel angle");
-        assert!(out.value <= 1.0, "clamped to [-1, 1]");
+        assert_eq!(tfm.get_out_interval(), SYMM_UNIT_INTERVAL, "output interval = [-1, 1]");
+        assert_eq!(tfm.get_out_relativity(), Relativity::Abs, "steering output is absolute");
+        assert!(out > 0.0, "rightward mouse → positive wheel angle");
+        assert!(out <= 1.0, "clamped to [-1, 1]");
 
-        println!("default.yaml pipeline: REL_X=50 -> wheel={:.6}", out.value);
+        println!("default.yaml pipeline: REL_X=50 -> wheel={:.6}", out);
     }
 
     #[test]
@@ -200,14 +187,14 @@ mod steering_tfm_deserialization_and_exec_tests {
 
         let mut prev = 0.0;
         for i in 1..=5 {
-            let out = tfm.exec(mouse_rel_x(30.0), &ctx);
-            assert!(out.value > prev, "tick {i}: must increase");
-            prev = out.value;
+            let out = tfm.exec(30.0, &ctx);
+            assert!(out > prev, "tick {i}: must increase");
+            prev = out;
         }
         for _ in 0..5 {
-            let out = tfm.exec(mouse_rel_x(-30.0), &ctx);
-            assert!(out.value < prev, "leftward must decrease");
-            prev = out.value;
+            let out = tfm.exec(-30.0, &ctx);
+            assert!(out < prev, "leftward must decrease");
+            prev = out;
         }
 
         println!("Accumulation: 5*right then 5*left, final={prev:.6}");
@@ -225,7 +212,7 @@ mod steering_tfm_deserialization_and_exec_tests {
         let mut tfm: TfmSeqCfg = serde_saphyr::from_str(yaml).unwrap();
         setup_mouse_metadata(&mut tfm);
 
-        let turned = tfm.exec(mouse_rel_x(100.0), &MockCtx::active()).value;
+        let turned = tfm.exec(100.0, &MockCtx::active());
         assert!(turned > 0.1, "must have turned, got {turned}");
 
         let ctx_idle = MockCtx::idle();
@@ -233,8 +220,8 @@ mod steering_tfm_deserialization_and_exec_tests {
         for _ in 0..20 {
             rewind_steering_clock(&tfm, Duration::from_millis(100));
             let out = tfm.exec(idle_input(), &ctx_idle);
-            assert!(out.value < pos, "autocentering must reduce |pos|");
-            pos = out.value;
+            assert!(out < pos, "autocentering must reduce |pos|");
+            pos = out;
         }
 
         assert!(
@@ -256,13 +243,13 @@ mod steering_tfm_deserialization_and_exec_tests {
         let mut tfm: TfmSeqCfg = serde_saphyr::from_str(yaml).unwrap();
         setup_mouse_metadata(&mut tfm);
 
-        let turned = tfm.exec(mouse_rel_x(100.0), &MockCtx::active()).value;
+        let turned = tfm.exec(100.0, &MockCtx::active());
 
         let ctx_idle = MockCtx::idle();
         for _ in 0..10 {
             rewind_steering_clock(&tfm, Duration::from_millis(100));
             let out = tfm.exec(idle_input(), &ctx_idle);
-            assert!(approx(out.value, turned), "halflife=0 → wheel must stay");
+            assert!(approx(out, turned), "halflife=0 → wheel must stay");
         }
         println!("halflife=0: stayed at {turned:.6}");
     }
@@ -279,13 +266,12 @@ mod steering_tfm_deserialization_and_exec_tests {
         let mut tfm: TfmSeqCfg = serde_saphyr::from_str(yaml).unwrap();
         setup_mouse_metadata(&mut tfm);
 
-        let turned = tfm.exec(mouse_rel_x(100.0), &MockCtx::active()).value;
-
+        let turned = tfm.exec(100.0, &MockCtx::active());
         let ctx_idle = MockCtx::idle();
         for _ in 0..10 {
             rewind_steering_clock(&tfm, Duration::from_millis(100));
             let out = tfm.exec(idle_input(), &ctx_idle);
-            assert!(approx(out.value, turned), "hold=1.0 → locked");
+            assert!(approx(out, turned), "hold=1.0 → locked");
         }
         println!("hold_factor=1.0: locked at {turned:.6}");
     }
@@ -308,8 +294,8 @@ mod steering_tfm_deserialization_and_exec_tests {
         };
 
         let ctx = MockCtx::active();
-        let lo = make(0.05).exec(mouse_rel_x(50.0), &ctx).value;
-        let hi = make(0.50).exec(mouse_rel_x(50.0), &ctx).value;
+        let lo = make(0.05).exec(50.0, &ctx);
+        let hi = make(0.50).exec(50.0, &ctx);
 
         assert!(hi > lo, "higher gain -> larger movement");
         println!("Input_gain: 0.05 -> {lo:.6}, 0.50 -> {hi:.6}");
@@ -342,8 +328,8 @@ mod steering_tfm_deserialization_and_exec_tests {
         setup_mouse_metadata(&mut linear);
 
         let ctx = MockCtx::active();
-        let c = curved.exec(mouse_rel_x(10.0), &ctx).value;
-        let l = linear.exec(mouse_rel_x(10.0), &ctx).value;
+        let c = curved.exec(10.0, &ctx);
+        let l = linear.exec(10.0, &ctx);
 
         assert!(c.abs() < l.abs(), "exp curve must attenuate center");
         println!("Exp curve: curved={c:.6} < linear={l:.6}");
@@ -370,15 +356,15 @@ mod steering_tfm_deserialization_and_exec_tests {
         setup_mouse_metadata(&mut tfm);
 
         // Tiny nudge so the wheel is not exactly at zero
-        let _ = tfm.exec(mouse_rel_x(1.0), &MockCtx::active());
+        let _ = tfm.exec(1.0, &MockCtx::active());
 
         // Idle tick with 500 ms simulated gap.
         // Expected FFB offset ≈ 0.8 * 1.0 * (1−0.0) * 0.5 = 0.4
         rewind_steering_clock(&tfm, Duration::from_millis(500));
         let out = tfm.exec(idle_input(), &MockCtx::idle());
 
-        assert!(out.value > 0.05, "FFB must push wheel rightward");
-        println!("FFB custom_source=0.8, dt=0.5 s → wheel={:.6}", out.value);
+        assert!(out > 0.05, "FFB must push wheel rightward");
+        println!("FFB custom_source=0.8, dt=0.5 s → wheel={:.6}", out);
     }
 
     #[test]
@@ -408,14 +394,14 @@ mod steering_tfm_deserialization_and_exec_tests {
         let normal = make(false);
         let inverted = make(true);
 
-        let _ = normal.exec(mouse_rel_x(1.0), &MockCtx::active());
-        let _ = inverted.exec(mouse_rel_x(1.0), &MockCtx::active());
+        let _ = normal.exec(1.0, &MockCtx::active());
+        let _ = inverted.exec(1.0, &MockCtx::active());
 
         rewind_steering_clock(&normal, Duration::from_millis(500));
         rewind_steering_clock(&inverted, Duration::from_millis(500));
 
-        let n = normal.exec(idle_input(), &MockCtx::idle()).value;
-        let i = inverted.exec(idle_input(), &MockCtx::idle()).value;
+        let n = normal.exec(idle_input(), &MockCtx::idle());
+        let i = inverted.exec(idle_input(), &MockCtx::idle());
 
         assert!(n > 0.0 && i < n, "inverted must push opposite");
         println!("FFB invert: normal={n:.6}, inverted={i:.6}");
@@ -437,14 +423,14 @@ mod steering_tfm_deserialization_and_exec_tests {
         setup_mouse_metadata(&mut tfm);
 
         let ctx = MockCtx::active();
-        let out = tfm.exec(mouse_rel_x(50.0), &ctx);
+        let out = tfm.exec(50.0, &ctx);
 
         let written = ctx
             .get_written("My Wheel Angle")
             .expect("accumulator must write to variable");
         assert!(written != 0.0, "persisted angle must be non-zero");
 
-        println!("Accumulator: out={:.6}, persisted={:.6}", out.value, written);
+        println!("Accumulator: out={:.6}, persisted={:.6}", out, written);
     }
 
     #[test]
@@ -457,8 +443,8 @@ mod steering_tfm_deserialization_and_exec_tests {
         let mut tfm_seq: TfmSeqCfg = serde_saphyr::from_str(yaml).unwrap();
         setup_mouse_metadata(&mut tfm_seq);
         assert_eq!(tfm_seq.steps.first_mut().unwrap().is_enabled(), false);
-        let out = tfm_seq.exec(mouse_rel_x(42.0), &MockCtx::active());
-        assert_eq!(out.value, 42.0, "Disabled transformation passes the value through");
+        let out = tfm_seq.exec(42.0, &MockCtx::active());
+        assert_eq!(out, 42.0, "Disabled transformation passes the value through");
     }
 
     #[test]
@@ -492,8 +478,8 @@ mod steering_tfm_deserialization_and_exec_tests {
         setup_mouse_metadata(&mut tfm2);
 
         let ctx = MockCtx::active();
-        let o1 = tfm1.exec(mouse_rel_x(60.0), &ctx).value;
-        let o2 = tfm2.exec(mouse_rel_x(60.0), &ctx).value;
+        let o1 = tfm1.exec(60.0, &ctx);
+        let o2 = tfm2.exec(60.0, &ctx);
 
         assert!(approx(o1, o2), "round-trip must preserve behaviour");
         println!("Round-trip: both -> {o1:.6}");
