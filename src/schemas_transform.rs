@@ -893,7 +893,7 @@ impl ForceFeedbackCfg {
         self.transformation.recompute_metadata_and_sanitize_recursive(
             AutoOrManual::Auto(InputValueMetadata {
                 interval: SYMM_UNIT_INTERVAL,
-                relativity: Relativity::Rel,
+                relativity: Relativity::Abs,
             })
             .into(),
         );
