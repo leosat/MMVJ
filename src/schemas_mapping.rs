@@ -180,10 +180,9 @@ impl MapperMode {
     pub(crate) fn display_full(&self) -> String {
         format!(
             "{} ({} {})",
-            &self.to_string(),
-            &format!("idle tick rate: {} Hz", self.get_idle_tick_rate()),
-            &self
-                .get_mapping_rate()
+            self,
+            format_args!("idle tick rate: {} Hz", self.get_idle_tick_rate()),
+            self.get_mapping_rate()
                 .map(|rate| format!(
                     ", mapping {} rate: {rate} Hz",
                     if self.is_stable() { "stable" } else { "max" }
