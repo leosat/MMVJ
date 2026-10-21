@@ -582,7 +582,7 @@ impl<
                 })
                 .for_each(|(cm_idx, cm)| {
                     cm.set_numeric_value(event.data.get_operational_value());
-                    if !mappings.is_empty() {
+                    if !mappings[cm_idx].is_empty() {
                         mapped = true;
                         if event.data.message_type.is_a_button() {
                             self.scheduled_mappings_immediate.extend(&mappings[cm_idx]);
@@ -610,7 +610,7 @@ impl<
                     event.data.value
                 });
 
-                if !mappings.is_empty() {
+                if !mappings[cm_idx].is_empty() {
                     mapped = true;
                     if event.data.control_type.is_button() || event.data.control_type.is_key() {
                         self.scheduled_mappings_immediate.extend(&mappings[cm_idx]);
