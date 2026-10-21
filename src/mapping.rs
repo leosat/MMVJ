@@ -1,3 +1,4 @@
+use crate::base_num::BaseAtomicT;
 use crate::base_num::BaseNumT;
 use crate::hid_device::HidDeviceEvent;
 
@@ -14,7 +15,7 @@ use crate::schemas_common::ControlCfgCommonIface;
 use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_control_matcher::ControlMatchers;
 
-use crate::schemas_hid::{HidControlMatcherCfg, HidDeviceCfg};
+use crate::schemas_hid::HidDeviceCfg;
 use crate::schemas_mapping::MapperMode;
 use crate::schemas_mapping::Mapping;
 #[cfg(feature = "midi")]
@@ -31,6 +32,7 @@ use crate::stats::StatsIface;
 use crate::tfm_exec::get_out_of_range_policy;
 use crate::tfm_exec::{TfmExecCtx, WithTfmExec};
 use anyhow::Result;
+use crossbeam_utils::CachePadded;
 use log::{debug, info, warn};
 // use num_traits::Zero;
 use std::collections::HashMap;
@@ -38,6 +40,7 @@ use std::fs;
 #[cfg(not(feature = "midi"))]
 use std::marker::PhantomData;
 use std::ops::Not;
+use std::sync::Arc;
 use std::sync::atomic::Ordering::Relaxed;
 use tokio::select;
 use tokio::time::{MissedTickBehavior, interval};
@@ -91,7 +94,7 @@ pub(crate) struct MappingEngine<
         HashMap<(ObjId, MappedCtls), (Vec<ControlMatchers>, Vec<Vec<usize>>)>,
     scheduled_mappings_immediate: Vec<usize>,
     scheduled_mappings_other: Vec<usize>,
-    rel_ctls: Vec<*const HidControlMatcherCfg>,
+    rel_ctls: Vec<Arc<CachePadded<BaseAtomicT>>>,
     // ---
     idle_tick_mappings: Vec<usize>,
     lua: &'d mlua::Lua,
@@ -539,7 +542,7 @@ impl<
                 d.1.controls
                     .values()
                     .filter(|c| c.r#type.is_relative())
-                    .map(|c| c as *const HidControlMatcherCfg)
+                    .map(|c| c.current_value_ptr_ref().clone())
                     .collect::<Vec<_>>(),
             );
         });
@@ -674,7 +677,7 @@ impl<
 
     fn clear_rel_ctls(&self) {
         self.rel_ctls.iter().for_each(|ctl| {
-            unsafe { &**ctl }.set_numeric_value(0.0);
+            ctl.store(0.0, Relaxed);
         });
     }
 
@@ -711,9 +714,7 @@ impl<
                 "All the input-triggered mappings must be executed by the time of idle tick processing."
             );
             debug_assert!(
-                self.rel_ctls
-                    .iter()
-                    .all(|ctl| unsafe { &**ctl }.get_numeric_value() == 0.0 as BaseNumT),
+                self.rel_ctls.iter().all(|ctl| ctl.load(Relaxed) == 0.0 as BaseNumT),
                 "All the relative control matcher values must be reset to 0 (after mappings execution) by the time idle tick processing is triggered."
             );
         } else {

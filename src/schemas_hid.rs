@@ -623,6 +623,12 @@ pub(crate) struct HidControlMatcherCfg {
     _dst_refs_count: Arc<CachePadded<AtomicUsize>>,
 }
 
+impl HidControlMatcherCfg {
+    pub(crate) fn current_value_ptr_ref(&self) -> &Arc<CachePadded<BaseAtomicT>> {
+        &self.current_value
+    }
+}
+
 impl ControlCfgCommonIface for HidControlMatcherCfg {
     fn get_ctl_type(&self) -> MappedCtls {
         self.r#type
