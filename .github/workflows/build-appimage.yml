@@ -1,8 +1,8 @@
 name: Build and Auto-Release AppImage
 
 on:
-  push:
-    branches: [ "main" ]
+  # push:
+  #   branches: [ "main" ]
   workflow_run:
     workflows: ["Common testing"]
     types: [completed]
