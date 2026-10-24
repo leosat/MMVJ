@@ -706,7 +706,7 @@ pub(crate) static DEMO_CFG: LazyLock<Arc<std::sync::Mutex<Vec<(String, Config)>>
             "Mouse steering only".into(),
             serde_saphyr::from_str(include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/conf/example-default.yaml"
+                "/conf/example-mouse-steering-only.yaml"
             )))
             .unwrap(),
         ),
