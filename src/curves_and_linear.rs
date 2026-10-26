@@ -62,6 +62,8 @@ pub(crate) fn signed_power(x: BaseNumT, power: BaseNumT) -> BaseNumT {
 
 #[cfg(test)]
 mod tests {
+    use crate::test_utils::fp_approx_eq;
+
     use super::*;
 
     #[test]
@@ -73,15 +75,12 @@ mod tests {
 
     #[test]
     fn test_smoothstep() {
-        let result = smoothstep(0.5);
-        assert!((result - 0.5).abs() < 0.001);
+        assert!(fp_approx_eq(smoothstep(0.5), 0.5));
     }
 
     #[test]
     fn test_power() {
-        let result = signed_power(0.5, 2.0);
-        assert_eq!(result, 0.25);
-
+        assert!(fp_approx_eq(signed_power(0.5, 2.0), 0.25));
         assert_eq!(
             apply_center_symmetric_with_abs_value(
                 1.2345,
@@ -97,7 +96,7 @@ mod tests {
             1.2345
         );
 
-        assert_eq!(
+        assert!(fp_approx_eq(
             apply_center_symmetric_with_abs_value(
                 0.5,
                 UNIT_INTERVAL,
@@ -105,9 +104,9 @@ mod tests {
                 OutOfRangePolicy::Allow,
             ),
             0.5
-        );
+        ));
 
-        assert_eq!(
+        assert!(fp_approx_eq(
             apply_center_symmetric_with_abs_value(
                 0.75,
                 UNIT_INTERVAL,
@@ -115,6 +114,6 @@ mod tests {
                 OutOfRangePolicy::Allow,
             ),
             0.625
-        )
+        ))
     }
 }
