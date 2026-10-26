@@ -2773,6 +2773,9 @@ impl ScriptCfg {
         let out_relativity = self
             .output_relativity
             .unwrap_or(self.common_state_ref().get_in_relativity());
+        for (_, ref mut tfm) in self.aux_transformations.iter_mut() {
+            *tfm.in_meta_mut() = tfm.in_meta_mut().make_manual();
+        }
         self.common_state_mut().set_out_interval(out_interval);
         self.common_state_mut().set_out_relativity(out_relativity);
     }
