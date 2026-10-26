@@ -219,6 +219,7 @@ pub(crate) struct GuiCmdScriptAuxRename {
 impl traversable::VisitorMut for GuiCmdScriptAuxRename {
     type Break = ();
     fn enter_mut(&mut self, this: &mut dyn std::any::Any) -> std::ops::ControlFlow<Self::Break> {
+        #[cfg(feature = "scripting")]
         if let Some(step) = this.downcast_mut::<TfmStepCfg>()
             && step.get_id() == self.tfm_step_id
             && let TfmStepCfg::Script(script) = step

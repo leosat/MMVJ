@@ -542,6 +542,7 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                         s.egui((ArithOpType::Div, gui_in.2.clone_and_push_hier(step_id)), ui)
                                     }
                                     Self::VelocityToDisplacement(s) => s.egui(gui_in.2, ui),
+                                    #[cfg(feature = "scripting")]
                                     Self::Script(s) => s.egui(
                                         (
                                             step_id,
@@ -1528,6 +1529,7 @@ fn draw_gui_idle_tick_params(ui: &mut egui::Ui, tfm: &mut impl TfmStepIdleBehavi
 }
 
 // --------------------------------------------
+#[cfg(feature = "scripting")]
 impl<'s> DrawEgui<'s> for ScriptCfg {
     type In = (ObjId, GuiInCommon<'s>, &'s VariablesCfg, &'s DevicesCfgNew);
     type Out = Option<GuiCmd>;

@@ -272,6 +272,7 @@ pub async fn run(
     let midi_mgr = MidiManager::new(debug)?;
 
     //----------------------------- LUA VM -------------------------------------------
+    #[cfg(feature = "lua")]
     let lua = mlua::Lua::new();
 
     //----------------------------- COMMAND BUFFERS ----------------------------------
@@ -326,6 +327,7 @@ pub async fn run(
             &hid_mgr,
             #[cfg(feature = "midi")]
             &midi_mgr,
+            #[cfg(feature = "lua")]
             &lua,
         )?;
 

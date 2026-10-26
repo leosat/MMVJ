@@ -717,6 +717,7 @@ pub(crate) static DEMO_CFG: LazyLock<Arc<std::sync::Mutex<Vec<(String, Config)>>
             )))
             .unwrap(),
         ),
+        #[cfg(feature = "lua")]
         (
             "Keyboard and mouse steering, Lua script".into(),
             serde_saphyr::from_str(include_str!(concat!(
@@ -734,6 +735,7 @@ pub(crate) static DEMO_CFG: LazyLock<Arc<std::sync::Mutex<Vec<(String, Config)>>
             )))
             .unwrap(),
         ),
+        #[cfg(feature = "lua")]
         (
             "Abstract Lua scripting demo".into(),
             serde_saphyr::from_str(include_str!(concat!(

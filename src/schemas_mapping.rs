@@ -387,14 +387,19 @@ impl Mapping {
 
     pub(crate) fn requires_idle_tick(&self) -> bool {
         self.transformation.steps.iter().any(|s| {
-            matches!(
+            #[allow(unused_mut)]
+            let mut ret = matches!(
                 s,
                 TfmStepCfg::Steering { .. }
                     | TfmStepCfg::RaiseFall { .. }
                     | TfmStepCfg::Ema { .. }
                     | TfmStepCfg::OneEuro { .. }
-                    | TfmStepCfg::Script { .. }
-            )
+            );
+            #[cfg(feature = "scripting")]
+            {
+                ret |= matches!(s, TfmStepCfg::Script { .. });
+            }
+            ret
         }) || collect_dynamic_value_matchers(self, |ctx| {
             ctx.contains(DynValFilter::Var) /*&& ctx.contains(DynValFilter::Src)*/
         })

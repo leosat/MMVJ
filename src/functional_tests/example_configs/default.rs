@@ -325,6 +325,7 @@ mod default_config_tests {
             Arc<AtomicBool>,
         ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'static>>,
     {
+        #[cfg(feature = "lua")]
         let lua = mlua::Lua::new();
         let (mock_hid_mgr, event_tx, outputs) = MockHidManager::new(ff_spring_enabled.clone(), range);
 
@@ -339,6 +340,7 @@ mod default_config_tests {
             &mock_hid_mgr,
             #[cfg(feature = "midi")]
             &mock_midi_mgr,
+            #[cfg(feature = "lua")]
             &lua,
         )
         .expect("Failed to create engine");
@@ -351,6 +353,7 @@ mod default_config_tests {
             &mock_hid_mgr,
             #[cfg(feature = "midi")]
             &mock_midi_mgr,
+            #[cfg(feature = "lua")]
             &lua,
         )
         .expect("Failed to create engine");

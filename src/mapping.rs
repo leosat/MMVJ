@@ -97,6 +97,7 @@ pub(crate) struct MappingEngine<
     rel_ctls: Vec<Arc<CachePadded<BaseAtomicT>>>,
     // ---
     idle_tick_mappings: Vec<usize>,
+    #[cfg(feature = "lua")]
     lua: &'d mlua::Lua,
     mapped_events_dt_stats: MappingEngineStats,
 }
@@ -112,7 +113,7 @@ pub(crate) trait Mapper<'d> {
         cfg: Config,
         hid_mgr: &'d Self::HidManagerT,
         #[cfg(feature = "midi")] midi_mgr: &'d Self::MidiManagerT,
-        lua: &'d mlua::Lua,
+        #[cfg(feature = "lua")] lua: &'d mlua::Lua,
     ) -> Result<Self>
     where
         Self: Sized;
@@ -183,7 +184,7 @@ impl<
         cfg: Config,
         hid_mgr: &'d Self::HidManagerT,
         #[cfg(feature = "midi")] midi_mgr: &'d Self::MidiManagerT,
-        lua: &'d mlua::Lua,
+        #[cfg(feature = "lua")] lua: &'d mlua::Lua,
     ) -> Result<Self> {
         Ok(Self {
             // ---
@@ -205,6 +206,7 @@ impl<
             rel_ctls: Default::default(),
             // ---
             idle_tick_mappings: Default::default(),
+            #[cfg(feature = "lua")]
             lua,
             mapped_events_dt_stats: MappingEngineStats::default()
                 .with_mean_alpha(0.7)
@@ -757,6 +759,7 @@ impl<
                 mapping_engine: self,
                 current_mapping_src: Some(&mapping.src),
                 current_mapping_dst: Some(&mapping.dst),
+                #[cfg(feature = "lua")]
                 lua: Some(self.lua),
                 sched_ctx,
             },
@@ -841,6 +844,7 @@ pub(crate) struct MappingTfmExecCtx<
     current_mapping_src: Option<&'m ValueSrcs>,
     current_mapping_dst: Option<&'m ValueDsts>,
     sched_ctx: MapppingSchedContext,
+    #[cfg(feature = "lua")]
     lua: Option<&'m mlua::Lua>,
 }
 
@@ -888,6 +892,7 @@ impl<
         self.mapping_engine.get_mode().get_idle_tick_rate()
     }
 
+    #[cfg(feature = "lua")]
     fn get_lua(&self) -> Option<&mlua::Lua> {
         self.lua
     }

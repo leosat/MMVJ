@@ -19,7 +19,10 @@ use crate::schemas_value_port::{
     PortRemapPolicy, RemapPolicyUserDefined, SanPolicyNone, SanPolicyUseFromPortInner, TfmPolicyDisabled, ValuePort,
     ValuePortIface,
 };
-use crate::tfm_exec::{RaiseFallExeState, ScriptExeState, SteeringExeState, TfmExeState};
+use crate::tfm_exec::{RaiseFallExeState, SteeringExeState, TfmExeState};
+
+#[cfg(feature = "scripting")]
+use crate::tfm_exec::ScriptExeState;
 use crate::{
     num_interval::NumInterval,
     num_interval::{SYMM_UNIT_INTERVAL, UNIT_INTERVAL},
@@ -546,6 +549,7 @@ pub(crate) enum TfmStepCfg {
     #[traverse(skip)]
     SignedPower(#[garde(skip)] SignedPowerCfg),
     OneEuro(#[garde(dive)] Box<OneEuroFilterCfg>),
+    #[cfg(feature = "scripting")]
     Script(#[garde(skip)] ScriptCfg),
     // #[strum(disabled)]
     // #[traverse(skip)]
@@ -577,6 +581,7 @@ impl WithSelfSanitize for TfmStepCfg {
             TfmStepCfg::Exp(s) => s.sanitize_inplace(input),
             TfmStepCfg::SignedPower(s) => s.sanitize_inplace(input),
             TfmStepCfg::OneEuro(s) => s.sanitize_inplace(input),
+            #[cfg(feature = "scripting")]
             TfmStepCfg::Script(s) => s.sanitize_inplace(input),
         }
     }
@@ -600,6 +605,7 @@ impl WithCommonState for TfmStepCfg {
             TfmStepCfg::Exp(s) => s.common_state_ref(),
             TfmStepCfg::SignedPower(s) => s.common_state_ref(),
             TfmStepCfg::OneEuro(s) => s.common_state_ref(),
+            #[cfg(feature = "scripting")]
             TfmStepCfg::Script(s) => s.common_state_ref(),
         }
     }
@@ -623,6 +629,7 @@ impl WithCommonStateMut for TfmStepCfg {
             TfmStepCfg::Exp(s) => s.common_state_mut(),
             TfmStepCfg::SignedPower(s) => s.common_state_mut(),
             TfmStepCfg::OneEuro(s) => s.common_state_mut(),
+            #[cfg(feature = "scripting")]
             TfmStepCfg::Script(s) => s.common_state_mut(),
         }
     }
@@ -649,6 +656,7 @@ impl TfmCfgDuplicateWithNewState for TfmStepCfg {
             TfmStepCfg::Exp(s) => TfmStepCfg::Exp(s.duplicate_with_new_state()),
             TfmStepCfg::SignedPower(s) => TfmStepCfg::SignedPower(s.duplicate_with_new_state()),
             TfmStepCfg::OneEuro(s) => TfmStepCfg::OneEuro(s.duplicate_with_new_state()),
+            #[cfg(feature = "scripting")]
             TfmStepCfg::Script(s) => TfmStepCfg::Script(s.duplicate_with_new_state()),
         }
     }
@@ -668,6 +676,7 @@ impl TfmStepCfg {
             TfmStepCfg::Mul(s) |
             TfmStepCfg::Div(s) => s.doc_str(),
             TfmStepCfg::Steering(s) => s.doc_str(),
+            #[cfg(feature = "scripting")]
             TfmStepCfg::Script(s) => s.doc_str(),
             TfmStepCfg::OneEuro(s) => s.doc_str(),
             TfmStepCfg::Ema(s) => s.doc_str(),
@@ -707,6 +716,7 @@ impl TfmStepCfg {
             TfmStepCfg::Exp(s) => s.enabled,
             TfmStepCfg::SignedPower(s) => s.enabled,
             TfmStepCfg::OneEuro(s) => s.enabled,
+            #[cfg(feature = "scripting")]
             TfmStepCfg::Script(s) => s.enabled,
         })
     }
@@ -728,6 +738,7 @@ impl TfmStepCfg {
             TfmStepCfg::Exp(s) => &mut s.enabled,
             TfmStepCfg::SignedPower(s) => &mut s.enabled,
             TfmStepCfg::OneEuro(s) => &mut s.enabled,
+            #[cfg(feature = "scripting")]
             TfmStepCfg::Script(s) => &mut s.enabled,
             // TfmStepCfg::_HighPass(s) => &mut s.enabled,
             // TfmStepCfg::_ForceFeedback(s) => &mut s.enabled,
@@ -753,6 +764,7 @@ impl _WithDescriptionMut for TfmStepCfg {
             TfmStepCfg::Exp(s) => Some(&mut s.desc),
             TfmStepCfg::SignedPower(s) => Some(&mut s.desc),
             TfmStepCfg::OneEuro(s) => Some(&mut s.desc),
+            #[cfg(feature = "scripting")]
             TfmStepCfg::Script(s) => Some(&mut s.desc),
             // TfmStepCfg::_HighPass(highpass) => Some(&mut highpass.desc),
             // TfmStepCfg::_ForceFeedback(force_feedback) => Some(&mut force_feedback.desc),
@@ -2140,13 +2152,21 @@ impl<T: WithCommonStateMut> WithCommonStateMut for Box<T> {
 }
 
 macro_rules! impl_with_common_state {
-    ($($t:ty),* $(,)?) => {
+    (
         $(
+            $( #[ cfg( $($cfg:tt)* ) ] )?
+            $t:path
+        ),*
+        $(,)?
+    ) => {
+        $(
+            $( #[ cfg( $($cfg)* ) ] )?
             impl WithCommonState for $t {
                 fn common_state_ref(&self) -> &TfmStepCommonState {
                     &self.common_state
                 }
             }
+            $( #[ cfg( $($cfg)* ) ] )?
             impl WithCommonStateMut for $t {
                 fn common_state_mut(&mut self) -> &mut TfmStepCommonState {
                     &mut self.common_state
@@ -2157,6 +2177,8 @@ macro_rules! impl_with_common_state {
 }
 
 impl_with_common_state!(
+    #[cfg(feature = "scripting")]
+    ScriptCfg,
     ArithCfg,
     VelocityToDisplacementCfg,
     ForceFeedbackCfg,
@@ -2174,7 +2196,6 @@ impl_with_common_state!(
     IntegrateCfg,
     SteeringCfg,
     RaiseFallCfg,
-    ScriptCfg,
 );
 
 /// Steering wheel emulation transform.
@@ -2573,12 +2594,21 @@ impl TfmStepIdleBehavior for OneEuroFilterCfg {
 /// Scripting language selector for the [`ScriptCfg`] transform step.
 ///
 /// Currently only [`Luau`](ScriptLanguage::Luau) is supported.
-#[derive(JsonSchema, Display, Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
+#[derive(JsonSchema, Display, Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[cfg(feature = "scripting")]
 pub(crate) enum ScriptLanguage {
     /// Luau — a fast, sandboxed dialect of Lua 5.1 with gradual typing,
     /// executed via the `mlua` crate.
-    #[default]
+    #[cfg(feature = "lua")]
     Luau,
+}
+
+#[cfg(feature = "scripting")]
+#[cfg(feature = "lua")]
+impl Default for ScriptLanguage {
+    fn default() -> Self {
+        Self::Luau
+    }
 }
 
 /// User-script transform step.
@@ -2606,6 +2636,7 @@ pub(crate) enum ScriptLanguage {
 #[derive(Clone, Serialize, Deserialize, JsonSchema, Debug, TraversableMut, Traversable, WithSelfSanitize)]
 #[with_doc_str]
 #[sanitize_inplace_with_epilogue]
+#[cfg(feature = "scripting")]
 pub(crate) struct ScriptCfg {
     #[serde(skip)]
     #[traverse(skip)]
@@ -2733,6 +2764,7 @@ pub(crate) struct ScriptCfg {
     pub(crate) aux_transformations: BTreeMap<String, TfmSeqCfg>,
 }
 
+#[cfg(feature = "scripting")]
 impl ScriptCfg {
     fn sanitize_inplace_epilogue(&mut self) {
         let out_interval = self
@@ -2746,6 +2778,7 @@ impl ScriptCfg {
     }
 }
 
+#[cfg(feature = "scripting")]
 impl TfmCfgDuplicateWithNewState for ScriptCfg {
     fn duplicate_with_new_state(&self) -> Self {
         let mut s = self.clone();
@@ -2755,6 +2788,7 @@ impl TfmCfgDuplicateWithNewState for ScriptCfg {
     }
 }
 
+#[cfg(feature = "scripting")]
 impl PartialEq for ScriptCfg {
     fn eq(&self, other: &Self) -> bool {
         self.desc == other.desc
@@ -2769,6 +2803,7 @@ impl PartialEq for ScriptCfg {
     }
 }
 
+#[cfg(feature = "scripting")]
 impl Default for ScriptCfg {
     fn default() -> Self {
         let mut tmp = Self {

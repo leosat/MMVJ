@@ -16,12 +16,14 @@ use crate::schemas_common::WithRuntimeId;
 
 use crate::schemas_transform::ArithCfg;
 use crate::schemas_transform::ArithOpType;
+#[cfg(feature = "scripting")]
+use crate::schemas_transform::ScriptCfg;
 use crate::schemas_transform::TfmCfgDuplicateWithNewState;
 use crate::schemas_transform::VelocityToDisplacementCfg;
 use crate::schemas_transform::WithCommonState;
 use crate::schemas_transform::{
     ClampCfg, EmaCfg, ForceFeedbackComponent, IntegrateCfg, InvertCfg, LinearCfg, NormExpCfg, OneEuroFilterCfg,
-    RaiseFallCfg, SCurveCfg, ScriptCfg, SignedPowerCfg, SmoothstepCfg, SteeringCfg, TfmSeqCfg, TfmStepCfg,
+    RaiseFallCfg, SCurveCfg, SignedPowerCfg, SmoothstepCfg, SteeringCfg, TfmSeqCfg, TfmStepCfg,
 };
 
 use crate::schemas_value::DeviceControlMatcherRef;
@@ -37,7 +39,9 @@ use crate::tracing::GraphDisplayStyle;
 #[cfg(feature = "gui")]
 use eframe::egui::Color32;
 use log::debug;
+#[cfg(feature = "lua")]
 use mlua::ErrorContext;
+#[cfg(feature = "lua")]
 use mlua::{FromLua, Lua};
 use std::ops::Add;
 use std::time::Instant;
@@ -105,6 +109,7 @@ pub(crate) trait TfmExecCtx {
     #[deprecated = "Raw usage of this API is deprecated, replace with ValuePort usage when API is complete."]
     fn device_control_matcher_ref_write(&self, dcm_ref: &DeviceControlMatcherRef, value: BaseNumT) {}
 
+    #[cfg(feature = "lua")]
     fn get_lua(&self) -> Option<&mlua::Lua> {
         None
     }
@@ -207,6 +212,7 @@ impl WithTfmExec for TfmStepCfg {
                 TfmStepCfg::Exp(s) => s.exec(value, ctx),
                 TfmStepCfg::SignedPower(s) => s.exec(value, ctx),
                 TfmStepCfg::OneEuro(s) => s.exec(value, ctx),
+                #[cfg(feature = "scripting")]
                 TfmStepCfg::Script(s) => s.exec(value, ctx),
             };
         }
@@ -600,12 +606,14 @@ impl WithTfmExec for LinearCfg {
 }
 
 #[derive(Clone, Debug)]
+#[cfg(feature = "scripting")]
 pub(crate) struct ScriptExeState {
     #[cfg(feature = "gui")]
     pub(super) edit_epoch: usize,
     pub(crate) compiled: mlua::Function,
 }
 
+#[cfg(feature = "scripting")]
 impl ScriptExeState {
     fn new(lua: &mlua::Lua) -> Self {
         let compiled = lua
@@ -621,6 +629,7 @@ impl ScriptExeState {
     }
 }
 
+#[cfg(feature = "scripting")]
 pub(crate) enum ScriptExeStateResetMode {
     #[cfg(feature = "gui")]
     Recompile {
@@ -629,6 +638,7 @@ pub(crate) enum ScriptExeStateResetMode {
     Init,
 }
 
+#[cfg(feature = "scripting")]
 impl TfmExeState for ScriptCfg {
     type StateMutT<'a>
         = std::sync::MutexGuard<'a, Option<ScriptExeState>>
@@ -714,6 +724,7 @@ impl TfmExeState for ScriptCfg {
     }
 }
 
+#[cfg(feature = "scripting")]
 impl WithTfmExec for ScriptCfg {
     type InputT = BaseNumT;
     type OutputT = Self::InputT;
