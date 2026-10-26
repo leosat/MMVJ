@@ -25,7 +25,6 @@ pub const MORE_DEBUG: bool = false;
 
 pub const APP_VERSION_STR: &str = env!("CARGO_PKG_VERSION");
 pub const CONFIG_VERSION_STR: &str = APP_VERSION_STR;
-pub const APP_DEFAULT_CONFIG_FILE: &str = "conf/default.yaml";
 pub const APP_DEFAULT_PREDEF_CONFIG_FILE_CFG_RELATIVE: &str = "predefined_controls_dump.yaml";
 pub const APP_CONFIG_SCHEMA_FILE_CFG_RELATIVE: &str = "scheme.json";
 pub const APP_AUTHORS: &str = env!("CARGO_PKG_AUTHORS"); // .. and small furry creatures from Alpha Centauri.
@@ -726,6 +725,7 @@ pub(crate) static DEMO_CFG: LazyLock<Arc<std::sync::Mutex<Vec<(String, Config)>>
             )))
             .unwrap(),
         ),
+        #[cfg(feature = "midi")]
         (
             "Mouse steering or MIDI-controlled joystick".into(),
             serde_saphyr::from_str(include_str!(concat!(
