@@ -46,7 +46,7 @@ chrono = { version = "0.4", features = ["serde"] }
 circular-buffer = "2.0.1"
 clap = { version = "4.6.1", features = ["derive"] }
 crossbeam-utils = "0.8.23"
-deserialize_untagged_verbose_error = "0.1.7"
+deserialize_untagged_verbose_error = "0.1.8"
 #enum_delegate = "0.2.0"
 enumflags2 = { version = "0.7.12", features = ["serde", "std"] }
 env_logger = "0.11.10"
