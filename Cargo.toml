@@ -26,7 +26,7 @@ name = "mmvj"
 path = "src/bin/main.rs"
 
 [dependencies]
-winit = { version = "0.30.12", optional = true }
+winit = { version = "0.30.13", optional = true }
 with_doc_str = { path = "src/with_doc_str" }
 mmvj_derive = { path = "src/mmvj_derive" }
 eframe = { version = "0.36.2", optional = true, features = [
