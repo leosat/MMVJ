@@ -21,7 +21,6 @@ mod default_config_tests {
     use log::LevelFilter;
     use std::collections::HashMap;
     use std::env;
-    use std::path::PathBuf;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
