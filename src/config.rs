@@ -692,58 +692,16 @@ pub(crate) static PREDEF_CONTROLS: LazyLock<ControlsPredefinedCfg> = LazyLock::n
 
 #[allow(clippy::type_complexity)]
 pub(crate) static DEMO_CFG: LazyLock<Arc<std::sync::Mutex<Vec<(String, Config)>>>> = LazyLock::new(|| {
-    let demo_cfg: Vec<(String, Config)> = vec![
-        (
-            "Keyboard and mouse steering, no-script".into(),
-            serde_saphyr::from_str(include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/conf/example-kbd-or-ms-steering-noscript.yaml"
-            )))
-            .unwrap(),
-        ),
-        (
-            "Mouse steering only".into(),
-            serde_saphyr::from_str(include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/conf/example-mouse-steering-only.yaml"
-            )))
-            .unwrap(),
-        ),
-        (
-            "G29-like joystick, mouse steering only".into(),
-            serde_saphyr::from_str(include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/conf/example-g29-like-joystick-mouse-steering.yaml"
-            )))
-            .unwrap(),
-        ),
-        #[cfg(feature = "lua")]
-        (
-            "Keyboard and mouse steering, Lua script".into(),
-            serde_saphyr::from_str(include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/conf/example-kbd-or-ms-steering-lua.yaml"
-            )))
-            .unwrap(),
-        ),
-        #[cfg(feature = "midi")]
-        (
-            "Mouse steering or MIDI-controlled joystick".into(),
-            serde_saphyr::from_str(include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/conf/example-midi-or-mouse-steering.yaml"
-            )))
-            .unwrap(),
-        ),
-        #[cfg(feature = "lua")]
-        (
-            "Abstract Lua scripting demo".into(),
-            serde_saphyr::from_str(include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/conf/example-scripting-lua.yaml"
-            )))
-            .unwrap(),
-        ),
-    ];
+    let mut demo_cfg: Vec<(String, Config)> = Vec::new();
+    static CFG_DIR: include_dir::Dir = include_dir::include_dir!("$CARGO_MANIFEST_DIR/conf");
+    for file in CFG_DIR.files() {
+        if let Some(name) = file.path().file_name().and_then(|n| n.to_str())
+            && name.starts_with("demo-")
+            && let Some(content) = file.contents_utf8()
+            && let Result::<Config, _>::Ok(cfg) = serde_saphyr::from_str(content)
+        {
+            demo_cfg.push((cfg.title.clone(), cfg));
+        }
+    }
     Arc::new(demo_cfg.into())
 });

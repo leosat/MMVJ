@@ -150,6 +150,7 @@ impl From<ConfigVariants> for Config {
                 variables: c.variables,
                 mappings: c.mappings,
                 ui: Default::default(),
+                title: c.title,
             },
             ConfigVariants::ConfigNewFormat(c) => Self {
                 cfg_file: c.cfg_file,
@@ -159,6 +160,7 @@ impl From<ConfigVariants> for Config {
                 variables: c.variables,
                 mappings: c.mappings,
                 ui: c.ui,
+                title: c.title,
             },
         }
     }
@@ -180,6 +182,12 @@ macro_rules! config_struct_tpl {
         #[serde(skip)]
         #[garde(skip)]
         pub(crate) cfg_file: Option<PathBuf>,
+        #[garde(skip)]
+        #[traverse(skip)]
+        #[serde(skip_serializing_if = "String::is_empty")]
+        #[serde(default)]
+        #[schemars(default)]
+        pub(crate) title: String,
         #[garde(skip)]
         #[serde(
             default,

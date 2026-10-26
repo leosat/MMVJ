@@ -427,7 +427,7 @@ cargo build --release -j4
 # Display help
 ./target/release/mmvj --help
 
-# Run mapping engine with default configuration (conf/default.yaml).
+# Run mapping engine with default configuration.
 ./target/release/mmvj
 ```
 
@@ -487,10 +487,10 @@ The recomended way to create configs is by using Gui mode. Run application with 
 
 NB: these configurations are pre-bundled within the application and can be loaded using Gui/saved to files from there. Alternatively they can be downloaded and app run with them using ``-c <CONFIG FILE>`` command line switch.
 
-- [Minimal mouse steering-oriented config example + some keyboard mappings to joystick buttons, default config](conf/default.yaml)
-- [Mouse OR Keyboard steering-oriented config example (uses Luau scripting for smart signal routing) with autoswitching between modes and hold factor for mouse being linked to Y movement and for keyboard - to DOWN and UP buttons](conf/example-kbd-or-ms-steering-lua.yaml) // Both Mouse and Keyboard modes add force feedback signal to input and use additional autocentering. Use variables to tweak the behavior.
-- [Mouse OR Keyboard steering-oriented config example (no scripting) with autoswitching between modes and hold factor for mouse being linked to Y movement and for keyboard - to DOWN and UP buttons](conf/example-kbd-or-ms-steering-noscript.yaml) // Both Mouse and Keyboard modes add force feedback signal to input and use additional autocentering.  Use variables to tweak the behavior.
-- [MIDI pedals or PitchWheel-based steering + Mouse steering with force feedback and autocetering](conf/example-midi-or-mouse-steering.yaml)
+- [Minimal mouse steering-oriented config example + some keyboard mappings to joystick buttons](conf/demo-2-mouse-steering-only.yaml)
+- [Mouse OR Keyboard steering-oriented config example (uses Luau scripting for smart signal routing) with autoswitching between modes and hold factor for mouse being linked to Y movement and for keyboard - to DOWN and UP buttons](conf/demo-3-kbd-or-ms-steering-lua.yaml) // Both Mouse and Keyboard modes add force feedback signal to input and use additional autocentering. Use variables to tweak the behavior.
+- [Mouse OR Keyboard steering-oriented config example (no scripting) with autoswitching between modes and hold factor for mouse being linked to Y movement and for keyboard - to DOWN and UP buttons](conf/demo-1-kbd-or-ms-steering-noscript.yaml) // Both Mouse and Keyboard modes add force feedback signal to input and use additional autocentering.  Use variables to tweak the behavior.
+- [MIDI pedals or PitchWheel-based steering + Mouse steering with force feedback and autocetering](conf/demo-4-midi-or-mouse-steering.yaml)
 - [Predefined control matchers config dump](conf/predefined_controls_dump.yaml) for definitions that you can reference in your config.
 
 ---

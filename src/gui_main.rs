@@ -325,21 +325,28 @@ impl eframe::App for GuiMain {
 
                     ui.menu_button("File", |ui| {
                         ui.separator();
-                        ui.menu_button("Load demo config", |ui| {
-                            for (demo_name, _) in crate::config::DEMO_CFG.lock().unwrap().iter() {
-                                if ui
-                                    .button(format!(
-                                        "{} {} Load {} ",
-                                        egui_phosphor::regular::TREE_PALM,
-                                        egui_phosphor::regular::DOTS_SIX_VERTICAL,
-                                        demo_name
-                                    ))
-                                    .clicked()
-                                {
-                                    self.submit_post_draw_cmd(GuiCmd::LoadCfgDemo(demo_name.into()));
+                        ui.menu_button(
+                            format!(
+                                "{} {} Load demo config",
+                                egui_phosphor::regular::TREE_PALM,
+                                egui_phosphor::regular::DOTS_SIX_VERTICAL,
+                            ),
+                            |ui| {
+                                for (demo_name, _) in crate::config::DEMO_CFG.lock().unwrap().iter() {
+                                    if ui
+                                        .button(format!(
+                                            "{} {} {}",
+                                            egui_phosphor::regular::TREE_PALM,
+                                            egui_phosphor::regular::DOTS_SIX_VERTICAL,
+                                            demo_name
+                                        ))
+                                        .clicked()
+                                    {
+                                        self.submit_post_draw_cmd(GuiCmd::LoadCfgDemo(demo_name.into()));
+                                    }
                                 }
-                            }
-                        });
+                            },
+                        );
 
                         ui.separator();
                         if ui
@@ -580,6 +587,19 @@ impl eframe::App for GuiMain {
                                     .auto_shrink([false, false])
                                     .scroll_source(ScrollSource::ALL)
                                     .show(ui, |ui| {
+                                        if ui
+                                            .add(
+                                                egui::TextEdit::singleline(&mut self.cfg.title)
+                                                    .font(egui::TextStyle::Monospace)
+                                                    .interactive(true)
+                                                    .desired_width(f32::INFINITY)
+                                                    .hint_text("Set the config title here"),
+                                            )
+                                            .changed()
+                                        {
+                                            self.submit_post_draw_cmd(GuiCmd::ConfigChangeSimple);
+                                        }
+                                        ui.separator();
                                         if ui
                                             .add(
                                                 egui::TextEdit::multiline(&mut self.cfg.description.0)

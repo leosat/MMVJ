@@ -40,10 +40,10 @@ jobs:
       - name: Execute Pre-Commit Hooks
         uses: pre-commit/action@v3.0.1
 
-      - name: Check example configs
+      - name: Check demo configs
         run: |
           cargo build
-          for cfg in conf/example*.yaml; do
+          for cfg in conf/demo*.yaml; do
             cargo run -- -c "$cfg" validate-config false
           done
 
