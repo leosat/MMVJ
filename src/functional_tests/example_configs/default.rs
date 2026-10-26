@@ -384,11 +384,8 @@ mod default_config_tests {
             tokio::time::sleep(Duration::from_millis(duration)).await;
         };
 
-        let cfg_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("conf/example-default.yaml");
         let mut cfg_mgr = ConfigManager::new();
-        cfg_mgr
-            .load_from_file(cfg_path)
-            .expect("Failed to load config from file.");
+        cfg_mgr.load_demo().expect("Failed to log default demo config.");
 
         let cfg_base = cfg_mgr.cfg_ref().clone();
 
