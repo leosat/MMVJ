@@ -1062,11 +1062,7 @@ impl WithTfmExec for SteeringCfg {
             let ff_force_symm_norm = if let Some(ff_config) = &self.force_feedback {
                 if *ff_config.enabled {
                     let raw_force = if let Some(custom_src) = &ff_config.custom_source {
-                        SYMM_UNIT_INTERVAL.map_from(
-                            custom_src.port_get_numeric_value(None::<&()>),
-                            &custom_src.port_get_interval(),
-                            OutOfRangePolicy::WarnIfDebugAndClamp,
-                        )
+                        custom_src.port_get_numeric_value(Some(ctx))
                     } else {
                         ctx.get_main_dst()
                             .and_then(|dst| {
