@@ -355,9 +355,8 @@ map:
               enabled: false
               lang: Luau
               script: |-
-                -- Just checking recursive script execution
-                print(inputs[0])
-                outputs[0] = inputs[0]
+                -- Example: debug printing in-pipeline value.
+                print(read(0))
           - ema:
               on_relative_input_feed_on_idle: true
               tau: 0.06
