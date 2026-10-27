@@ -27,6 +27,7 @@ use crate::schemas_value_port::ValuePortIface;
 use crate::tracing::GraphDisplayStyle;
 use egui::RichText;
 use egui::{Button, CollapsingHeader, Sense};
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::Ordering::Relaxed;
@@ -302,21 +303,37 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
                 .order(egui::Order::TOP)
                 .show(ui.ctx(), |ui| {
                     ui.separator();
-                    static STEPS_TEMPLATES_CACHE: std::sync::LazyLock<std::sync::Mutex<Vec<TfmStepCfg>>> =
-                        std::sync::LazyLock::new(|| TfmStepCfg::iter().collect::<Vec<_>>().into());
-                    let mut step_to_add = None;
-                    for step in &*STEPS_TEMPLATES_CACHE.lock().unwrap() {
-                        let btn_response = ui.add(Button::new(step.to_string()).sense(Sense::click_and_drag()));
-                        if btn_response.clicked() {
-                            step_to_add = Some(step.duplicate_with_new_state());
-                        } else if btn_response.drag_started() {
-                            btn_response.dnd_set_drag_payload(GuiDndJob::NewTfmStep(std::sync::Arc::new(
-                                std::sync::Mutex::new(GuiDndJobNewTfmStep {
-                                    step: step.duplicate_with_new_state(),
-                                }),
-                            )));
-                            // TODO?: maybe visual feedback of draggin the button...
+                    static STEPS_TEMPLATES_CLASSIFIED_CACHE: std::sync::LazyLock<
+                        /* TODO?: excessive mutex here makes it Sync to be used with static.
+                        refactor: can use std::cell::LazyCell and no excessive synchronization at all,
+                        but need to put it in app struct, without going for static */
+                        std::sync::Mutex<BTreeMap<TfmClassification, Vec<TfmStepCfg>>>,
+                    > = std::sync::LazyLock::new(|| {
+                        let mut db: BTreeMap<TfmClassification, Vec<TfmStepCfg>> = Default::default();
+                        for step in TfmStepCfg::iter() {
+                            for class in step.get_operation_classification() {
+                                db.entry(*class).or_default().push(step.clone());
+                            }
                         }
+                        db.into()
+                    });
+                    let mut step_to_add = None;
+                    for (class, steps) in &*STEPS_TEMPLATES_CLASSIFIED_CACHE.lock().unwrap() {
+                        ui.collapsing(class.to_string(), |ui| {
+                            for step in steps.iter() {
+                                let btn_response = ui.add(Button::new(step.to_string()).sense(Sense::click_and_drag()));
+                                if btn_response.clicked() {
+                                    step_to_add = Some(step.duplicate_with_new_state());
+                                } else if btn_response.drag_started() {
+                                    btn_response.dnd_set_drag_payload(GuiDndJob::NewTfmStep(std::sync::Arc::new(
+                                        std::sync::Mutex::new(GuiDndJobNewTfmStep {
+                                            step: step.duplicate_with_new_state(),
+                                        }),
+                                    )));
+                                    // TODO?: maybe visual feedback of draggin the button...
+                                }
+                            }
+                        });
                     }
                     ui.separator();
                     step_to_add

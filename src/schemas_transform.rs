@@ -664,7 +664,52 @@ impl TfmCfgDuplicateWithNewState for TfmStepCfg {
 
 pub(crate) const DEFAULT_TRANSFORM_DESCRIPTION: &str = "No transform description available... yet.";
 
+//#[derive(JsonSchema, Display, Debug, Serialize, Deserialize, EnumString, EnumIter, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Display, Debug, EnumString, EnumIter, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[strum(serialize_all = "PascalCase")]
+//#[serde(rename_all = "PascalCase")]
+pub(crate) enum TfmClassification {
+    Arithmetic, // TODO: n-th root and general exponentiation.
+    Logic,      // TODO: add boolean ops for predication purposes.
+    Physics,    // TODO: add inertia, damper, friction, spring, exp decay.
+    Filters,    // TODO: add more filters (e.g. highpass).
+    Curves,     // TODO: add more curves (e.g. user-defined ones).
+    #[cfg(feature = "scripting")]
+    Scripting,
+    Util, // TODO: add steps grouping (with inter-pipelines reusability by auto-cloning).
+          // TODO: add audio-like compressor.
+}
+
 impl TfmStepCfg {
+    pub(crate) const fn get_operation_classification(&self) -> &'static [TfmClassification] {
+        match self {
+            TfmStepCfg::Sum(..) => &[TfmClassification::Arithmetic],
+            TfmStepCfg::Sub(..) => &[TfmClassification::Arithmetic],
+            TfmStepCfg::Mul(..) => &[TfmClassification::Arithmetic],
+            TfmStepCfg::Div(..) => &[TfmClassification::Arithmetic],
+            TfmStepCfg::VelocityToDisplacement(..) => &[TfmClassification::Physics],
+            TfmStepCfg::Nop(..) => &[TfmClassification::Util],
+            TfmStepCfg::Invert(..) => &[TfmClassification::Logic],
+            TfmStepCfg::Integrate(..) => &[TfmClassification::Arithmetic, TfmClassification::Util],
+            TfmStepCfg::Steering(..) => &[TfmClassification::Physics, TfmClassification::Util],
+            TfmStepCfg::Clamp(..) => &[TfmClassification::Arithmetic, TfmClassification::Util],
+            TfmStepCfg::RaiseFall(..) => &[
+                TfmClassification::Physics,
+                TfmClassification::Curves,
+                TfmClassification::Filters,
+            ],
+            TfmStepCfg::Ema(..) => &[TfmClassification::Filters],
+            TfmStepCfg::Linear(..) => &[TfmClassification::Curves],
+            TfmStepCfg::Smoothstep(..) => &[TfmClassification::Curves],
+            TfmStepCfg::SCurve(..) => &[TfmClassification::Curves],
+            TfmStepCfg::Exp(..) => &[TfmClassification::Curves],
+            TfmStepCfg::SignedPower(..) => &[TfmClassification::Curves],
+            TfmStepCfg::OneEuro(..) => &[TfmClassification::Filters],
+            #[cfg(feature = "scripting")]
+            TfmStepCfg::Script(..) => &[TfmClassification::Scripting],
+        }
+    }
+
     pub(crate) fn _get_out_interval(&self) -> NumInterval<BaseNumT> {
         <Self as WithCommonState>::common_state_ref(self).get_out_interval()
     }

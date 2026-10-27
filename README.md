@@ -41,10 +41,13 @@ command line option or just double click on appimage when under your favourite d
 
 Regarding steering wheel simulation (in particular), **force feedback** checked to work with "Richard Burns Rally" (NGP), "Euro truck sim", "Race Room", "Rush rally 3" (all of them use constant force effect). Other effects such as Spring and Friction are also supported. If seeing trouble with your use case and wish to help, please run the program with **\--debug-ff** flag and [send me the the output](mailto:leonid.satanovsky@gmail.com).
 
+Please notice, that these effects refer to effects supported at the level of virtual joystick logic itself, in its force feedback player.
+Except for **constant** force effect (which comes from client application like a racing game from its physics engine (and is of most interest to our application)) can be simulated by our own mappings whenever required according to your preference (in the same way they can be overridden in a real steering wheel driver app).
+
 - Constant: **yes** (_contemporary games with advanced physics engines primarily use this_)
 - Friction: **yes**
 - Spring: **yes**
-- Damper: no ([waiting for relevant fix push to mainline](https://github.com/emberian/evdev/pull/168)), 
+- Damper: no ([waiting for relevant fix push to mainline](https://github.com/emberian/evdev/pull/168)),
 - Inertia: no ([waiting for relevant fix push to mainline](https://github.com/emberian/evdev/pull/168))
 - Ramp: **yes**
 - Rumble: no (no need for our application, but is planned to be added)
