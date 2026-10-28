@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ "main" ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -52,3 +56,9 @@ jobs:
           cargo test --no-default-features
           cargo test --no-default-features --features=midi
           cargo test --no-default-features --features=gui
+
+  # trigger-appimage:
+  #   needs: test
+  #   if: success()
+  #   uses: ./.github/workflows/build-appimage.yml
+  #   secrets: inherit

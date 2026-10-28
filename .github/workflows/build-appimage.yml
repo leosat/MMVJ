@@ -1,12 +1,15 @@
 name: Build and Auto-Release AppImage
 
 on:
-  # push:
-  #   branches: [ "main" ]
-  workflow_run:
+   #workflow_call:
+   workflow_run:
     workflows: ["Common testing"]
     types: [completed]
     branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -20,6 +23,7 @@ env:
 jobs:
   check-release:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     timeout-minutes: 13
     outputs:
       should_build: ${{ steps.check.outputs.should_build }}
