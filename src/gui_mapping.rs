@@ -56,86 +56,87 @@ impl<'s> DrawEgui<'s> for Mapping {
         let gui_in_common = gui_in.1;
         let gui_style = gui_in.1.style;
 
-        let gui_out = Frame::default()
+        let mut gui_out = None;
+        let gui_out_mut = &mut gui_out;
+        Frame::default()
             .inner_margin(0)
             .shadow(Shadow::default())
             .corner_radius(CornerRadiusF32::default().at_least(5.0))
             .show(ui, |ui| {
-                let mut gui_out = ui
-                    .horizontal(|ui| {
-                        if ui
-                            .add(
-                                TextEdit::singleline(&mut self.name)
-                                    .desired_width(0.0)
-                                    .clip_text(false)
-                                    .hint_text("Enter mapping name..."),
-                            )
-                            .changed()
-                        {
-                            return bool_to_simple_change_gui_cmd(true);
-                        };
+                ui.horizontal(|ui| {
+                    if ui
+                        .add(
+                            TextEdit::singleline(&mut self.name)
+                                .desired_width(0.0)
+                                .clip_text(false)
+                                .hint_text("Enter mapping name..."),
+                        )
+                        .changed()
+                    {
+                        *gui_out_mut = bool_to_simple_change_gui_cmd(true);
+                    };
 
-                        ui.separator();
+                    ui.separator();
 
+                    ui.collapsing("Idle tick", |ui| {
                         ui.horizontal(|ui| {
-                            ui.collapsing("Idle tick info...", |ui| {
-                                ui.separator();
-                                if self.requires_idle_tick {
-                                    ui.label("Required.");
-                                } else {
-                                    ui.label("Not required.");
-                                }
+                            self.run_on_idle
+                                .egui("Run on idle", ui)
+                                .inspect(|out| *gui_out_mut = Some(out.clone()));
+                            ui.separator();
+                            if *self.run_on_idle {
+                                let shadowing_hint = "Running on idle tick can be automatically shadowed (temporarily disabled) \
+                                    if another mapping having same main destination and also requiring running on idle is the last one \
+                                    having active input. This allows multiple such mappings being configured for the same destination \
+                                    and be used alternatively in sequence. \
+                                    NB: this behavior only works for a device control matcher detination referenced in main mapping destination port."
+                                    /* TODO: shadowing. When fully supported this will work for any destination mentioned in a mapping.*/;
+                                ui.label("Shadowing: ").on_hover_text(shadowing_hint);
                                 #[allow(clippy::single_match)]
                                 match &self.dst {
-                                    ValueDsts::Void(..) => {}
-                                    ValueDsts::Dynamic(d) => match d {
-                                        DynValueRefs::DeviceControlMatcher(d) => {
-                                            if d.control_matcher.get_idle_tick_enabled_flag().load(Relaxed) {
-                                                ui.label("On for dest control");
-                                            } else {
-                                                ui.label("Off for dest control");
-                                            }
-                                        }
-                                        _ => {}
-                                    },
+                                    ValueDsts::Dynamic(DynValueRefs::DeviceControlMatcher(d)) =>
+                                    if d.control_matcher.get_idle_tick_enabled_flag().load(Relaxed) {
+                                        ui.label("not shadowed").on_hover_text(shadowing_hint);
+                                    } else { ui.label("shadowed").on_hover_text(shadowing_hint); },
+                                    _ => { ui.label("unapplicable").on_hover_text(shadowing_hint); },
                                 }
-                            });
+                            }
                         });
+                    });
 
-                        None
-                    })
-                    .inner;
+                    // ui.horizontal(|ui| {
+                    // });
+                });
                 ui.separator();
                 // ----------------------------------
                 /*Last mapping in*/
-                {
-                    gui_out = gui_out.or(ui
-                        .horizontal(|ui| {
-                            // ui.label(
-                            //     egui::RichText::new("Main src").strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
-                            // );
-                            // ui.separator();
-                            let gui_out = self.src.egui(
-                                GuiInValue::Edit(GuiInValueEditParams {
-                                    allow_interval_edit: true,
-                                    slider_log_scale: false,
-                                    name: "Choose main mapping source",
-                                    choice_case: ValueUsageContext::MappingSrc.into(),
-                                    gui_common_ctx: &gui_in_common,
-                                }),
-                                ui,
-                            );
-                            ui.separator();
-                            ui.label(
-                                egui::RichText::new(format!("<= {:+08.2}", self.get_last_known_io().0))
-                                    .size(12.0)
-                                    .strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
-                            );
-                            ui.separator();
-                            gui_out
-                        })
-                        .inner);
-                }
+
+                ui.horizontal(|ui| {
+                    // ui.label(
+                    //     egui::RichText::new("Main src").strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
+                    // );
+                    // ui.separator();
+                    self.src
+                        .egui(
+                            GuiInValue::Edit(GuiInValueEditParams {
+                                allow_interval_edit: true,
+                                slider_log_scale: false,
+                                name: "Choose main mapping source",
+                                choice_case: ValueUsageContext::MappingSrc.into(),
+                                gui_common_ctx: &gui_in_common,
+                            }),
+                            ui,
+                        )
+                        .inspect(|out| *gui_out_mut = Some(out.clone()));
+                    ui.separator();
+                    ui.label(
+                        egui::RichText::new(format!("<= {:+08.2}", self.get_last_known_io().0))
+                            .size(12.0)
+                            .strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
+                    );
+                    ui.separator();
+                });
+
                 let all_dynamic_sources =
                     collect_dynamic_value_matchers(&self.transformation, |ctx| ctx.contains(DynValFilter::Src));
                 if !all_dynamic_sources.is_empty() {
@@ -152,37 +153,36 @@ impl<'s> DrawEgui<'s> for Mapping {
                         }
                     });
                 }
+
                 ui.separator();
                 //---------------------------------------------
                 /*Last mapping out*/
-                {
-                    gui_out = gui_out.or(ui
-                        .horizontal(|ui| {
-                            // ui.label(
-                            //     egui::RichText::new("Main dst").strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
-                            // );
-                            // ui.separator();
-                            let gui_out = self.dst.egui(
-                                GuiInValue::Edit(GuiInValueEditParams {
-                                    allow_interval_edit: true,
-                                    slider_log_scale: false,
-                                    name: "Choose main mapping destination",
-                                    choice_case: ValueUsageContext::MappingDst.into(),
-                                    gui_common_ctx: &gui_in_common,
-                                }),
-                                ui,
-                            );
-                            ui.separator();
-                            ui.label(
-                                egui::RichText::new(format!("=> {:+08.2}", self.get_last_known_io().1))
-                                    .size(12.0)
-                                    .strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
-                            );
-                            ui.separator();
-                            gui_out
-                        })
-                        .inner);
-                }
+                ui.horizontal(|ui| {
+                    // ui.label(
+                    //     egui::RichText::new("Main dst").strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
+                    // );
+                    // ui.separator();
+                    self.dst
+                        .egui(
+                            GuiInValue::Edit(GuiInValueEditParams {
+                                allow_interval_edit: true,
+                                slider_log_scale: false,
+                                name: "Choose main mapping destination",
+                                choice_case: ValueUsageContext::MappingDst.into(),
+                                gui_common_ctx: &gui_in_common,
+                            }),
+                            ui,
+                        )
+                        .inspect(|out| *gui_out_mut = Some(out.clone()));
+                    ui.separator();
+                    ui.label(
+                        egui::RichText::new(format!("=> {:+08.2}", self.get_last_known_io().1))
+                            .size(12.0)
+                            .strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
+                    );
+                    ui.separator();
+                });
+
                 //---------------------------------------------
                 let all_dynamic_destinations =
                     collect_dynamic_value_matchers(&self.transformation, |ctx| ctx.contains(DynValFilter::Dst));
@@ -202,17 +202,15 @@ impl<'s> DrawEgui<'s> for Mapping {
                 }
                 ui.separator();
 
-                gui_out = gui_out.or(ui
-                    .collapsing(
-                        gui_style.tfm_big_title_decorate(egui::RichText::new("Transformation")),
-                        |ui| self.transformation.egui(gui_in_common, ui),
-                    )
-                    .body_returned
-                    .unwrap_or_default());
-
-                gui_out
-            })
-            .inner;
+                ui.collapsing(
+                    gui_style.tfm_big_title_decorate(egui::RichText::new("Transformation")),
+                    |ui| {
+                        self.transformation
+                            .egui(gui_in_common, ui)
+                            .inspect(|out| *gui_out_mut = Some(out.clone()))
+                    },
+                );
+            });
 
         if gui_out.is_some() {
             self.sanitize_inplace(());

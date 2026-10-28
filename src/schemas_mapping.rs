@@ -316,9 +316,10 @@ pub(crate) struct Mapping {
     #[garde(dive)]
     #[serde(skip_serializing_if = "TfmSeqCfg::skip_serializing")]
     pub(crate) transformation: TfmSeqCfg,
-    #[serde(skip)]
     #[garde(skip)]
-    pub(crate) requires_idle_tick: bool,
+    #[traverse(skip)]
+    #[serde(default, skip_serializing_if = "AutoOrManual::is_auto")]
+    pub(crate) run_on_idle: AutoOrManual<bool>,
 }
 
 impl WithLastKnownIO for Mapping {
@@ -347,7 +348,7 @@ impl Default for Mapping {
             src: Default::default(),
             dst: Default::default(),
             transformation: Default::default(),
-            requires_idle_tick: Default::default(),
+            run_on_idle: Default::default(),
         };
         m.sanitize_inplace(());
         m
@@ -368,7 +369,9 @@ impl WithSelfSanitize for Mapping {
                 },
             )));
 
-        self.requires_idle_tick = self.requires_idle_tick();
+        if self.run_on_idle.is_auto() {
+            *self.run_on_idle = self.requires_idle_tick();
+        }
     }
 
     type SanInputT = ();

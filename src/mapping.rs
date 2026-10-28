@@ -378,7 +378,7 @@ impl<
             .mappings
             .iter()
             .enumerate()
-            .filter(|(_, mapping)| *mapping.enabled && mapping.requires_idle_tick)
+            .filter(|(_, mapping)| *mapping.enabled && *mapping.run_on_idle)
             .for_each(|(idx, _)| self.idle_tick_mappings.push(idx));
     }
 
@@ -555,8 +555,8 @@ impl<
     fn set_idle_tick_enabled_on_device_control_for_mapping(&self, mapping: &Mapping) {
         if let Some(flag) = mapping.dst.get_idle_tick_enabled_flag()
             && let Ok(prev) = flag.compare_exchange(
-                !mapping.requires_idle_tick,
-                mapping.requires_idle_tick,
+                !*mapping.run_on_idle,
+                *mapping.run_on_idle,
                 // Yes, both relaxed because active mapping will retrigger this, no need for stronger.
                 Relaxed,
                 Relaxed,
@@ -565,7 +565,7 @@ impl<
         {
             debug!(
                 "Idle-tick update for {}: {} -> {}",
-                mapping.dst, prev, mapping.requires_idle_tick
+                mapping.dst, prev, mapping.run_on_idle
             );
         }
     }
