@@ -116,6 +116,8 @@ pub(crate) trait DeviceManagerCommon {
     ) -> anyhow::Result<Self::OpenedDeviceInfoT>;
     // NB: https://github.com/leosat/MMVJ/issues/72
     async fn consume_any_opened_device_event(&self) -> Option<Self::DeviceEventT>;
+    fn drain_events_queue(&self);
+    fn events_queue_is_full(&self) -> bool;
     async fn device_monitor(
         &self,
         match_name_regex: &regex::Regex,

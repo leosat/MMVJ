@@ -1,5 +1,6 @@
 use crate::base_num::BaseAtomicT;
 use crate::base_num::BaseNumT;
+use crate::config::MAX_DEVICE_EVENT_QUEUE_DEPTH;
 use crate::debug::DebugLevel;
 use crate::device_and_device_manager::AvailableDeviceInfoIface;
 use crate::device_and_device_manager::CommonDeviceCfgIface;
@@ -49,7 +50,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 use strum::IntoEnumIterator;
-use tokio::sync::mpsc::unbounded_channel;
+use tokio::sync::mpsc::channel;
 use tokio_util::future::FutureExt;
 use tokio_util::sync::CancellationToken;
 
@@ -57,7 +58,7 @@ pub(crate) type HidDeviceEvent = DeviceEvent<HidEvent>;
 
 #[derive(Debug)]
 pub(crate) enum DeviceThreadCmd {
-    SetExternalNotification(tokio::sync::mpsc::UnboundedSender<HidDeviceEvent>),
+    SetExternalNotification(tokio::sync::mpsc::Sender<HidDeviceEvent>),
     SetControlValue(MappedCtls, BaseNumT),
 }
 
@@ -159,8 +160,8 @@ impl OwnedVirtualHIDDeviceThreadIO {
 pub(crate) type DeviceControlStates = [CachePadded<BaseAtomicT>; MappedCtls::Unhandled as usize];
 // Vec<CachePadded<AtomicF32>>;
 pub(crate) type DeviceComm = (
-    tokio::sync::mpsc::UnboundedReceiver<DeviceThreadCmd>,
-    tokio::sync::mpsc::UnboundedSender<DeviceThreadCmd>,
+    tokio::sync::mpsc::Receiver<DeviceThreadCmd>,
+    tokio::sync::mpsc::Sender<DeviceThreadCmd>,
 );
 
 // -----------------------------------------------------
@@ -222,13 +223,13 @@ pub(crate) struct HidDevice {
     id: ObjId,
     is_owned_virtual_device: bool,
     owned_virtual_device: Option<VirtualDevice>,
-    owned_virtual_device_cmd: Option<tokio::sync::mpsc::UnboundedSender<DeviceThreadCmd>>,
+    owned_virtual_device_cmd: Option<tokio::sync::mpsc::Sender<DeviceThreadCmd>>,
     cfg_key: String,
     classification: BitFlags<DeviceKind>,
     name: String,
     _client_side_path: PathBuf,
     client_side_thread_rx_tx: DeviceComm,
-    events_listener: Option<tokio::sync::mpsc::UnboundedSender<HidDeviceEvent>>,
+    events_listener: Option<tokio::sync::mpsc::Sender<HidDeviceEvent>>,
     client_side_thread_cancellation: CancellationToken,
     ctl_states: Arc<DeviceControlStates>,
     is_owned_virtual_device_persistent: bool,
@@ -405,7 +406,7 @@ impl HidDevice {
         let client_side_path = virtual_device.enumerate_dev_nodes_blocking()?.last().unwrap()?;
 
         let ff_enabled = creation_spec.cfg_spec.virtual_device_is_ff_enabled();
-        let (tx1, rx1) = tokio::sync::mpsc::unbounded_channel::<DeviceThreadCmd>();
+        let (tx1, rx1) = tokio::sync::mpsc::channel::<DeviceThreadCmd>(MAX_DEVICE_EVENT_QUEUE_DEPTH);
 
         // --- Initialized or based on whether thread is spawned or not ---
         // --- Owned virtual device thread is spawned to handle FFB events and to set controls values ---
@@ -486,10 +487,12 @@ impl HidDevice {
             }
 
             if Instant::now().duration_since(perms_wait_begin_at).as_secs_f32() > perms_wait_timeout_sec {
-                unreachable!(
-                    "Timed out while waiting to access newly created virtual device file {:?}... Check your udev settings/permissions!",
-                    client_side_path
+                let msg = format!(
+                    "Timed out while waiting to access newly created virtual device file {client_side_path:?}... \n\
+                    Check your udev settings/permissions and try again!",
                 );
+                log::error!("{msg}");
+                println!("{msg}");
             }
         }
 
@@ -576,8 +579,8 @@ impl HidDevice {
             }
         }
 
-        let (tx1, rx1) = tokio::sync::mpsc::unbounded_channel::<DeviceThreadCmd>();
-        let (tx2, rx2) = tokio::sync::mpsc::unbounded_channel::<DeviceThreadCmd>();
+        let (tx1, rx1) = tokio::sync::mpsc::channel::<DeviceThreadCmd>(MAX_DEVICE_EVENT_QUEUE_DEPTH);
+        let (tx2, rx2) = tokio::sync::mpsc::channel::<DeviceThreadCmd>(MAX_DEVICE_EVENT_QUEUE_DEPTH);
         let cancellation_token = CancellationToken::new();
         let opened_device_id = device_id.unwrap_or(ObjId::from(intern_str(&device_name)));
 
@@ -692,7 +695,7 @@ impl HidDevice {
         mut app_comm: DeviceComm,
         debug: DebugLevel,
     ) {
-        let mut external_notification_tx: Option<tokio::sync::mpsc::UnboundedSender<HidDeviceEvent>> = None;
+        let mut external_notification_tx: Option<tokio::sync::mpsc::Sender<HidDeviceEvent>> = None;
 
         // NB: acquiring here so that AsyncFd would associate with current runtime.
         let mut platform_device_stream = platform_device.into_event_stream().unwrap();
@@ -701,8 +704,8 @@ impl HidDevice {
             tokio::select! {
                 Some(Some(cmd)) = app_comm.0.recv().with_cancellation_token(&cancellation_token) => {
                     match cmd {
-                        DeviceThreadCmd::SetExternalNotification(unbounded_sender) => {
-                            external_notification_tx = Some(unbounded_sender)
+                        DeviceThreadCmd::SetExternalNotification(sender) => {
+                            external_notification_tx = Some(sender)
                         }
                         DeviceThreadCmd::SetControlValue(control_type, control_value) => {
                             set_hid_control_unowned_device(platform_device_stream.device_mut(), control_type, control_value);
@@ -720,7 +723,7 @@ impl HidDevice {
                         ctl_states[control_type as usize].store(value, std::sync::atomic::Ordering::Relaxed);
 
                         if let Some(external_notification_tx) = &external_notification_tx
-                            && let Err(e) = external_notification_tx.send(event.unwrap())
+                            && let Err(e) = external_notification_tx.try_send(event.unwrap())
                         {
                             log::error!("{e}");
                         }
@@ -834,7 +837,7 @@ fn test_virtual_joystick_internal(with_ff: bool) {
     )
     .unwrap();
 
-    let (notification_tx, mut notification_rx) = unbounded_channel::<HidDeviceEvent>();
+    let (notification_tx, mut notification_rx) = channel::<HidDeviceEvent>(MAX_DEVICE_EVENT_QUEUE_DEPTH);
 
     vjk.attach_events_listener(Some(notification_tx));
 
@@ -879,16 +882,17 @@ impl HidDevice {
             if let Some(owned_device) = &mut self.owned_virtual_device {
                 set_hid_control_virtual_owned_device(owned_device, control, value);
             } else if let Some(owned_virtual_device_cmd) = &self.owned_virtual_device_cmd {
-                if let Err(e) = owned_virtual_device_cmd.send(DeviceThreadCmd::SetControlValue(control, value)) {
+                if let Err(e) = owned_virtual_device_cmd.try_send(DeviceThreadCmd::SetControlValue(control, value)) {
                     branches::mark_unlikely();
-                    unreachable!(
+                    log::error!(
                         "Error while setting control value on owned HID device {} {:?}",
-                        self.name, e
+                        self.name,
+                        e
                     );
                 }
             } else {
                 branches::mark_unlikely();
-                unreachable!(
+                log::error!(
                     "Owning virtual device abstraction doesn't have neither object instance \
                         nor a corresponding owning thread handle."
                 );
@@ -896,7 +900,7 @@ impl HidDevice {
         } else if let Err(e) = self
             .client_side_thread_rx_tx
             .1
-            .send(DeviceThreadCmd::SetControlValue(control, value))
+            .try_send(DeviceThreadCmd::SetControlValue(control, value))
         {
             branches::mark_unlikely();
             log::error!(
@@ -914,7 +918,7 @@ impl Drop for HidDevice {
 }
 
 impl Device for HidDevice {
-    type EventsListener = tokio::sync::mpsc::UnboundedSender<HidDeviceEvent>;
+    type EventsListener = tokio::sync::mpsc::Sender<HidDeviceEvent>;
 
     fn close(&self) -> anyhow::Result<()> {
         self.client_side_thread_cancellation.cancel();
@@ -930,14 +934,14 @@ impl Device for HidDevice {
         self.id
     }
 
-    fn attach_events_listener(&mut self, listener: Option<tokio::sync::mpsc::UnboundedSender<HidDeviceEvent>>) {
+    fn attach_events_listener(&mut self, listener: Option<tokio::sync::mpsc::Sender<HidDeviceEvent>>) {
         if let Some(listener) = &listener {
             self.client_side_thread_rx_tx
                 .1
-                .send(DeviceThreadCmd::SetExternalNotification(listener.clone()))
+                .try_send(DeviceThreadCmd::SetExternalNotification(listener.clone()))
                 .expect("Can't set external notification with device client side thread.");
             if let Some(tx) = &self.owned_virtual_device_cmd {
-                tx.send(DeviceThreadCmd::SetExternalNotification(listener.clone()))
+                tx.try_send(DeviceThreadCmd::SetExternalNotification(listener.clone()))
                     .expect("Can't set external notification with oned virtual device thread.");
             }
         }

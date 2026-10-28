@@ -1,4 +1,5 @@
 use crate::base_num::BaseNumT;
+use crate::config::MAX_DEVICE_EVENT_QUEUE_DEPTH;
 use crate::interner::get_interned_str;
 
 use crate::debug::DebugLevel;
@@ -34,8 +35,8 @@ pub(crate) struct HidManager {
     debug_ff: bool,
     #[allow(clippy::type_complexity)]
     device_key_to_devices: UncheckedRefCell<HashMap<String, Vec<(Rc<UncheckedRefCell<HidDevice>>, HidDeviceCfg)>>>,
-    per_device_event_notification_tx: tokio::sync::mpsc::UnboundedSender<HidDeviceEvent>,
-    all_devices_rx: UncheckedRefCell<tokio::sync::mpsc::UnboundedReceiver<HidDeviceEvent>>,
+    per_device_event_notification_tx: tokio::sync::mpsc::Sender<HidDeviceEvent>,
+    all_devices_rx: UncheckedRefCell<tokio::sync::mpsc::Receiver<HidDeviceEvent>>,
 }
 
 impl Drop for HidManager {
@@ -99,7 +100,7 @@ impl HidManager {
     }
 
     pub(crate) fn new(debug: DebugLevel, debug_ff: bool) -> Result<Self> {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<HidDeviceEvent>();
+        let (tx, rx) = tokio::sync::mpsc::channel::<HidDeviceEvent>(MAX_DEVICE_EVENT_QUEUE_DEPTH);
         Ok(Self {
             debug,
             debug_ff,
@@ -544,6 +545,15 @@ impl DeviceManagerCommon for HidManager {
 
     fn destroy_virtual_device_if_exists(&self, device_key: &str) {
         self.destroy_virtual_device_if_exists(device_key);
+    }
+
+    fn events_queue_is_full(&self) -> bool {
+        self.all_devices_rx.borrow().capacity() == 0
+    }
+
+    fn drain_events_queue(&self) {
+        let mut queue = self.all_devices_rx.borrow_mut();
+        while queue.try_recv().is_ok() {}
     }
 }
 

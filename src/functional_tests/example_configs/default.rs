@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod default_config_tests {
     use crate::base_num::BaseNumT;
-    use crate::config::ConfigManager;
+    use crate::config::{ConfigManager, MAX_DEVICE_EVENT_QUEUE_DEPTH};
     use crate::debug::DebugLevel;
     use crate::device_and_device_manager::{
         AvailableDeviceInfoIface, DeviceEvent, DeviceKind, DeviceManagerCommon, DeviceManagerWithFfb,
@@ -77,7 +77,7 @@ mod default_config_tests {
     }
 
     struct MockHidManager {
-        event_rx: tokio::sync::Mutex<mpsc::UnboundedReceiver<HidDeviceEvent>>,
+        event_rx: tokio::sync::Mutex<mpsc::Receiver<HidDeviceEvent>>,
         outputs: Arc<Mutex<HashMap<(String, String), BaseNumT>>>,
         ff_spring_enabled: Arc<AtomicBool>,
         tested_axis_range: NumInterval<BaseNumT>,
@@ -90,10 +90,10 @@ mod default_config_tests {
             tested_axis_range: NumInterval<BaseNumT>,
         ) -> (
             Self,
-            mpsc::UnboundedSender<HidDeviceEvent>,
+            mpsc::Sender<HidDeviceEvent>,
             Arc<Mutex<HashMap<(String, String), BaseNumT>>>,
         ) {
-            let (tx, rx) = mpsc::unbounded_channel();
+            let (tx, rx) = mpsc::channel(MAX_DEVICE_EVENT_QUEUE_DEPTH * 1000);
             let outputs = Arc::new(Mutex::new(HashMap::new()));
             (
                 Self {
@@ -132,6 +132,10 @@ mod default_config_tests {
             rx.recv().await
         }
 
+        fn events_queue_is_full(&self) -> bool {
+            false
+        }
+
         async fn device_monitor(
             &self,
             _match_name_regex: &regex::Regex,
@@ -164,13 +168,15 @@ mod default_config_tests {
                 .insert((dev_key.to_string(), ctl_key.to_string()), value);
         }
 
+        fn destroy_virtual_device_if_exists(&self, _device_key: &str) {
+            unimplemented!()
+        }
+
         fn stop(&self, _full_shutdown: bool) -> anyhow::Result<()> {
             Ok(())
         }
 
-        fn destroy_virtual_device_if_exists(&self, _device_key: &str) {
-            unimplemented!()
-        }
+        fn drain_events_queue(&self) {}
     }
 
     impl DeviceManagerWithFfb for MockHidManager {
@@ -249,6 +255,12 @@ mod default_config_tests {
         fn destroy_virtual_device_if_exists(&self, _device_key: &str) {
             unimplemented!()
         }
+
+        fn events_queue_is_full(&self) -> bool {
+            false
+        }
+
+        fn drain_events_queue(&self) {}
     }
 
     #[cfg(feature = "midi")]
@@ -273,7 +285,7 @@ mod default_config_tests {
     }
 
     async fn send_rel(
-        tx: &mpsc::UnboundedSender<HidDeviceEvent>,
+        tx: &mpsc::Sender<HidDeviceEvent>,
         mouse_id: ObjId,
         rel: MappedCtls,
         val: BaseNumT,
@@ -281,23 +293,26 @@ mod default_config_tests {
         period: Period,
     ) {
         for _ in 0..count.0 {
-            let _ = tx.send(DeviceEvent {
-                device_id: mouse_id,
-                data: HidEvent {
-                    control_type: rel,
-                    value: val,
-                },
-            });
+            let _ = tx
+                .send(DeviceEvent {
+                    device_id: mouse_id,
+                    data: HidEvent {
+                        control_type: rel,
+                        value: val,
+                    },
+                })
+                .await
+                .inspect_err(|e| log::error!("{e}"));
             tokio::time::sleep(Duration::from_millis(period.0)).await;
         }
     }
 
-    async fn set_hold_factor_max(tx: &mpsc::UnboundedSender<HidDeviceEvent>, mouse_id: ObjId) {
+    async fn set_hold_factor_max(tx: &mpsc::Sender<HidDeviceEvent>, mouse_id: ObjId) {
         send_rel(tx, mouse_id, MappedCtls::RelY, 127.0, Count(20), Period(10)).await;
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
-    async fn set_hold_factor_zero(tx: &mpsc::UnboundedSender<HidDeviceEvent>, mouse_id: ObjId) {
+    async fn set_hold_factor_zero(tx: &mpsc::Sender<HidDeviceEvent>, mouse_id: ObjId) {
         send_rel(tx, mouse_id, MappedCtls::RelY, -127.0, Count(40), Period(10)).await;
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
@@ -320,7 +335,7 @@ mod default_config_tests {
     ) where
         F: FnOnce(
             Arc<Mutex<HashMap<(String, String), BaseNumT>>>,
-            mpsc::UnboundedSender<HidDeviceEvent>,
+            mpsc::Sender<HidDeviceEvent>,
             Arc<AtomicBool>,
         ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'static>>,
     {
@@ -422,7 +437,7 @@ mod default_config_tests {
         {
             let cfg = cfg_base.clone();
             let scenario = |outputs: Arc<Mutex<HashMap<(String, String), BaseNumT>>>,
-                            event_tx: mpsc::UnboundedSender<HidDeviceEvent>,
+                            event_tx: mpsc::Sender<HidDeviceEvent>,
                             ff_enable_flag: Arc<AtomicBool>|
              -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'static>> {
                 Box::pin(async move {
@@ -559,7 +574,7 @@ mod default_config_tests {
             ff_spring_enabled.store(false, Ordering::Relaxed);
 
             let scenario = |outputs: Arc<Mutex<HashMap<(String, String), BaseNumT>>>,
-                            event_tx: mpsc::UnboundedSender<HidDeviceEvent>,
+                            event_tx: mpsc::Sender<HidDeviceEvent>,
                             ff_enable_flag: Arc<AtomicBool>|
              -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'static>> {
                 Box::pin(async move {

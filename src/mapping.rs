@@ -46,6 +46,12 @@ use tokio::select;
 use tokio::time::{MissedTickBehavior, interval};
 
 // ---------------------------------------------
+const EMERGENCY_THROTTLE_DURATION_SEC_INC: BaseNumT = 0.1 as BaseNumT;
+const EMERGENCY_THROTTLE_DURATION_SEC_MIN: BaseNumT = 0.01 as BaseNumT;
+const EMERGENCY_THROTTLE_DURATION_SEC_MAX: BaseNumT = 15.0 as BaseNumT;
+const EMERGENCY_THROTTLE_TIMEOUT_RESET_AFTER_PROCESSED_EVENTS_NUM: usize = 10000;
+
+// ---------------------------------------------
 #[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) enum MappingEngineCmd {
     _None,
@@ -393,12 +399,18 @@ impl<
         let mut idle_ticker = interval(mode.calc_idle_tick_period());
         let mut mapping_ticker = interval(target_mapping_tick_dt);
 
+        let mut events_count: usize = 0;
+        let mut last_throttle_at_events_count: usize = 0;
+
         idle_ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
         mapping_ticker.set_missed_tick_behavior(MissedTickBehavior::Burst);
 
         //-------------------------------- MAIN LOOP ----------------------------------
         const DBG_MAIN_LOOP_TIMING: bool = false;
         const DBG_CAPPED_MODE: bool = false;
+
+        let mut current_throttle_duration =
+            std::time::Duration::from_secs_f32(EMERGENCY_THROTTLE_DURATION_SEC_MIN as f32);
 
         let main_loop_processing_time_stats = MappingEngineStats::default();
         let mut last_event_time = std::time::Instant::now();
@@ -436,6 +448,10 @@ impl<
                             self.running = false; }},
                 }
             } => {
+                (last_throttle_at_events_count, current_throttle_duration) = self
+                    .emergency_throttling(last_throttle_at_events_count, events_count, current_throttle_duration)
+                    .await;
+
                 self.process_and_run_mappings(MapppingSchedContext::Immediate);
                 if is_reactive {
                     self.process_and_run_mappings(MapppingSchedContext::Normal);
@@ -448,6 +464,8 @@ impl<
                         dbg!(&self.mapped_events_dt_stats);
                     }
                 }
+
+                events_count = events_count.wrapping_add(1);
             },
             _ = idle_ticker.tick() => self.process_and_run_mappings(MapppingSchedContext::Idle)
             }
@@ -829,6 +847,57 @@ impl<
                 !debug.is_on(),
             ),
         }
+    }
+
+    async fn emergency_throttling(
+        &self,
+        mut last_throttle_at_events_count: usize,
+        events_count: usize,
+        mut current_throttle_duration: std::time::Duration,
+    ) -> (usize, std::time::Duration) {
+        if events_count > 0
+            && let Some(throttle_reason) = || -> Option<&'static str> {
+                #[cfg(feature = "midi")]
+                if branches::unlikely(self.midi_mgr.events_queue_is_full()) {
+                    self.midi_mgr.drain_events_queue();
+                    return "Throttling by incoming MIDI events backlog (events queue is full)".into();
+                }
+                if branches::unlikely(self.hid_mgr.events_queue_is_full()) {
+                    self.hid_mgr.drain_events_queue();
+                    return "Throttling by incoming HID events backlog (events queue is full)".into();
+                }
+                return None;
+            }()
+        {
+            branches::mark_unlikely();
+            let msg = format!(
+                "\n-------\n{throttle_reason}, events will be dropped! Sleeping for {} seconds and draining events queue.\n\
+                Mappings cause execution loop, check your mapping configuration!\n\
+                {}",
+                current_throttle_duration.as_secs_f32(),
+                if self.get_mode().is_reactive() {
+                    "In case you are using high-frequency gaming mouse, \
+                        try switching to Stable or Capped execution mode (current mode is Reactive)"
+                } else {
+                    ""
+                }
+            );
+            log::warn!("{msg}");
+            println!("{msg}");
+            if events_count.wrapping_sub(last_throttle_at_events_count)
+                > EMERGENCY_THROTTLE_TIMEOUT_RESET_AFTER_PROCESSED_EVENTS_NUM
+            {
+                current_throttle_duration =
+                    std::time::Duration::from_secs_f32(EMERGENCY_THROTTLE_DURATION_SEC_MIN as f32);
+            }
+            last_throttle_at_events_count = events_count;
+            tokio::time::sleep(current_throttle_duration).await;
+            current_throttle_duration = std::time::Duration::from_secs_f32(
+                (current_throttle_duration.as_secs_f32() + EMERGENCY_THROTTLE_DURATION_SEC_INC as f32)
+                    .min(EMERGENCY_THROTTLE_DURATION_SEC_MAX as f32),
+            );
+        }
+        (last_throttle_at_events_count, current_throttle_duration)
     }
 }
 

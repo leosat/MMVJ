@@ -47,6 +47,7 @@ pub const DEFAULT_BASE_FREQ_HZ: u32 = 60;
 pub const MAX_BASE_FREQ_HZ: u32 = 1000;
 include_flate::flate!(pub static LICENSE_THIRDPARTY: str from "LICENSE_THIRDPARTY");
 include_flate::flate!(pub static LICENSE: str from "LICENSE");
+pub const MAX_DEVICE_EVENT_QUEUE_DEPTH: usize = 2000;
 
 pub const fn default_base_freq_hz() -> u32 {
     DEFAULT_BASE_FREQ_HZ

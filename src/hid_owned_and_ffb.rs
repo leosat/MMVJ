@@ -450,7 +450,7 @@ pub(crate) async fn owned_hid_device_thread(
     max_effects: usize,
     fake_accepting_unsupported_effects: bool,
     owned_virtual_device_thread_io: Arc<OwnedVirtualHIDDeviceThreadIO>,
-    mut app_comm: tokio::sync::mpsc::UnboundedReceiver<DeviceThreadCmd>, // TODO: move to owned_virtual_device_thread_io
+    mut app_comm: tokio::sync::mpsc::Receiver<DeviceThreadCmd>, // TODO: move to owned_virtual_device_thread_io
     virtual_device_id: ObjId,
     ctl_states: Arc<DeviceControlStates>, // TODO: move to owned_virtual_device_thread_io
     debug_ff: bool,
@@ -458,7 +458,7 @@ pub(crate) async fn owned_hid_device_thread(
     // NB: acquiring here so that AsyncFd would associate with current runtime.
     let mut platform_device_stream = platform_device.into_event_stream().unwrap();
 
-    let mut external_notification_tx: Option<tokio::sync::mpsc::UnboundedSender<HidDeviceEvent>> = None;
+    let mut external_notification_tx: Option<tokio::sync::mpsc::Sender<HidDeviceEvent>> = None;
     let mut uploaded_effects_buffer: Vec<Option<FfEffect>> = Vec::new();
     uploaded_effects_buffer.resize_with(max_effects, || None);
     let mut played_effects = PlayedEffects::new();

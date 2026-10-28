@@ -1,4 +1,5 @@
 use crate::base_num::BaseNumT;
+use crate::config::MAX_DEVICE_EVENT_QUEUE_DEPTH;
 use crate::debug::DebugLevel;
 use crate::device_and_device_manager::{
     AvailableDeviceInfoIface, CommonDeviceCfgIface, DeviceEvent, DeviceKind, DeviceManagerCommon, OpenedDeviceInfo,
@@ -253,9 +254,9 @@ pub(crate) struct MidiManager {
     debug: DebugLevel,
     midi_input: MidiInput,
     connections: UncheckedRefCell<HashMap<ObjId, (String, MidiInputConnection<()>)>>,
-    message_sender: mpsc::UnboundedSender<MidiDeviceEvent>,
+    message_sender: mpsc::Sender<MidiDeviceEvent>,
     _engine_stop_token: CancellationToken,
-    all_devices_rx: UncheckedRefCell<mpsc::UnboundedReceiver<MidiDeviceEvent>>,
+    all_devices_rx: UncheckedRefCell<mpsc::Receiver<MidiDeviceEvent>>,
     note_states: UncheckedRefCell<HashMap<ObjId, HashSet<u8>>>,
 }
 
@@ -289,7 +290,7 @@ impl MidiManager {
         let midi_input = MidiInput::new(format!("{} MIDI Input", crate::config::APP_NAME).as_str())
             .context("Failed to create MIDI input")?;
 
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::channel(MAX_DEVICE_EVENT_QUEUE_DEPTH);
 
         Ok(Self {
             debug,
@@ -343,7 +344,9 @@ impl MidiManager {
                             if debug.is_on() {
                                 debug!("MIDI {}: {:?}", device_name, msg);
                             }
-                            let _ = sender.send(MidiDeviceEvent { device_id, data: msg });
+                            let _ = sender
+                                .try_send(MidiDeviceEvent { device_id, data: msg })
+                                .inspect_err(|e| log::error!("{e}"));
                         }
                     },
                     (),
@@ -504,6 +507,10 @@ impl DeviceManagerCommon for MidiManager {
         None
     }
 
+    fn events_queue_is_full(&self) -> bool {
+        self.all_devices_rx.borrow().capacity() == 0
+    }
+
     async fn device_monitor(
         &self,
         name_regex: &regex::Regex,
@@ -560,13 +567,18 @@ impl DeviceManagerCommon for MidiManager {
         unreachable!("Midi devices are not yet writeable.")
     }
 
+    fn destroy_virtual_device_if_exists(&self, _device_key: &str) {
+        unimplemented!("No owned virtual MIDI devices support");
+    }
+
     fn stop(&self, _full_shutdown: bool) -> anyhow::Result<()> {
         self.connections.borrow_mut().clear();
         Ok(())
     }
 
-    fn destroy_virtual_device_if_exists(&self, _device_key: &str) {
-        unimplemented!("No owned virtual MIDI devices support");
+    fn drain_events_queue(&self) {
+        let mut queue = self.all_devices_rx.borrow_mut();
+        while queue.try_recv().is_ok() {}
     }
 }
 
