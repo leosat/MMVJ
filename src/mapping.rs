@@ -99,7 +99,7 @@ pub(crate) struct MappingEngine<
     router_index_sysdev_and_ctl_type_to_cms_and_mappings:
         HashMap<(ObjId, MappedCtls), (Vec<ControlMatchers>, Vec<Vec<usize>>)>,
     scheduled_mappings_immediate: Vec<usize>,
-    scheduled_mappings_other: Vec<usize>,
+    scheduled_mappings_normal: Vec<usize>,
     rel_ctls: Vec<Arc<CachePadded<BaseAtomicT>>>,
     // ---
     idle_tick_mappings: Vec<usize>,
@@ -208,7 +208,7 @@ impl<
             // ---
             router_index_sysdev_and_ctl_type_to_cms_and_mappings: Default::default(),
             scheduled_mappings_immediate: Default::default(),
-            scheduled_mappings_other: Default::default(),
+            scheduled_mappings_normal: Default::default(),
             rel_ctls: Default::default(),
             // ---
             idle_tick_mappings: Default::default(),
@@ -245,7 +245,7 @@ impl<
         // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         self.idle_tick_mappings_reset();
         self.router_index_sysdev_and_ctl_type_to_cms_and_mappings.clear();
-        self.scheduled_mappings_other.clear();
+        self.scheduled_mappings_normal.clear();
         self.reset_rel_ctls_cache();
 
         // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -609,7 +609,7 @@ impl<
                         if event.data.message_type.is_a_button() {
                             self.scheduled_mappings_immediate.extend(&mappings[cm_idx]);
                         } else {
-                            self.scheduled_mappings_other.extend(&mappings[cm_idx]);
+                            self.scheduled_mappings_normal.extend(&mappings[cm_idx]);
                         }
                     }
                 });
@@ -637,7 +637,7 @@ impl<
                     if event.data.control_type.is_button() || event.data.control_type.is_key() {
                         self.scheduled_mappings_immediate.extend(&mappings[cm_idx]);
                     } else {
-                        self.scheduled_mappings_other.extend(&mappings[cm_idx]);
+                        self.scheduled_mappings_normal.extend(&mappings[cm_idx]);
                     }
                 }
             });
@@ -704,7 +704,7 @@ impl<
     fn mappings_by_ctx_mut(&mut self, sched_ctx: MapppingSchedContext) -> &mut Vec<usize> {
         match sched_ctx {
             MapppingSchedContext::Idle => &mut self.idle_tick_mappings,
-            MapppingSchedContext::Normal => &mut self.scheduled_mappings_other,
+            MapppingSchedContext::Normal => &mut self.scheduled_mappings_normal,
             MapppingSchedContext::Immediate => &mut self.scheduled_mappings_immediate,
         }
     }
@@ -712,7 +712,7 @@ impl<
     fn mappings_by_ctx_ref(&self, sched_ctx: MapppingSchedContext) -> &Vec<usize> {
         match sched_ctx {
             MapppingSchedContext::Idle => &self.idle_tick_mappings,
-            MapppingSchedContext::Normal => &self.scheduled_mappings_other,
+            MapppingSchedContext::Normal => &self.scheduled_mappings_normal,
             MapppingSchedContext::Immediate => &self.scheduled_mappings_immediate,
         }
     }
@@ -724,19 +724,21 @@ impl<
         }
 
         if sched_ctx.is_idle() {
-            if branches::unlikely(
-                !(/*self.scheduled_mappings_immediate.is_empty() &&*/self.scheduled_mappings_other.is_empty()),
-            ) {
+            if branches::unlikely(!(self.scheduled_mappings_normal.is_empty())) {
                 return;
             }
             debug_assert!(
-                self.scheduled_mappings_immediate.is_empty() && self.scheduled_mappings_other.is_empty(),
+                self.scheduled_mappings_immediate.is_empty() && self.scheduled_mappings_normal.is_empty(),
                 "All the input-triggered mappings must be executed by the time of idle tick processing."
             );
-            debug_assert!(
-                self.rel_ctls.iter().all(|ctl| ctl.load(Relaxed) == 0.0 as BaseNumT),
-                "All the relative control matcher values must be reset to 0 (after mappings execution) by the time idle tick processing is triggered."
-            );
+            if !self.get_mode().is_reactive() {
+                self.clear_rel_ctls();
+            } else {
+                debug_assert!(
+                    self.rel_ctls.iter().all(|ctl| ctl.load(Relaxed) == 0.0 as BaseNumT),
+                    "All the relative control matcher values must be reset to 0 (after mappings execution) by the time idle tick processing is triggered."
+                );
+            }
         } else {
             Self::dedup_and_shuffle(mappings, true, mappings.len() > 1);
         }
@@ -747,7 +749,7 @@ impl<
             self.mappings_by_ctx_mut(sched_ctx).clear();
         }
 
-        if sched_ctx.is_normal() {
+        if self.get_mode().is_reactive() || sched_ctx.is_normal() {
             self.clear_rel_ctls();
         }
     }
