@@ -35,7 +35,6 @@ use egui_file_dialog::FileDialog;
 use log::warn;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::f32;
 use std::ops::ControlFlow;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
