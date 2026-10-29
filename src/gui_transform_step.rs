@@ -68,9 +68,9 @@ fn draw_graph_docked_or_windowed(
     let mut changed = false;
 
     let is_graph_window_opened_egui_id = ui.make_persistent_id(1);
-    let egui_state_is_graph_window_opened =
-        &mut ui.data_mut(|d| d.get_temp::<bool>(is_graph_window_opened_egui_id).unwrap_or(false));
-    let was_graph_window_opened = *egui_state_is_graph_window_opened;
+    let mut egui_state_is_graph_window_opened =
+        ui.data_mut(|d| *d.get_persisted_mut_or_default::<bool>(is_graph_window_opened_egui_id));
+    let was_graph_window_opened = egui_state_is_graph_window_opened;
 
     // ui.label(state.0.read().get_state_id().to_string());
 
@@ -109,10 +109,10 @@ fn draw_graph_docked_or_windowed(
             };
         };
 
-        if *egui_state_is_graph_window_opened {
+        if egui_state_is_graph_window_opened {
             egui::Window::new(format!("{} transform input-output monitor.", tfm_step))
                 .id(is_graph_window_opened_egui_id.with(42))
-                .open(egui_state_is_graph_window_opened)
+                .open(&mut egui_state_is_graph_window_opened)
                 .resizable(true)
                 .order(egui::Order::TOP)
                 .show(ui.ctx(), move |ui| {
@@ -144,7 +144,7 @@ fn draw_graph_docked_or_windowed(
                             .on_hover_text("Open graph in a separate window")
                             .clicked()
                     {
-                        *egui_state_is_graph_window_opened = true;
+                        egui_state_is_graph_window_opened = true;
                     }
                 });
                 r.set_open(r.is_open() ^ header_clicked);
@@ -154,7 +154,7 @@ fn draw_graph_docked_or_windowed(
             }
         }
 
-        ui.data_mut(|d| d.insert_temp(is_graph_window_opened_egui_id, *egui_state_is_graph_window_opened));
+        ui.data_mut(|d| d.insert_persisted(is_graph_window_opened_egui_id, egui_state_is_graph_window_opened));
 
         if !graph_displayed && tfm_step.common_state_ref().is_gui_tracing_enabled() {
             tfm_step.common_state_ref().disable_gui_tracing();
@@ -239,10 +239,12 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
         let mut gui_out = None;
         let gui_out_mut = &mut gui_out;
 
-        let is_win_opened_egui_id = ui.make_persistent_id("+ add step").with(*self.id); // gui::Id::new("Create new step window").with(self.id); // ui.make_persistent_id("..");
-        let is_win_opened = &mut ui.data_mut(|d| d.get_temp::<bool>(is_win_opened_egui_id).unwrap_or(false));
-
         ui.scope(|ui| {
+
+            let is_win_opened_egui_id = ui.make_persistent_id("+ add step").with(*self.id);
+            let mut is_win_opened =
+                ui.data_mut(|d| *d.get_persisted_mut_or_default::<bool>(is_win_opened_egui_id));
+
             ui.add_space(5.0);
             ui.horizontal(|ui| {
                 // ui.collapsing("Description", |ui| self.desc.egui(GuiInKinds::Edit, ui))
@@ -256,13 +258,13 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
                         self.get_in_relativity(),
                         self.get_in_interval(),
                     ));
-                    if !*is_win_opened {
+                    if !is_win_opened {
                         if ui
                             .small_button("add step".to_string())
                             .on_hover_text("Hint: to choose the new step click on its name or drag and drop into appropriate slot in the pipeline")
                             .clicked()
                         {
-                            *is_win_opened = true;
+                            is_win_opened = true;
                         }
                     } else {
                         ui.label("... choosing step to add ...");
@@ -303,7 +305,7 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
 
                 let step_to_add_opt = egui::Window::new("Select transformation to add...")
                     .id(is_win_opened_egui_id)
-                    .open(is_win_opened)
+                    .open(&mut is_win_opened)
                     .resizable(true)
                     .order(egui::Order::TOP)
                     .show(ui.ctx(), |ui| {
@@ -352,7 +354,7 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
                     *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
                 }
 
-                ui.data_mut(|d| d.insert_temp(is_win_opened_egui_id, *is_win_opened));
+                ui.data_mut(|d| d.insert_persisted(is_win_opened_egui_id, is_win_opened));
             });
             ui.add_space(3.0);
         });
