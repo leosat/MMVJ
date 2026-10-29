@@ -1382,9 +1382,9 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
         let mut changed_simple = false;
         let mut gui_out = None;
         let gui_out_mut = &mut gui_out;
-        ui.separator();
+
         ui.horizontal(|ui| {
-            let param_name = "Gain";
+            let param_name = "Input gain";
             ui.label(param_name).on_hover_text(self.in_gain_doc_str());
             self.in_gain
                 .egui(
@@ -1401,6 +1401,59 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
         })
         .response
         .on_hover_text(self.in_gain_doc_str());
+
+        ui.separator();
+        ui.collapsing("Accumulator", |ui| {
+            ui.horizontal(|ui| {
+                self.accumulator
+                    .egui(
+                        GuiInValue::Edit(GuiInValueEditParams {
+                            allow_interval_edit: false,
+                            slider_log_scale: false,
+                            name: "Accumulator",
+                            choice_case: ValueUsageContext::TfmStepAuxXrc.into(),
+                            gui_common_ctx: &gui_in,
+                        }),
+                        ui,
+                    )
+                    .inspect(|out| *gui_out_mut = Some(out.clone()));
+                ui.separator();
+            });
+
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.collapsing("Transformation", |ui| {
+                    self.integrated_user_input_transform
+                        .egui(gui_in.clone_and_push_hier(self.integrated_user_input_transform.id), ui)
+                        .inspect(|out| *gui_out_mut = Some(out.clone()))
+                })
+                .header_response
+                .on_hover_text(self.integrated_user_input_transform_doc_str());
+            })
+        })
+        .header_response
+        .on_hover_text(self.accumulator_doc_str());
+
+        ui.separator();
+        ui.collapsing("Hold factor", |ui| {
+            ui.separator();
+            ui.horizontal(|ui| {
+                self.hold_factor
+                    .egui(
+                        GuiInValue::Edit(GuiInValueEditParams {
+                            allow_interval_edit: false,
+                            slider_log_scale: false,
+                            name: "Choose hold factor source",
+                            choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                            gui_common_ctx: &gui_in,
+                        }),
+                        ui,
+                    )
+                    .inspect(|out| *gui_out_mut = Some(out.clone()));
+            });
+        })
+        .header_response
+        .on_hover_text(self.hold_factor_doc_str());
 
         ui.separator();
         ui.horizontal(|ui| {
@@ -1443,59 +1496,6 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                     .inspect(|out| *gui_out_mut = Some(out.clone()));
             });
         }
-
-        ui.separator();
-        ui.collapsing("Hold factor", |ui| {
-            ui.separator();
-            ui.horizontal(|ui| {
-                self.hold_factor
-                    .egui(
-                        GuiInValue::Edit(GuiInValueEditParams {
-                            allow_interval_edit: false,
-                            slider_log_scale: false,
-                            name: "Choose hold factor source",
-                            choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
-                            gui_common_ctx: &gui_in,
-                        }),
-                        ui,
-                    )
-                    .inspect(|out| *gui_out_mut = Some(out.clone()));
-            });
-        })
-        .header_response
-        .on_hover_text(self.hold_factor_doc_str());
-
-        ui.separator();
-        ui.collapsing("Accumulator", |ui| {
-            ui.horizontal(|ui| {
-                self.accumulator
-                    .egui(
-                        GuiInValue::Edit(GuiInValueEditParams {
-                            allow_interval_edit: false,
-                            slider_log_scale: false,
-                            name: "Accumulator",
-                            choice_case: ValueUsageContext::TfmStepAuxXrc.into(),
-                            gui_common_ctx: &gui_in,
-                        }),
-                        ui,
-                    )
-                    .inspect(|out| *gui_out_mut = Some(out.clone()));
-                ui.separator();
-            });
-
-            ui.separator();
-            ui.horizontal(|ui| {
-                ui.collapsing("Transformation", |ui| {
-                    self.integrated_user_input_transform
-                        .egui(gui_in.clone_and_push_hier(self.integrated_user_input_transform.id), ui)
-                        .inspect(|out| *gui_out_mut = Some(out.clone()))
-                })
-                .header_response
-                .on_hover_text(self.integrated_user_input_transform_doc_str());
-            })
-        })
-        .header_response
-        .on_hover_text(self.accumulator_doc_str());
 
         if let Some(ff) = &mut self.force_feedback {
             ui.separator();
