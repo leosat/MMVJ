@@ -1,12 +1,15 @@
 use crate::config::{MORE_DEBUG, WithSelfSanitize};
-use crate::gui_common::{DrawEgui, GuiCmd, GuiDndJobMoveTfmStep, bool_to_simple_change_gui_cmd, draw_collapsing_ui};
+use crate::gui_common::{
+    DrawEgui, GuiCmd, GuiDndJobMoveTfmStep, bool_to_simple_change_gui_cmd, clear_dyn_srcs_and_dsts_cache,
+    collect_and_cache_dyn_dsts, collect_and_cache_dyn_srcs, draw_collapsing_ui, draw_dyn_value_refs_list,
+};
 use crate::gui_transform_step::GuiInCommon;
 use crate::gui_value::{GuiInValue, GuiInValueEditParams};
 use crate::mapping::MappingEngineCmd;
 
 use crate::schemas_common::WithRuntimeId;
 use crate::schemas_mapping::Mapping;
-use crate::schemas_transform::{DynValFilter, TfmCfgDuplicateTreeWithNewState, collect_dynamic_value_matchers};
+use crate::schemas_transform::TfmCfgDuplicateTreeWithNewState;
 use crate::schemas_transform::{TfmSeqCfg, TfmStepCfg};
 use crate::schemas_value::{DynValueRefs, ValueDsts, WithLastKnownIO};
 use std::any::Any;
@@ -137,22 +140,8 @@ impl<'s> DrawEgui<'s> for Mapping {
                     ui.separator();
                 });
 
-                let all_dynamic_sources =
-                    collect_dynamic_value_matchers(&self.transformation, |ctx| ctx.contains(DynValFilter::Src));
-                if !all_dynamic_sources.is_empty() {
-                    ui.separator();
-                    ui.collapsing("In-pipeline referenced dynamic sources ...", |ui| {
-                        for mut dcm in all_dynamic_sources {
-                            ui.separator();
-                            dcm.egui(
-                                GuiInValue::Display {
-                                    usage_context: ValueUsageContext::MappingSrc,
-                                },
-                                ui,
-                            );
-                        }
-                    });
-                }
+                let mut srcs = collect_and_cache_dyn_srcs(ui, &self.transformation);
+                draw_dyn_value_refs_list(ui, &mut srcs, "in-pipeline dynamic sources");
 
                 ui.separator();
                 //---------------------------------------------
@@ -184,22 +173,9 @@ impl<'s> DrawEgui<'s> for Mapping {
                 });
 
                 //---------------------------------------------
-                let all_dynamic_destinations =
-                    collect_dynamic_value_matchers(&self.transformation, |ctx| ctx.contains(DynValFilter::Dst));
-                if !all_dynamic_destinations.is_empty() {
-                    ui.separator();
-                    ui.collapsing("In-pipeline referenced dynamic destinations ...", |ui| {
-                        ui.separator();
-                        for mut dcm in all_dynamic_destinations {
-                            dcm.egui(
-                                GuiInValue::Display {
-                                    usage_context: ValueUsageContext::MappingDst,
-                                },
-                                ui,
-                            );
-                        }
-                    });
-                }
+                let mut dsts = collect_and_cache_dyn_dsts(ui, &self.transformation);
+                draw_dyn_value_refs_list(ui, &mut dsts, "in-pipeline dynamic destinations");
+
                 ui.separator();
 
                 ui.collapsing(
@@ -213,6 +189,7 @@ impl<'s> DrawEgui<'s> for Mapping {
             });
 
         if gui_out.is_some() {
+            clear_dyn_srcs_and_dsts_cache(ui, &self.transformation);
             self.sanitize_inplace(());
         }
 

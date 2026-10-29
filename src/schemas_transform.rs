@@ -1916,7 +1916,9 @@ pub(crate) fn collect_dynamic_value_matchers(
         type Break = ();
 
         fn enter(&mut self, this: &dyn core::any::Any) -> std::ops::ControlFlow<Self::Break> {
-            if this.is::<ValueSrcs>() {
+            if this.is::<ValueXrcs>() {
+                self.ctx.insert(DynValFilter::Src | DynValFilter::Dst);
+            } else if this.is::<ValueSrcs>() {
                 self.ctx.insert(DynValFilter::Src);
             } else if this.is::<ValueDsts>() {
                 self.ctx.insert(DynValFilter::Dst);
@@ -1938,7 +1940,9 @@ pub(crate) fn collect_dynamic_value_matchers(
                     DynValueRefs::Variable(_) => self.ctx.remove(DynValFilter::Var),
                 }
             }
-            if this.is::<ValueSrcs>() {
+            if this.is::<ValueXrcs>() {
+                self.ctx.remove(DynValFilter::Src | DynValFilter::Dst);
+            } else if this.is::<ValueSrcs>() {
                 self.ctx.remove(DynValFilter::Src);
             } else if this.is::<ValueDsts>() {
                 self.ctx.remove(DynValFilter::Dst);

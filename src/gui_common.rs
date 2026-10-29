@@ -1,6 +1,10 @@
 use crate::config::WithSelfSanitize;
 use crate::device_and_device_manager::DeviceKind;
+use crate::gui_mapping::ValueUsageContext;
+use crate::gui_value::GuiInValue;
 use crate::mapping::MappingEngineCmd;
+use crate::schemas_transform::{DynValFilter, collect_dynamic_value_matchers};
+use crate::schemas_value::DynValueRefs;
 use crate::{schemas_common::ObjId, schemas_control_matcher::ControlMatchers};
 use crate::{
     schemas_common::WithRuntimeId,
@@ -16,6 +20,7 @@ use egui::{
 };
 use enumflags2::BitFlags;
 use std::{any::Any, path::PathBuf};
+use traversable::Traversable;
 
 pub(crate) enum GuiInKinds {
     Edit,
@@ -353,4 +358,49 @@ pub(crate) fn draw_collapsing_ui<'a, T, SaltT: std::hash::Hash + std::fmt::Debug
         c.set_open(clicked ^ c.is_open());
     }
     c
+}
+
+pub(crate) fn clear_dyn_srcs_and_dsts_cache(ui: &mut egui::Ui, obj: &impl Traversable) {
+    ui.data_mut(|d| {
+        d.remove_temp::<Vec<DynValueRefs>>(egui::Id::new(obj as *const _).with("dynamic dsts"));
+        d.remove_temp::<Vec<DynValueRefs>>(egui::Id::new(obj as *const _).with("dynamic srcs"));
+    })
+}
+
+pub(crate) fn collect_and_cache_dyn_srcs(ui: &mut egui::Ui, obj: &impl Traversable) -> Vec<DynValueRefs> {
+    ui.data_mut(|d| {
+        d.get_temp_mut_or_insert_with(egui::Id::new(obj as *const _).with("dynamic srcs"), || {
+            collect_dynamic_value_matchers(obj, |ctx| ctx.contains(DynValFilter::Src))
+        })
+        .clone()
+    })
+}
+
+pub(crate) fn collect_and_cache_dyn_dsts(ui: &mut egui::Ui, obj: &impl Traversable) -> Vec<DynValueRefs> {
+    ui.data_mut(|d| {
+        d.get_temp_mut_or_insert_with(egui::Id::new(obj as *const _).with("dynamic dsts"), || {
+            collect_dynamic_value_matchers(obj, |ctx| ctx.contains(DynValFilter::Dst))
+        })
+        .clone()
+    })
+}
+
+pub(crate) fn draw_dyn_value_refs_list(ui: &mut egui::Ui, refs: &mut [DynValueRefs], msg: &str) {
+    if !refs.is_empty() {
+        ui.vertical(|ui| {
+            ui.set_min_width(800.0);
+            ui.collapsing(msg, |ui| {
+                ui.separator();
+                for r#ref in refs {
+                    r#ref.egui(
+                        GuiInValue::Display {
+                            usage_context: ValueUsageContext::MappingDst,
+                        },
+                        ui,
+                    );
+                    ui.separator();
+                }
+            });
+        });
+    }
 }

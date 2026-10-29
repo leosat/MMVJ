@@ -1,4 +1,8 @@
 use crate::base_num::BaseNumT;
+use crate::gui_common::clear_dyn_srcs_and_dsts_cache;
+use crate::gui_common::collect_and_cache_dyn_dsts;
+use crate::gui_common::collect_and_cache_dyn_srcs;
+use crate::gui_common::draw_dyn_value_refs_list;
 use crate::gui_style::GuiStyle;
 use crate::num_interval::MAX_SPAN_INTERVAL;
 use crate::relativity::Relativity;
@@ -25,7 +29,6 @@ use crate::schemas_value::AutoOrManual;
 use crate::schemas_value::WithLastKnownIO;
 use crate::schemas_value_port::ValuePortIface;
 use crate::tracing::GraphDisplayStyle;
-use egui::RichText;
 use egui::{Button, CollapsingHeader, Sense};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -193,21 +196,6 @@ impl<'g> GuiInCommon<'g> {
     }
 }
 
-fn get_step_io_text(_ui: &mut egui::Ui, state: &TfmStepCommonState) -> RichText {
-    let (last_in, last_out) = state.get_last_known_io();
-    let in_label = if state.is_in_relative() { "rel" } else { "abs" };
-    let out_label = if state.is_out_relative() { "rel" } else { "abs" };
-    egui::RichText::new(format!(
-        " {} ({:+08.2}) {} -> {} ({:+08.2}) {}",
-        in_label,
-        last_in,
-        state.get_in_interval(),
-        out_label,
-        last_out,
-        state.get_out_interval()
-    ))
-}
-
 fn egui_dnd_drop_job_to_insert_job(
     egui_drop_job_tuple: (egui::InnerResponse<()>, Option<Arc<GuiDndJob>>),
     obj_ids_hier: &[usize],
@@ -254,10 +242,22 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
 
                 ui.horizontal(|ui| {
                     ui.label(format!(
-                        "{} {} -> ...",
+                        "{} {} ",
                         self.get_in_relativity(),
                         self.get_in_interval(),
                     ));
+
+                    let mut dynamic_srcs = collect_and_cache_dyn_srcs(ui, self);
+                    if !dynamic_srcs.is_empty() {
+                        ui.label("(+...)").on_hover_ui(|ui|
+                            draw_dyn_value_refs_list(ui,
+                                &mut dynamic_srcs,
+                                "in-pipeline dynamic sources")
+                        );
+                    }
+
+                    ui.label("-> ");
+
                     if !is_win_opened {
                         if ui
                             .small_button("add step".to_string())
@@ -269,11 +269,21 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
                     } else {
                         ui.label("... choosing step to add ...");
                     }
+
                     ui.label(format!(
-                        " ... -> {} {}",
+                        " -> {} {}",
                         self.get_out_relativity(),
                         self.get_out_interval(),
                     ));
+
+                    let mut dynamic_dsts = collect_and_cache_dyn_dsts(ui, self);
+                    if !dynamic_dsts.is_empty() {
+                        ui.label("(+...)").on_hover_ui(|ui|
+                            draw_dyn_value_refs_list(ui,
+                                &mut dynamic_dsts,
+                                "in-pipeline dynamic destinations")
+                        );
+                    }
 
                     if let AutoOrManual::Manual(in_meta) = self.in_meta_mut() {
                         ui.separator();
@@ -420,6 +430,8 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
                 self.steps.remove(idx);
                 gui_out = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
             }
+
+            clear_dyn_srcs_and_dsts_cache(ui, self);
             self.recompute_metadata_and_sanitize_recursive(None);
         }
 
@@ -437,6 +449,7 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let step_idx = gui_in.0;
         let container_id = gui_in.1;
+        let gui_style = gui_in.2.style;
         let step_id = self.get_id();
 
         let transform_name = self.to_string();
@@ -448,161 +461,216 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
         } else {
             gui_in.2.style.tfm_title_decorate_enabled(egui::RichText::new(&label))
         };
-        ui.scope_builder(
-            egui::UiBuilder::new().id(egui::Id::new(container_id).with(state_id)),
-            |ui| {
-                let collapsing = egui::collapsing_header::CollapsingState::load_with_default_open(
-                    ui.ctx(),
-                    ui.id().with("collapsing"),
-                    // egui::Id::new(container_id).with(state_id),
-                    false,
-                );
-                let header_response = collapsing
-                    .show_header(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            if crate::config::MORE_DEBUG {
-                                ui.label(format!(
-                                    "ui.id() = {:?} + container_id: {} + tfm step state_id: {}",
-                                    ui.id(),
-                                    container_id,
-                                    state_id
-                                ));
-                            }
-                            let _dnd_src = ui.dnd_drag_source(
-                                ui.id().with("DND Source"),
-                                GuiDndJob::MoveTfmStep(GuiDndJobMoveTfmStep {
-                                    src_container_id: container_id.into(),
-                                    src_obj_runtime_id: state_id,
-                                    dst_container_id_opt: None,
-                                    dst_idx_opt: None,
-                                    do_copy: false,
-                                }),
-                                |ui| {
-                                    ui.label(heading);
-                                },
-                            );
 
-                            if self.doc_str() != DEFAULT_TRANSFORM_DESCRIPTION {
-                                ui.label(egui::RichText::from(egui_phosphor::bold::CIRCLE_WAVY_QUESTION).size(16.0))
+        let gui_out = ui
+            .scope_builder(
+                egui::UiBuilder::new().id(egui::Id::new(container_id).with(state_id)),
+                |ui| {
+                    let collapsing = egui::collapsing_header::CollapsingState::load_with_default_open(
+                        ui.ctx(),
+                        ui.id().with("collapsing"),
+                        // egui::Id::new(container_id).with(state_id),
+                        false,
+                    );
+                    let header_response = collapsing
+                        .show_header(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                if crate::config::MORE_DEBUG {
+                                    ui.label(format!(
+                                        "ui.id() = {:?} + container_id: {} + tfm step state_id: {}",
+                                        ui.id(),
+                                        container_id,
+                                        state_id
+                                    ));
+                                }
+                                let _dnd_src = ui.dnd_drag_source(
+                                    ui.id().with("DND Source"),
+                                    GuiDndJob::MoveTfmStep(GuiDndJobMoveTfmStep {
+                                        src_container_id: container_id.into(),
+                                        src_obj_runtime_id: state_id,
+                                        dst_container_id_opt: None,
+                                        dst_idx_opt: None,
+                                        do_copy: false,
+                                    }),
+                                    |ui| {
+                                        ui.label(heading);
+                                    },
+                                );
+
+                                if self.doc_str() != DEFAULT_TRANSFORM_DESCRIPTION {
+                                    ui.label(
+                                        egui::RichText::from(egui_phosphor::bold::CIRCLE_WAVY_QUESTION).size(16.0),
+                                    )
                                     .on_hover_text(self.doc_str());
-                            }
-
-                            let mut gui_out = None;
-
-                            ui.separator();
-                            let enable_disable_text = if is_enabled { "on" } else { "off" };
-                            gui_out = gui_out.or(bool_to_simple_change_gui_cmd(
-                                ui.checkbox(self.get_enabled_ref_mut(), enable_disable_text).changed(),
-                            ));
-
-                            ui.separator();
-                            ui.scope(|ui| {
-                                ui.set_max_width(EMBEDDED_GRAPH_MAX_WIDTH);
-                                if draw_graph_docked_or_windowed(self, gui_in.2.graph_states, ui) {
-                                    gui_out = Some(GuiCmd::ConfigChangeSimple);
                                 }
-                            });
 
-                            let io_text = gui_in
-                                .2
-                                .style
-                                .tfm_io_info_decorate(get_step_io_text(ui, self.common_state_ref()), is_enabled);
-                            ui.label(io_text);
+                                let mut gui_out = None;
 
-                            ui.separator();
-                            if ui
-                                .button(egui_phosphor::bold::TRASH.to_string())
-                                .on_hover_text("Remove step")
-                                .clicked()
-                            {
-                                gui_out = Some(GuiCmd::LocalItemRemove(step_idx));
-                            }
-                            gui_out
+                                ui.separator();
+                                let enable_disable_text = if is_enabled { "on" } else { "off" };
+                                gui_out = gui_out.or(bool_to_simple_change_gui_cmd(
+                                    ui.checkbox(self.get_enabled_ref_mut(), enable_disable_text).changed(),
+                                ));
+
+                                ui.separator();
+                                ui.scope(|ui| {
+                                    ui.set_max_width(EMBEDDED_GRAPH_MAX_WIDTH);
+                                    if draw_graph_docked_or_windowed(self, gui_in.2.graph_states, ui) {
+                                        gui_out = Some(GuiCmd::ConfigChangeSimple);
+                                    }
+                                });
+
+                                let (last_in, last_out) = self.common_state_ref().get_last_known_io();
+                                let in_rel_txt = self.common_state_ref().get_in_relativity().to_string();
+                                let out_rel_txt = self.common_state_ref().get_out_relativity().to_string();
+                                let srcs_txt = gui_style.tfm_io_info_decorate(
+                                    format!(
+                                        "{} ({:+08.2}) {}",
+                                        in_rel_txt,
+                                        last_in,
+                                        self.common_state_ref().get_in_interval(),
+                                    )
+                                    .into(),
+                                    self.is_enabled(),
+                                );
+
+                                let dst_txt = gui_style.tfm_io_info_decorate(
+                                    format!(
+                                        "-> {} ({:+08.2}) {}",
+                                        out_rel_txt,
+                                        last_out,
+                                        self.common_state_ref().get_out_interval()
+                                    )
+                                    .into(),
+                                    self.is_enabled(),
+                                );
+
+                                ui.label(srcs_txt);
+                                let mut dynamic_srcs = collect_and_cache_dyn_srcs(ui, self);
+                                if !dynamic_srcs.is_empty() {
+                                    ui.label(gui_style.tfm_io_info_decorate("(+...)".into(), self.is_enabled()))
+                                        .on_hover_ui(|ui| {
+                                            draw_dyn_value_refs_list(
+                                                ui,
+                                                &mut dynamic_srcs,
+                                                "aux transform step dynamic sources",
+                                            )
+                                        });
+                                }
+
+                                ui.label(dst_txt);
+                                let mut dynamic_dsts = collect_and_cache_dyn_dsts(ui, self);
+                                if !dynamic_dsts.is_empty() {
+                                    ui.label(gui_style.tfm_io_info_decorate("(+...)".into(), self.is_enabled()))
+                                        .on_hover_ui(|ui| {
+                                            draw_dyn_value_refs_list(
+                                                ui,
+                                                &mut dynamic_dsts,
+                                                "aux transform step dynamic destinations",
+                                            )
+                                        });
+                                }
+
+                                ui.separator();
+                                if ui
+                                    .button(egui_phosphor::bold::TRASH.to_string())
+                                    .on_hover_text("Remove step")
+                                    .clicked()
+                                {
+                                    gui_out = Some(GuiCmd::LocalItemRemove(step_idx));
+                                }
+                                gui_out
+                            })
+                            .inner
                         })
-                        .inner
-                    })
-                    .body(|ui| {
-                        if crate::config::MORE_DEBUG {
-                            ui.label(format!("{:?}", ui.id()));
-                        }
-                        if !is_enabled {
-                            // let mut style = ui.style().as_ref().clone();
-                            // style.visuals.widgets.inactive.fg_stroke.color =
-                            //     style.visuals.widgets.inactive.fg_stroke.color.gamma_multiply(0.3);
-                            // ui.set_style(style);
-                            ui.disable();
-                        }
+                        .body(|ui| {
+                            if crate::config::MORE_DEBUG {
+                                ui.label(format!("{:?}", ui.id()));
+                            }
+                            if !is_enabled {
+                                // let mut style = ui.style().as_ref().clone();
+                                // style.visuals.widgets.inactive.fg_stroke.color =
+                                //     style.visuals.widgets.inactive.fg_stroke.color.gamma_multiply(0.3);
+                                // ui.set_style(style);
+                                ui.disable();
+                            }
 
-                        // if let Some(desc) = self.description_mut() {
-                        //     ui.separator();
-                        //     if let Some(gui_out) = ui
-                        //         .collapsing("Description", |ui| desc.egui(GuiInKinds::Edit, ui))
-                        //         .body_returned
-                        //         .unwrap_or_default()
-                        //     {
-                        //         return Some(gui_out);
-                        //     }
-                        // }
+                            // if let Some(desc) = self.description_mut() {
+                            //     ui.separator();
+                            //     if let Some(gui_out) = ui
+                            //         .collapsing("Description", |ui| desc.egui(GuiInKinds::Edit, ui))
+                            //         .body_returned
+                            //         .unwrap_or_default()
+                            //     {
+                            //         return Some(gui_out);
+                            //     }
+                            // }
 
-                        ui.separator();
+                            ui.separator();
 
-                        ui.scope(
-                            // .collapsing(
-                            //     "Parameters",
-                            #[allow(unused)]
-                            |ui| {
-                                let label = self.to_string();
-                                let in_interval = self.common_state_ref().get_in_interval();
-                                match self {
-                                    Self::Sum(s) => {
-                                        s.egui((ArithOpType::Sum, gui_in.2.clone_and_push_hier(step_id)), ui)
-                                    }
-                                    Self::Sub(s) => {
-                                        s.egui((ArithOpType::Sub, gui_in.2.clone_and_push_hier(step_id)), ui)
-                                    }
-                                    Self::Mul(s) => {
-                                        s.egui((ArithOpType::Mul, gui_in.2.clone_and_push_hier(step_id)), ui)
-                                    }
-                                    Self::Div(s) => {
-                                        s.egui((ArithOpType::Div, gui_in.2.clone_and_push_hier(step_id)), ui)
-                                    }
-                                    Self::VelocityToDisplacement(s) => s.egui(gui_in.2, ui),
-                                    #[cfg(feature = "scripting")]
-                                    Self::Script(s) => s.egui(
-                                        (
-                                            step_id,
-                                            gui_in.2.clone_and_push_hier(step_id),
-                                            gui_in.2.cfg_variables,
-                                            gui_in.2.cfg_devices,
+                            ui.scope(
+                                // .collapsing(
+                                //     "Parameters",
+                                #[allow(unused)]
+                                |ui| {
+                                    let label = self.to_string();
+                                    let in_interval = self.common_state_ref().get_in_interval();
+                                    match self {
+                                        Self::Sum(s) => {
+                                            s.egui((ArithOpType::Sum, gui_in.2.clone_and_push_hier(step_id)), ui)
+                                        }
+                                        Self::Sub(s) => {
+                                            s.egui((ArithOpType::Sub, gui_in.2.clone_and_push_hier(step_id)), ui)
+                                        }
+                                        Self::Mul(s) => {
+                                            s.egui((ArithOpType::Mul, gui_in.2.clone_and_push_hier(step_id)), ui)
+                                        }
+                                        Self::Div(s) => {
+                                            s.egui((ArithOpType::Div, gui_in.2.clone_and_push_hier(step_id)), ui)
+                                        }
+                                        Self::VelocityToDisplacement(s) => s.egui(gui_in.2, ui),
+                                        #[cfg(feature = "scripting")]
+                                        Self::Script(s) => s.egui(
+                                            (
+                                                step_id,
+                                                gui_in.2.clone_and_push_hier(step_id),
+                                                gui_in.2.cfg_variables,
+                                                gui_in.2.cfg_devices,
+                                            ),
+                                            ui,
                                         ),
-                                        ui,
-                                    ),
-                                    Self::Nop(_) | Self::Invert(_) => None,
-                                    Self::Integrate(s) => s.egui(&gui_in.2, ui),
-                                    Self::Steering(s) => {
-                                        ui.push_id(state_id, |ui| s.egui(gui_in.2.clone_and_push_hier(step_id), ui))
-                                            .inner
+                                        Self::Nop(_) | Self::Invert(_) => None,
+                                        Self::Integrate(s) => s.egui(&gui_in.2, ui),
+                                        Self::Steering(s) => {
+                                            ui.push_id(state_id, |ui| s.egui(gui_in.2.clone_and_push_hier(step_id), ui))
+                                                .inner
+                                        }
+                                        Self::Clamp(s) => s.egui(&gui_in.2, ui),
+                                        Self::RaiseFall(s) => s.egui((&gui_in.2, in_interval), ui),
+                                        Self::Ema(s) => s.egui(&gui_in.2, ui),
+                                        Self::Linear(s) => s.egui(in_interval, ui),
+                                        Self::Smoothstep(_) => None,
+                                        Self::SCurve(s) => s.egui((), ui),
+                                        Self::Exp(s) => s.egui((), ui),
+                                        Self::SignedPower(s) => s.egui((), ui),
+                                        Self::OneEuro(s) => s.egui(&gui_in.2, ui), // Self::_HighPass(_) => None,
+                                                                                   // Self::_ForceFeedback(_) => None,
                                     }
-                                    Self::Clamp(s) => s.egui(&gui_in.2, ui),
-                                    Self::RaiseFall(s) => s.egui((&gui_in.2, in_interval), ui),
-                                    Self::Ema(s) => s.egui(&gui_in.2, ui),
-                                    Self::Linear(s) => s.egui(in_interval, ui),
-                                    Self::Smoothstep(_) => None,
-                                    Self::SCurve(s) => s.egui((), ui),
-                                    Self::Exp(s) => s.egui((), ui),
-                                    Self::SignedPower(s) => s.egui((), ui),
-                                    Self::OneEuro(s) => s.egui(&gui_in.2, ui), // Self::_HighPass(_) => None,
-                                                                               // Self::_ForceFeedback(_) => None,
-                                }
-                            },
-                        )
-                        .inner
-                    });
+                                },
+                            )
+                            .inner
+                        });
 
-                header_response.1.inner.or(header_response.2.and_then(|v| v.inner))
-            },
-        )
-        .inner
+                    header_response.1.inner.or(header_response.2.and_then(|v| v.inner))
+                },
+            )
+            .inner;
+
+        if gui_out.is_some() {
+            clear_dyn_srcs_and_dsts_cache(ui, self);
+        }
+
+        gui_out
     }
 }
 
@@ -1403,6 +1471,7 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
                 if let Some(acc) = &mut self.accumulator {
                     if ui.button("Use built-in accumulator").clicked() {
                         self.accumulator = None;
+                        *gui_out_mut = bool_to_simple_change_gui_cmd(true);
                     } else {
                         ui.separator();
                         acc.egui(
