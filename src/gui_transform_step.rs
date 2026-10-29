@@ -239,117 +239,123 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
         let mut gui_out = None;
         let gui_out_mut = &mut gui_out;
 
-        ui.separator();
+        let is_win_opened_egui_id = ui.make_persistent_id("+ add step").with(*self.id); // gui::Id::new("Create new step window").with(self.id); // ui.make_persistent_id("..");
+        let is_win_opened = &mut ui.data_mut(|d| d.get_temp::<bool>(is_win_opened_egui_id).unwrap_or(false));
 
-        // ui.collapsing("Description", |ui| self.desc.egui(GuiInKinds::Edit, ui))
-        //     .body_returned
-        //     .unwrap_or_default()
-        //     .inspect(|out| *gui_out_mut = Some(out.clone()));
-
-        if let AutoOrManual::Manual(in_meta) = self.in_meta_mut() {
-            ui.separator();
-            let mut changed = false;
+        ui.scope(|ui| {
+            ui.add_space(5.0);
             ui.horizontal(|ui| {
-                ui.label("Input range:");
-                changed |= in_meta.interval.egui(
-                    GuiInInterval::Edit {
-                        max_range: HID_AXIS_MAX_RANGE,
-                        from_label: "",
-                        to_label: "",
-                        sanitize_and_sort: true,
-                        truncate: false,
-                    },
-                    ui,
-                );
+                // ui.collapsing("Description", |ui| self.desc.egui(GuiInKinds::Edit, ui))
+                //     .body_returned
+                //     .unwrap_or_default()
+                //     .inspect(|out| *gui_out_mut = Some(out.clone()));
 
-                ui.separator();
-                ui.label("Input relativity:");
-                changed |= in_meta.relativity.egui(GuiInKinds::Edit, ui).is_some();
-            });
-
-            if changed {
-                self.recompute_metadata_and_sanitize_recursive(None);
-                *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
-            }
-        } else {
-            ui.horizontal(|ui| {
-                ui.label(format!(
-                    "{} {} -> {} {}",
-                    self.get_in_relativity(),
-                    self.get_in_interval(),
-                    self.get_out_relativity(),
-                    self.get_out_interval(),
-                ));
-            });
-        }
-
-        ui.separator();
-        ui.horizontal(|ui| {
-            // '_Add_New_Tfm_Step:
-            let is_win_opened_egui_id = ui.make_persistent_id("+ add step").with(*self.id); // gui::Id::new("Create new step window").with(self.id); // ui.make_persistent_id("..");
-            let is_win_opened = &mut ui.data_mut(|d| d.get_temp::<bool>(is_win_opened_egui_id).unwrap_or(false));
-            if !*is_win_opened {
-                if ui.small_button("add step".to_string()).clicked() {
-                    *is_win_opened = true;
-                }
-            } else {
-                ui.label("... choosing step to add ...");
-            }
-
-            let step_to_add_opt = egui::Window::new("Select transformation to add...")
-                .id(is_win_opened_egui_id)
-                .open(is_win_opened)
-                .resizable(true)
-                .order(egui::Order::TOP)
-                .show(ui.ctx(), |ui| {
-                    ui.separator();
-                    static STEPS_TEMPLATES_CLASSIFIED_CACHE: std::sync::LazyLock<
-                        /* TODO?: excessive mutex here makes it Sync to be used with static.
-                        refactor: can use std::cell::LazyCell and no excessive synchronization at all,
-                        but need to put it in app struct, without going for static */
-                        std::sync::Mutex<BTreeMap<TfmClassification, Vec<TfmStepCfg>>>,
-                    > = std::sync::LazyLock::new(|| {
-                        let mut db: BTreeMap<TfmClassification, Vec<TfmStepCfg>> = Default::default();
-                        for step in TfmStepCfg::iter() {
-                            for class in step.get_operation_classification() {
-                                db.entry(*class).or_default().push(step.clone());
-                            }
+                ui.horizontal(|ui| {
+                    ui.label(format!(
+                        "{} {} -> ...",
+                        self.get_in_relativity(),
+                        self.get_in_interval(),
+                    ));
+                    if !*is_win_opened {
+                        if ui
+                            .small_button("add step".to_string())
+                            .on_hover_text("Hint: to choose the new step click on its name or drag and drop into appropriate slot in the pipeline")
+                            .clicked()
+                        {
+                            *is_win_opened = true;
                         }
-                        db.into()
-                    });
-                    let mut step_to_add = None;
-                    for (class, steps) in &*STEPS_TEMPLATES_CLASSIFIED_CACHE.lock().unwrap() {
-                        ui.collapsing(class.to_string(), |ui| {
-                            for step in steps.iter() {
-                                let btn_response = ui.add(Button::new(step.to_string()).sense(Sense::click_and_drag()));
-                                if btn_response.clicked() {
-                                    step_to_add = Some(step.duplicate_with_new_state());
-                                } else if btn_response.drag_started() {
-                                    btn_response.dnd_set_drag_payload(GuiDndJob::NewTfmStep(std::sync::Arc::new(
-                                        std::sync::Mutex::new(GuiDndJobNewTfmStep {
-                                            step: step.duplicate_with_new_state(),
-                                        }),
-                                    )));
-                                    // TODO?: maybe visual feedback of draggin the button...
-                                }
-                            }
-                        });
+                    } else {
+                        ui.label("... choosing step to add ...");
                     }
-                    ui.separator();
-                    step_to_add
+                    ui.label(format!(
+                        " ... -> {} {}",
+                        self.get_out_relativity(),
+                        self.get_out_interval(),
+                    ));
+
+                    if let AutoOrManual::Manual(in_meta) = self.in_meta_mut() {
+                        ui.separator();
+                        let mut changed = false;
+                        ui.horizontal(|ui| {
+                            ui.label("Input range:");
+                            changed |= in_meta.interval.egui(
+                                GuiInInterval::Edit {
+                                    max_range: HID_AXIS_MAX_RANGE,
+                                    from_label: "",
+                                    to_label: "",
+                                    sanitize_and_sort: true,
+                                    truncate: false,
+                                },
+                                ui,
+                            );
+
+                            ui.separator();
+                            ui.label("Input relativity:");
+                            changed |= in_meta.relativity.egui(GuiInKinds::Edit, ui).is_some();
+                        });
+
+                        if changed {
+                            self.recompute_metadata_and_sanitize_recursive(None);
+                            *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
+                        }
+                    }
                 });
 
-            if let Some(step_to_add) = step_to_add_opt
-                && let Some(step) = step_to_add.inner.flatten()
-            {
-                self.steps.push(step);
-                *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
-            }
+                let step_to_add_opt = egui::Window::new("Select transformation to add...")
+                    .id(is_win_opened_egui_id)
+                    .open(is_win_opened)
+                    .resizable(true)
+                    .order(egui::Order::TOP)
+                    .show(ui.ctx(), |ui| {
+                        ui.separator();
+                        static STEPS_TEMPLATES_CLASSIFIED_CACHE: std::sync::LazyLock<
+                            /* TODO?: excessive mutex here makes it Sync to be used with static.
+                            refactor: can use std::cell::LazyCell and no excessive synchronization at all,
+                            but need to put it in app struct, without going for static */
+                            std::sync::Mutex<BTreeMap<TfmClassification, Vec<TfmStepCfg>>>,
+                        > = std::sync::LazyLock::new(|| {
+                            let mut db: BTreeMap<TfmClassification, Vec<TfmStepCfg>> = Default::default();
+                            for step in TfmStepCfg::iter() {
+                                for class in step.get_operation_classification() {
+                                    db.entry(*class).or_default().push(step.clone());
+                                }
+                            }
+                            db.into()
+                        });
+                        let mut step_to_add = None;
+                        for (class, steps) in &*STEPS_TEMPLATES_CLASSIFIED_CACHE.lock().unwrap() {
+                            ui.collapsing(class.to_string(), |ui| {
+                                for step in steps.iter() {
+                                    let btn_response =
+                                        ui.add(Button::new(step.to_string()).sense(Sense::click_and_drag()));
+                                    if btn_response.clicked() {
+                                        step_to_add = Some(step.duplicate_with_new_state());
+                                    } else if btn_response.drag_started() {
+                                        btn_response.dnd_set_drag_payload(GuiDndJob::NewTfmStep(std::sync::Arc::new(
+                                            std::sync::Mutex::new(GuiDndJobNewTfmStep {
+                                                step: step.duplicate_with_new_state(),
+                                            }),
+                                        )));
+                                        // TODO?: maybe visual feedback of draggin the button...
+                                    }
+                                }
+                            });
+                        }
+                        ui.separator();
+                        step_to_add
+                    });
 
-            ui.data_mut(|d| d.insert_temp(is_win_opened_egui_id, *is_win_opened));
+                if let Some(step_to_add) = step_to_add_opt
+                    && let Some(step) = step_to_add.inner.flatten()
+                {
+                    self.steps.push(step);
+                    *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
+                }
+
+                ui.data_mut(|d| d.insert_temp(is_win_opened_egui_id, *is_win_opened));
+            });
+            ui.add_space(3.0);
         });
-
-        ui.separator();
 
         let mut matched_dnd_job = None;
         let hier = gui_in.get_hier().unwrap();
