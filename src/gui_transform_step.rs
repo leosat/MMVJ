@@ -1468,31 +1468,19 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
         ui.separator();
         ui.collapsing("Accumulator", |ui| {
             ui.horizontal(|ui| {
-                if let Some(acc) = &mut self.accumulator {
-                    if ui.button("Use built-in accumulator").clicked() {
-                        self.accumulator = None;
-                        *gui_out_mut = bool_to_simple_change_gui_cmd(true);
-                    } else {
-                        ui.separator();
-                        acc.egui(
-                            GuiInValue::Edit(GuiInValueEditParams {
-                                allow_interval_edit: false,
-                                slider_log_scale: false,
-                                name: "Accumulator",
-                                choice_case: ValueUsageContext::TfmStepAuxXrc.into(),
-                                gui_common_ctx: &gui_in,
-                            }),
-                            ui,
-                        )
-                        .inspect(|out| *gui_out_mut = Some(out.clone()));
-                        ui.separator();
-                    }
-                } else {
-                    if ui.button("Use custom accumulator").clicked() {
-                        self.accumulator = Some(Default::default());
-                        *gui_out_mut = bool_to_simple_change_gui_cmd(true);
-                    }
-                }
+                self.accumulator
+                    .egui(
+                        GuiInValue::Edit(GuiInValueEditParams {
+                            allow_interval_edit: false,
+                            slider_log_scale: false,
+                            name: "Accumulator",
+                            choice_case: ValueUsageContext::TfmStepAuxXrc.into(),
+                            gui_common_ctx: &gui_in,
+                        }),
+                        ui,
+                    )
+                    .inspect(|out| *gui_out_mut = Some(out.clone()));
+                ui.separator();
             });
 
             ui.separator();
