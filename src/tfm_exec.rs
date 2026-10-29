@@ -1006,9 +1006,7 @@ impl WithTfmExec for SteeringCfg {
 
         let mut post_filter: BaseNumT;
 
-        if let Some(acc) = &self.accumulator {
-            state.pre_filter = acc.port_get_numeric_value(Some(ctx));
-        }
+        state.pre_filter = self.accumulator.port_get_numeric_value(Some(ctx));
 
         state.pre_filter = SYMM_UNIT_INTERVAL.clamp(state.pre_filter.add(delta));
 
@@ -1153,9 +1151,8 @@ impl WithTfmExec for SteeringCfg {
 
         state.last_time = now;
 
-        if let Some(acc) = self.accumulator.as_ref() {
-            acc.port_set_numeric_value_and_flush_to_devices(state.pre_filter, ctx);
-        }
+        self.accumulator
+            .port_set_numeric_value_and_flush_to_devices(state.pre_filter, ctx);
 
         post_filter
     }

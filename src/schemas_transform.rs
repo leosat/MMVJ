@@ -48,7 +48,7 @@ use traversable::Traversable;
 use traversable::TraversableMut;
 
 // =================================================
-fn skip_serializing_value_port(port: &impl ValuePortIface) -> bool {
+fn is_value_port_to_xrc_sink(port: &impl ValuePortIface) -> bool {
     use crate::schemas_value::ValueIface;
     port.port_inner_ref().value_is_xrc_sink()
 }
@@ -1729,7 +1729,7 @@ pub(crate) struct IntegrateCfg {
     #[traverse(skip)]
     pub(crate) out_interval: NumInterval<BaseNumT>,
     #[serde(default)]
-    #[serde(skip_serializing_if = "skip_serializing_value_port")]
+    #[serde(skip_serializing_if = "is_value_port_to_xrc_sink")]
     #[garde(skip)]
     pub(crate) accumulator: ValuePort<ValueXrcs, SanPolicyNone, RemapPolicyUnit>,
     #[serde(default = "default_one")]
@@ -2289,15 +2289,13 @@ pub(crate) struct SteeringCfg {
     #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
     pub(crate) enabled: EnabledFlagCfg,
 
-    /// Optional external variable (or device control) that persists the raw
+    /// Accumulator that persists the raw
     /// accumulated wheel angle (`pre_filter`) across ticks.
     ///
-    /// Useful for sharing wheel state across mappings or for inspection.
-    #[garde(skip)]
     #[serde(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[sanitize_inplace(skip)]
-    pub(crate) accumulator: Option<ValuePort<ValueXrcs, SanPolicyNone, RemapPolicySymmUnit>>,
+    #[serde(skip_serializing_if = "is_value_port_to_xrc_sink")]
+    #[garde(skip)]
+    pub(crate) accumulator: ValuePort<ValueXrcs, SanPolicyNone, RemapPolicySymmUnit>,
 
     /// *(Reserved — currently unused.)*
     ///
