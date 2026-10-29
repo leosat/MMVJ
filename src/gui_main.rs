@@ -27,7 +27,7 @@ use crate::schemas_mapping::MapperModeKind;
 #[cfg(feature = "midi")]
 use crate::schemas_midi::MidiMatcherCfg;
 use crate::schemas_ui::UiMonitorsCfg;
-use crate::schemas_value::VariableState;
+use crate::schemas_value::VariableCfg;
 use eframe::egui::{self};
 use eframe::egui_glow;
 use egui::scroll_area::ScrollSource;
@@ -209,7 +209,7 @@ pub(crate) struct GuiMain {
     pending_cmds: Vec<PendingCommand>,
     post_draw_cmds: Vec<PendingCommand>,
     // ---
-    transient_states_variable_edit: HashMap<String, GuiTransientStateItemEdit<VariableState>>,
+    transient_states_variable_edit: HashMap<String, GuiTransientStateItemEdit<VariableCfg>>,
     transient_states_device_key_edit: HashMap<String, String>,
     pub transient_states_script_aux_edit: UncheckedRefCell<HashMap<(ObjId, ScriptAuxKind), (String, String)>>,
     // ---
@@ -1368,7 +1368,7 @@ impl GuiMain {
         {
             self.cfg.variables.insert(
                 get_item_name_with_random_suffix("New Variable", self.cfg.variables.len() + 1),
-                VariableState::default(),
+                VariableCfg::default(),
             );
             self.submit_post_draw_cmd(GuiCmd::ConfigChangeSimple);
         }

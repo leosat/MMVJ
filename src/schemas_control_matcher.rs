@@ -3,7 +3,6 @@ use serde::Serialize;
 use std::sync::atomic::AtomicBool;
 use traversable::{Traversable, TraversableMut};
 
-use crate::relativity::Relativity;
 #[cfg(feature = "midi")]
 use crate::schemas_midi::MidiControlMatcherCfg;
 use crate::{
@@ -14,6 +13,7 @@ use crate::{
     schemas_hid::HidControlMatcherCfg,
     schemas_value::{WithLastKnownIO, WithLastKnownIOSettable, WithNumericValue, WithNumericValueSettable},
 };
+use crate::{mapping::WithMappingTriggerPredicate, relativity::Relativity};
 
 #[derive(Debug, Clone, Serialize, DeserializeUntaggedVerboseError, PartialEq, TraversableMut, Traversable)]
 #[serde(untagged)]
@@ -21,6 +21,18 @@ pub(crate) enum ControlMatchers {
     #[cfg(feature = "midi")]
     Midi(MidiControlMatcherCfg),
     Hid(HidControlMatcherCfg),
+}
+
+impl WithMappingTriggerPredicate for ControlMatchers {
+    type TriggersMappingIn = ();
+
+    fn triggers_mapping(&self, ctx: Self::TriggersMappingIn) -> bool {
+        match self {
+            #[cfg(feature = "midi")]
+            ControlMatchers::Midi(m) => m.triggers_mapping(ctx),
+            ControlMatchers::Hid(h) => h.triggers_mapping(ctx),
+        }
+    }
 }
 
 impl WithNumericValueSettable for ControlMatchers {

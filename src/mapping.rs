@@ -23,8 +23,8 @@ use crate::schemas_midi::MidiMatcherCfg;
 use crate::schemas_transform::{DynValFilter, collect_dynamic_value_matchers};
 use crate::schemas_value::WithNumericValue;
 use crate::schemas_value::{
-    DeviceControlMatcherRef, DynValueRefs, ValueDsts, WithDeviceControlMatcherRef, WithLastKnownIOSettable,
-    WithNumInterval, WithNumericValueSettable,
+    DeviceControlMatcherRef, ValueDsts, WithDeviceControlMatcherRef, WithLastKnownIOSettable, WithNumInterval,
+    WithNumericValueSettable,
 };
 use crate::schemas_value::{ValueSrcs, WithRelativity};
 
@@ -58,6 +58,12 @@ pub(crate) enum MappingEngineCmd {
     #[default]
     UpdateMappingRouterIdleTickOnly,
     UpdateMappingRouter,
+}
+
+// ---------------------------------------------
+pub(crate) trait WithMappingTriggerPredicate {
+    type TriggersMappingIn;
+    fn triggers_mapping(&self, ctx: Self::TriggersMappingIn) -> bool;
 }
 
 // ---------------------------------------------
@@ -267,11 +273,16 @@ impl<
                             ctx.contains(DynValFilter::Control | DynValFilter::Src)
                         })
                         .iter()
-                        .map(|v| match v {
-                            DynValueRefs::DeviceControlMatcher(dcm) => dcm.clone(),
-                            _ => unreachable!(),
+                        .map(|v| {
+                            v.get_device_control_matcher_ref()
+                                .expect("Only device control matchers expected here")
+                                .clone()
                         })
-                        .filter(|src| src.device_matcher_key == *dmk && src.control_matcher.get_id() == cm_id)
+                        .filter(|src| {
+                            src.device_matcher_key == *dmk
+                                && src.control_matcher.get_id() == cm_id
+                                && src.triggers_mapping(())
+                        })
                         .collect::<Vec<_>>()
                         .is_empty()
                         .not()
@@ -604,7 +615,8 @@ impl<
                 })
                 .for_each(|(cm_idx, cm)| {
                     cm.set_numeric_value(event.data.get_operational_value());
-                    if !mappings[cm_idx].is_empty() {
+
+                    if cm.triggers_mapping(()) && !mappings[cm_idx].is_empty() {
                         mapped = true;
                         if event.data.message_type.is_a_button() {
                             self.scheduled_mappings_immediate.extend(&mappings[cm_idx]);
@@ -632,7 +644,7 @@ impl<
                     event.data.value
                 });
 
-                if !mappings[cm_idx].is_empty() {
+                if cm.triggers_mapping(()) && !mappings[cm_idx].is_empty() {
                     mapped = true;
                     if event.data.control_type.is_button() || event.data.control_type.is_key() {
                         self.scheduled_mappings_immediate.extend(&mappings[cm_idx]);

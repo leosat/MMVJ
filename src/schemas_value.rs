@@ -15,8 +15,8 @@ use std::{
     },
 };
 
-use crate::num_interval::ZERO_INTERVAL;
 use crate::relativity::Relativity;
+use crate::{mapping::WithMappingTriggerPredicate, num_interval::ZERO_INTERVAL};
 use crate::{
     num_interval::UNIT_INTERVAL,
     schemas_value_port::{WithNumIntervalSanitizerStatic, WithNumericValueSanitizerStatic},
@@ -204,7 +204,7 @@ pub(crate) mod variable_value_serde {
 }
 
 #[derive(JsonSchema, Debug, Clone, Deserialize, Serialize, TraversableMut, Traversable, Default)]
-pub(crate) struct VariableState {
+pub(crate) struct VariableCfg {
     #[traverse(skip)]
     #[serde(alias = "range")]
     #[serde(rename = "range")]
@@ -228,19 +228,27 @@ pub(crate) struct VariableState {
     _dst_refs_count: Arc<CachePadded<AtomicUsize>>,
 }
 
-impl WithNumIntervalMut for VariableState {
+impl WithMappingTriggerPredicate for VariableCfg {
+    type TriggersMappingIn = ();
+
+    fn triggers_mapping(&self, _ctx: Self::TriggersMappingIn) -> bool {
+        false
+    }
+}
+
+impl WithNumIntervalMut for VariableCfg {
     fn interval_mut(&mut self) -> &mut NumInterval<Self::ValueT> {
         &mut self.interval
     }
 }
 
-impl PartialEq for VariableState {
+impl PartialEq for VariableCfg {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
-impl VariableState {
+impl VariableCfg {
     pub(crate) fn new(interval: NumInterval<BaseNumT> /*, relativity: Relativity */) -> Self {
         Self {
             interval,
@@ -252,7 +260,7 @@ impl VariableState {
     }
 }
 
-impl WithRuntimeId for VariableState {
+impl WithRuntimeId for VariableCfg {
     fn get_id(&self) -> ObjId {
         self.id
     }
@@ -268,7 +276,7 @@ impl WithRuntimeId for VariableState {
 //     }
 // }
 
-impl WithNumericValue for VariableState {
+impl WithNumericValue for VariableCfg {
     fn get_numeric_value(&self) -> BaseNumT {
         self.value.load(std::sync::atomic::Ordering::Relaxed) as BaseNumT
     }
@@ -276,13 +284,13 @@ impl WithNumericValue for VariableState {
     type ValueT = BaseNumT;
 }
 
-impl WithRelativity for VariableState {
+impl WithRelativity for VariableCfg {
     fn get_relativity(&self) -> Relativity {
         Relativity::Abs
     }
 }
 
-impl WithNumInterval for VariableState {
+impl WithNumInterval for VariableCfg {
     fn get_interval(&self) -> NumInterval<Self::ValueT> {
         self.interval
     }
@@ -296,11 +304,19 @@ pub(crate) struct VariableRef {
     pub(crate) variable_key: String,
     #[serde(skip)]
     #[serde(default = "dummy_variable")]
-    pub(crate) variable: VariableState,
+    pub(crate) variable: VariableCfg,
 }
 
-pub(crate) fn dummy_variable() -> VariableState {
-    VariableState::new(ZERO_INTERVAL /*, Relativity::Abs*/)
+impl WithMappingTriggerPredicate for VariableRef {
+    type TriggersMappingIn = ();
+
+    fn triggers_mapping(&self, ctx: Self::TriggersMappingIn) -> bool {
+        self.variable.triggers_mapping(ctx)
+    }
+}
+
+pub(crate) fn dummy_variable() -> VariableCfg {
+    VariableCfg::new(ZERO_INTERVAL /*, Relativity::Abs*/)
 }
 
 impl Eq for VariableRef {}
@@ -344,6 +360,17 @@ impl WithDeviceControlMatcherRef for ValueSrcs {
     }
 }
 
+impl WithMappingTriggerPredicate for ValueSrcs {
+    type TriggersMappingIn = ();
+
+    fn triggers_mapping(&self, ctx: Self::TriggersMappingIn) -> bool {
+        match self {
+            ValueSrcs::Static(_) => false,
+            ValueSrcs::Dynamic(d) => d.triggers_mapping(ctx),
+        }
+    }
+}
+
 impl WithDeviceControlMatcherRef for ValueDsts {
     fn get_device_control_matcher_ref(&self) -> Option<&crate::schemas_value::DeviceControlMatcherRef> {
         if let Self::Dynamic(DynValueRefs::DeviceControlMatcher(d)) = self {
@@ -371,6 +398,14 @@ pub(crate) struct DeviceControlMatcherRef {
     #[serde(skip)]
     #[serde(default = "dummy_control_matcher")]
     pub(crate) control_matcher: ControlMatchers,
+}
+
+impl WithMappingTriggerPredicate for DeviceControlMatcherRef {
+    type TriggersMappingIn = ();
+
+    fn triggers_mapping(&self, ctx: Self::TriggersMappingIn) -> bool {
+        self.control_matcher.triggers_mapping(ctx)
+    }
 }
 
 impl WithNumInterval for DeviceControlMatcherRef {
@@ -411,6 +446,17 @@ pub(crate) fn dummy_control_matcher() -> ControlMatchers {
 pub(crate) enum DynValueRefs {
     DeviceControlMatcher(DeviceControlMatcherRef),
     Variable(VariableRef),
+}
+
+impl WithMappingTriggerPredicate for DynValueRefs {
+    type TriggersMappingIn = ();
+
+    fn triggers_mapping(&self, ctx: Self::TriggersMappingIn) -> bool {
+        match self {
+            DynValueRefs::DeviceControlMatcher(d) => d.triggers_mapping(ctx),
+            DynValueRefs::Variable(v) => v.triggers_mapping(ctx),
+        }
+    }
 }
 
 impl WithDeviceControlMatcherRef for DynValueRefs {
@@ -779,7 +825,7 @@ impl WithNumericValue for VariableRef {
     }
 }
 
-impl WithNumericValueSettable for VariableState {
+impl WithNumericValueSettable for VariableCfg {
     fn set_numeric_value(&self, value: Self::ValueT) {
         self.value.store(value, std::sync::atomic::Ordering::Relaxed);
     }
@@ -1361,7 +1407,7 @@ impl TryFrom<ValueTargets> for DynValueRefs {
     }
 }
 
-impl _WithDstRefCount for VariableState {
+impl _WithDstRefCount for VariableCfg {
     fn _get_dst_refs_count(&self) -> usize {
         self._dst_refs_count.load(std::sync::atomic::Ordering::Relaxed)
     }

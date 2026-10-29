@@ -7,7 +7,7 @@ use crate::{
     schemas_hid::HidControlMatcherCfg,
     schemas_mapping::Mapping,
     schemas_transform::TfmStepCfg,
-    schemas_value::{DeviceControlMatcherRef, VariableRef, VariableState},
+    schemas_value::{DeviceControlMatcherRef, VariableCfg, VariableRef},
 };
 use eframe::egui;
 use egui::{
@@ -69,7 +69,7 @@ impl PartialEq for GuiDndJob {
 pub(crate) struct GuiCmdVariableChange {
     pub(crate) old_key: String,
     pub(crate) new_key: String,
-    pub(crate) new_definition: VariableState,
+    pub(crate) new_definition: VariableCfg,
 }
 
 impl traversable::VisitorMut for GuiCmdVariableChange {

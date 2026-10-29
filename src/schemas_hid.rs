@@ -4,6 +4,7 @@ use crate::{
     device_and_device_manager::{DeviceClassification, WithDeviceClassification},
     hid_device::{HID_AXIS_MAX_INTERVAL, sanitize_hid_name},
     mapped_controls::MappedCtls,
+    mapping::WithMappingTriggerPredicate,
     num_interval::NumInterval,
     schemas_cfg::DescriptionCfg,
     schemas_common::{
@@ -621,6 +622,14 @@ pub(crate) struct HidControlMatcherCfg {
     #[serde(skip)]
     #[traverse(skip)]
     _dst_refs_count: Arc<CachePadded<AtomicUsize>>,
+}
+
+impl WithMappingTriggerPredicate for HidControlMatcherCfg {
+    type TriggersMappingIn = ();
+
+    fn triggers_mapping(&self, _ctx: Self::TriggersMappingIn) -> bool {
+        true
+    }
 }
 
 impl HidControlMatcherCfg {

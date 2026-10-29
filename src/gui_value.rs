@@ -27,7 +27,7 @@ use crate::{
     schemas_control_matcher::ControlMatchers,
     schemas_hid::HidDeviceCfg,
     schemas_value::{
-        DeviceControlMatcherRef, DynValueRefs, ValueDsts, ValueSrcs, ValueTargets, VariableState, WithLastKnownIO,
+        DeviceControlMatcherRef, DynValueRefs, ValueDsts, ValueSrcs, ValueTargets, VariableCfg, WithLastKnownIO,
         WithNumInterval, WithNumIntervalMut, WithNumericValue, WithRelativity,
     },
 };
@@ -514,7 +514,7 @@ impl<'s> DrawEgui<'s> for Relativity {
     }
 }
 
-impl<'s> DrawEgui<'s> for VariableState {
+impl<'s> DrawEgui<'s> for VariableCfg {
     type In = GuiInKinds;
     type Out = bool;
 

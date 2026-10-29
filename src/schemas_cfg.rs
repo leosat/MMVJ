@@ -6,7 +6,7 @@ use crate::schemas_mapping::Mapping;
 #[cfg(feature = "midi")]
 use crate::schemas_midi::MidiMatcherCfg;
 use crate::schemas_ui::UiCfg;
-use crate::schemas_value::VariableState;
+use crate::schemas_value::VariableCfg;
 use anyhow::Result;
 use deserialize_untagged_verbose_error::DeserializeUntaggedVerboseError;
 use garde::Validate;
@@ -228,7 +228,7 @@ config_struct_tpl!(ConfigNew, , DevicesCfgNew);
 
 // --------------------------------------
 
-pub(crate) type VariablesCfg = BTreeMap<String, VariableState>;
+pub(crate) type VariablesCfg = BTreeMap<String, VariableCfg>;
 
 // --------------------------------------
 

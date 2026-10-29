@@ -3,6 +3,7 @@ use crate::schemas_value::{WithLastKnownIO, WithLastKnownIOSettable, WithNumeric
 use crate::{
     base_num::{BaseAtomicT, BaseNumT},
     mapped_controls::{MappedCtls, MappedCtlsMidi},
+    mapping::WithMappingTriggerPredicate,
     num_interval::NumInterval,
     schemas_cfg::DescriptionCfg,
     schemas_common::{
@@ -304,6 +305,14 @@ pub(crate) struct MidiControlMatcherCfg {
     #[serde(skip)]
     #[traverse(skip)]
     _dst_refs_count: Arc<CachePadded<AtomicUsize>>,
+}
+
+impl WithMappingTriggerPredicate for MidiControlMatcherCfg {
+    type TriggersMappingIn = ();
+
+    fn triggers_mapping(&self, _ctx: Self::TriggersMappingIn) -> bool {
+        true
+    }
 }
 
 impl ControlCfgCommonIface for MidiControlMatcherCfg {
