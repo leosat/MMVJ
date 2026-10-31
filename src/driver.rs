@@ -461,7 +461,7 @@ pub async fn run(
                         #[cfg(not(feature = "gui"))]
                         return true; })()
                 => {
-                    if let Some(cfg_file_name) = cfg_mgr.get_cfg_file() &&
+                    if let Some(cfg_file_name) = cfg_mgr.cfg_ref().cfg_file.clone() &&
                         check_and_load_new_cfg(&mut cfg_mgr, &cfg_file_name).is_ok() {
                         log::info!("Config watcher triggered, reloading from file {}.", cfg_file_name.display());
                         mapping_engine.stop()?;
@@ -567,7 +567,8 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                 DriverCmd::LoadCfg { cfg_source, resp_tx } => {
                     match cfg_source {
                         LoadCfgSource::File(cfg_file) => {
-                            let loading_new_cfg_file = cfg_mgr.get_cfg_file().unwrap_or_default() != *cfg_file;
+                            let loading_new_cfg_file =
+                                cfg_mgr.cfg_ref().cfg_file.clone().unwrap_or_default() != *cfg_file;
                             match check_and_load_new_cfg(cfg_mgr, &cfg_file) {
                                 Ok(_) => {
                                     if loading_new_cfg_file {

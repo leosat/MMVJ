@@ -498,22 +498,18 @@ impl Config {
 //------------------------------------------------------
 #[derive(Debug)]
 pub(crate) struct ConfigManager {
-    cfg_file_path_canon: Option<PathBuf>,
     cfg: Config,
 }
 
 impl ConfigManager {
-    pub(crate) fn get_cfg_file(&self) -> Option<PathBuf> {
-        self.cfg_file_path_canon.clone()
-    }
-
     pub(crate) fn set_cfg(&mut self, cfg: Config) {
         self.cfg = cfg;
     }
 
     pub(crate) fn write_schema_and_predefined_controls_files(&self) -> Result<()> {
         if let Some(target_dir) = self
-            .cfg_file_path_canon
+            .cfg
+            .cfg_file
             .as_ref()
             .and_then(|cfg_file| {
                 cfg_file
@@ -590,16 +586,12 @@ impl ConfigManager {
             }
 
             self.cfg.cfg_file = cfg_file_path.to_owned().into();
-            self.cfg_file_path_canon = cfg_file_path_canon.to_owned().into();
             self
         })
     }
 
     pub(crate) fn new() -> Self {
-        Self {
-            cfg_file_path_canon: None,
-            cfg: Config::new(None),
-        }
+        Self { cfg: Config::new(None) }
     }
 
     pub(crate) fn load_demo(&mut self) -> Result<&mut Self> {
@@ -646,7 +638,7 @@ impl ConfigManager {
     pub(crate) fn save(&self, file: &Option<PathBuf>, suffix: &Option<String>) -> Result<()> {
         let file = if let Some(file) = file {
             file.clone()
-        } else if let Some(mut path) = self.cfg_file_path_canon.clone() {
+        } else if let Some(mut path) = self.cfg.cfg_file.clone() {
             if let Some(suffix) = suffix {
                 path.set_extension(suffix);
                 path
