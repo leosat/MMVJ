@@ -102,6 +102,7 @@ async fn main() -> Result<()> {
     }
 
     mmvj_lib::driver::run(
+        cli.cfg_blank,
         cli.cfg_file_path,
         cli.no_hot_reload,
         cli.debug,

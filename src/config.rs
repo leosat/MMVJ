@@ -595,20 +595,18 @@ impl ConfigManager {
     }
 
     pub(crate) fn load_demo(&mut self) -> Result<&mut Self> {
-        log::info!("Loading default bundled demo config");
-        self.load(
-            DEMO_CFG
-                .lock()
-                .unwrap()
-                .first()
-                .map(|v| (v.0.clone(), v.1.clone()))
-                .context("Can't get bundled demo config")?,
-        )
-        .context("Loading demo config failed")
+        let (title, cfg) = DEMO_CFG
+            .lock()
+            .unwrap()
+            .first()
+            .map(|v| (v.0.clone(), v.1.clone()))
+            .context("Can't get bundled demo config")?;
+        log::info!("Loading default bundled demo config ({title})");
+        self.load((title, cfg)).context("Loading demo config failed")
     }
 
     pub(crate) fn load(&mut self, cfg: (String, Config)) -> Result<&mut Self> {
-        log::info!("Loading config {}", cfg.0);
+        log::info!("Loading {} config", cfg.0);
         self.cfg = cfg.1;
         self.cfg.resolve()?;
         self.cfg.validate()?;

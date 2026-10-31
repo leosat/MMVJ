@@ -324,6 +324,18 @@ impl eframe::App for GuiMain {
 
                     ui.menu_button("File", |ui| {
                         ui.separator();
+                        if ui
+                            .button(format!(
+                                "{} {} New blank config",
+                                egui_phosphor::regular::NOTE_BLANK,
+                                egui_phosphor::regular::DOTS_SIX_VERTICAL
+                            ))
+                            .clicked()
+                        {
+                            self.submit_post_draw_cmd(GuiCmd::LoadCfgBlank());
+                        }
+
+                        ui.separator();
                         ui.menu_button(
                             format!(
                                 "{} {} Load demo config",
@@ -350,7 +362,7 @@ impl eframe::App for GuiMain {
                         ui.separator();
                         if ui
                             .button(format!(
-                                "{} {} Load config",
+                                "{} {} Load config from file",
                                 egui_phosphor::regular::FOLDER_OPEN,
                                 egui_phosphor::regular::DOTS_SIX_VERTICAL
                             ))
@@ -359,10 +371,11 @@ impl eframe::App for GuiMain {
                             self.file_picking_action_in_progress = FilePickingAction::Load;
                             self.file_dialog.pick_file();
                         }
+
                         ui.separator();
                         if ui
                             .button(format!(
-                                "{} {} Save config as ..?",
+                                "{} {} Save config as ...",
                                 egui_phosphor::regular::FLOPPY_DISK,
                                 egui_phosphor::regular::DOTS_SIX_VERTICAL
                             ))
@@ -478,11 +491,15 @@ impl eframe::App for GuiMain {
                     }
                 });
                 ui.separator();
-                if let Some(cfg_file) = &self.cfg.cfg_file {
-                    ui.label(format!(" Config file: {}", cfg_file.to_string_lossy()));
-                } else {
-                    ui.label("Running bundled demo config");
-                }
+                ui.label(format!(
+                    "Cfg title: {} | Cfg file: {}",
+                    self.cfg.title,
+                    self.cfg
+                        .cfg_file
+                        .as_ref()
+                        .and_then(|f| Some(f.to_string_lossy().to_string()))
+                        .unwrap_or("no associated file".to_string())
+                ));
             });
 
         egui::CentralPanel::default().show(ui, |ui| {
@@ -1013,6 +1030,27 @@ impl GuiMain {
                     }
                     Err(e) => {
                         return Err(format!("Failed to receive config opened from file from driver: {e:?}"));
+                    }
+                }
+            }
+            GuiCmd::LoadCfgBlank() => {
+                self.reset_available_devices_caches();
+                let (resp_tx, resp_rx) = std::sync::mpsc::channel::<Result<Config, String>>();
+                self.send_driver_cmd(DriverCmd::LoadCfg {
+                    cfg_source: crate::driver::LoadCfgSource::Blank(),
+                    resp_tx,
+                });
+                match resp_rx.recv_timeout(Duration::from_millis(5000)) {
+                    Ok(Ok(new_cfg)) => {
+                        self.cfg = new_cfg;
+                        self.update_cfg_yaml();
+                        self.pending_cmds.clear();
+                    }
+                    Ok(Err(e)) => {
+                        return Err(format!("Failed to load blank config: {e}."));
+                    }
+                    Err(e) => {
+                        return Err(format!("Failed to receive blank config: {e}"));
                     }
                 }
             }

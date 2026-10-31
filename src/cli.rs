@@ -14,6 +14,15 @@ pub struct Cli {
     help = "Path to main config file, including filename.",
     overrides_with = "cfg_file_path", action = ArgAction::Set)]
     pub cfg_file_path: Option<std::path::PathBuf>,
+    #[arg(
+        long,
+        alias = "blank",
+        alias = "config-blank",
+        alias = "blank-config",
+        help = "Load with blank configuration",
+        default_value = "false"
+    )]
+    pub cfg_blank: bool,
     #[arg(long, default_value =  crate::config::APP_DEFAULT_NO_HOT_RELOAD, help = "Disable automatic engine reload on configuration file change.")]
     pub no_hot_reload: bool,
     #[arg(

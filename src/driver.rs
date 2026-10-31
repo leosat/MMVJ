@@ -31,6 +31,7 @@ const COMMAND_RECV_CAPACITY: usize = 100;
 pub(crate) enum LoadCfgSource {
     File(PathBuf),
     Demo(String),
+    Blank(),
 }
 
 #[derive(Debug, Clone)]
@@ -223,6 +224,7 @@ impl MappedMidiManager for MidiManager {}
 
 #[allow(clippy::too_many_arguments)]
 pub async fn run(
+    blank: bool,
     cfg_file_path: Option<PathBuf>,
     no_hot_reload: bool,
     debug: DebugLevel,
@@ -256,6 +258,8 @@ pub async fn run(
 
     if let Some(cfg_file_path) = cfg_file_path.clone() {
         cfg_mgr.load_from_file(cfg_file_path)?;
+    } else if blank {
+        cfg_mgr.load(("blank".to_string(), Default::default()))?;
     } else {
         cfg_mgr.load_demo()?;
     }
@@ -565,6 +569,11 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                     // command_channel_rx.close(); // NB: the channel would be closed anyways after last sender is out, but...
                 }
                 DriverCmd::LoadCfg { cfg_source, resp_tx } => {
+                    let stop_hid = || {
+                        let _ = hid_mgr
+                            .stop(true)
+                            .inspect_err(|e| log::error!("Stopping joysticks failed: {e}."));
+                    };
                     match cfg_source {
                         LoadCfgSource::File(cfg_file) => {
                             let loading_new_cfg_file =
@@ -575,7 +584,7 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                                         log::warn!(
                                             "Loading new configuration file will make persistent joysticks stopped."
                                         );
-                                        hid_mgr.stop(true).expect("Stopping joysticks failed.");
+                                        stop_hid();
                                     }
                                 }
                                 Err(e) => {
@@ -595,7 +604,11 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                                         .expect("Failed to get requested demo config"),
                                 )
                                 .inspect_err(|e| log::error!("{e}"));
-                            hid_mgr.stop(true).expect("Stopping joysticks failed.");
+                            stop_hid();
+                        }
+                        LoadCfgSource::Blank() => {
+                            let _ = cfg_mgr.load(Default::default()).inspect_err(|e| log::error!("{e}"));
+                            stop_hid();
                         }
                     };
 

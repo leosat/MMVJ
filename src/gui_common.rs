@@ -276,6 +276,7 @@ pub(crate) enum GuiCmd {
     // -----------------------------
     LoadCfgFile(PathBuf),
     LoadCfgDemo(String),
+    LoadCfgBlank(),
     SaveCfg(Option<PathBuf>, Option<String>),
     // -----------------------------
     ChangeVirtualHid(GuiCmdChangeVirtualHid),
