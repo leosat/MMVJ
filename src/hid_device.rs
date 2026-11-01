@@ -368,8 +368,6 @@ impl HidDevice {
                 for effect in HidFfEffect::iter() {
                     ff_effects.insert(effect.into());
                 }
-            } else if ff_config.effects.is_empty() {
-                ff_effects.insert(HidFfEffect::Constant.into());
             } else {
                 for effect in ff_config.effects.iter() {
                     ff_effects.insert(effect.clone().into());

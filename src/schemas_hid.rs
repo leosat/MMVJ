@@ -164,12 +164,7 @@ impl WithSelfSanitize for HidDeviceCfg {
             *name = sanitize_hid_name(name).to_string();
         }
         if let Some(ff) = self.virtual_device_force_feedback_info_mut() {
-            if !ff.cond_effects_axis_x.is_absolute() {
-                ff.cond_effects_axis_x = default_ffb_axis_x()
-            }
-            if !ff.cond_effects_axis_y.is_absolute() {
-                ff.cond_effects_axis_y = default_ffb_axis_y()
-            }
+            ff.sanitize_inplace(());
         }
     }
 }
@@ -567,6 +562,26 @@ pub(crate) struct HIDDeviceForceFeedbackCfg {
     #[serde(skip_serializing_if = "is_false")]
     #[garde(skip)]
     pub(crate) fake_accepting_all_effects: bool,
+}
+
+impl WithSelfSanitize for HIDDeviceForceFeedbackCfg {
+    type SanInputT = ();
+
+    fn sanitize_inplace(&mut self, _input: Self::SanInputT) {
+        if self.effects.is_empty() {
+            log::warn!(
+                "Force feedback is enabled, but the list of effects is empty. \
+                Adding Constant force to avoid confusion"
+            );
+            self.effects.push(HidFfEffect::Constant.into());
+        }
+        if !self.cond_effects_axis_x.is_absolute() {
+            self.cond_effects_axis_x = default_ffb_axis_x()
+        }
+        if !self.cond_effects_axis_y.is_absolute() {
+            self.cond_effects_axis_y = default_ffb_axis_y()
+        }
+    }
 }
 
 impl Default for HIDDeviceForceFeedbackCfg {

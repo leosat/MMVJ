@@ -173,7 +173,8 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
 
                     ui.separator();
                     ui.horizontal(|ui| {
-                        ui.label("Long name:");
+                        ui.label("Name:")
+                            .on_hover_text("This name is assigned in the operating system for informal purposes");
                         if ui
                             .text_edit_singleline(
                                 self.virtual_device_name_mut()
