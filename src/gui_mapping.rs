@@ -116,10 +116,10 @@ impl<'s> DrawEgui<'s> for Mapping {
                 /*Last mapping in*/
 
                 ui.horizontal(|ui| {
-                    // ui.label(
-                    //     egui::RichText::new("Main src").strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
-                    // );
-                    // ui.separator();
+                    ui.label(
+                        egui::RichText::new("Src: ").strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
+                    );
+                    ui.separator();
                     self.src
                         .egui(
                             GuiInValue::Edit(GuiInValueEditParams {
@@ -134,10 +134,10 @@ impl<'s> DrawEgui<'s> for Mapping {
                         .inspect(|out| *gui_out_mut = Some(out.clone()));
                     ui.separator();
                     ui.label(
-                        egui::RichText::new(format!("<= {:+08.2}", self.get_last_known_io().0))
+                        egui::RichText::new(format!(" ({:+08.2})", self.get_last_known_io().0))
                             .size(12.0)
                             .strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
-                    );
+                    ).on_hover_text("Value input on last mapping run");
                     ui.separator();
                 });
 
@@ -145,13 +145,23 @@ impl<'s> DrawEgui<'s> for Mapping {
                 draw_dyn_value_refs_list(ui, &mut srcs, "in-pipeline dynamic sources");
 
                 ui.separator();
+                ui.collapsing(
+                    gui_style.tfm_big_title_decorate(egui::RichText::new("Transformation")),
+                    |ui| {
+                        self.transformation
+                            .egui(gui_in_common, ui)
+                            .inspect(|out| *gui_out_mut = Some(out.clone()))
+                    },
+                );
+                ui.separator();
+
                 //---------------------------------------------
                 /*Last mapping out*/
                 ui.horizontal(|ui| {
-                    // ui.label(
-                    //     egui::RichText::new("Main dst").strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
-                    // );
-                    // ui.separator();
+                    ui.label(
+                        egui::RichText::new("Dst: ").strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
+                    );
+                    ui.separator();
                     self.dst
                         .egui(
                             GuiInValue::Edit(GuiInValueEditParams {
@@ -166,10 +176,10 @@ impl<'s> DrawEgui<'s> for Mapping {
                         .inspect(|out| *gui_out_mut = Some(out.clone()));
                     ui.separator();
                     ui.label(
-                        egui::RichText::new(format!("=> {:+08.2}", self.get_last_known_io().1))
+                        egui::RichText::new(format!("({:+08.2})", self.get_last_known_io().1))
                             .size(12.0)
                             .strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
-                    );
+                    ).on_hover_text("Value output on last mapping run");
                     ui.separator();
                 });
 
@@ -177,16 +187,6 @@ impl<'s> DrawEgui<'s> for Mapping {
                 let mut dsts = collect_and_cache_dyn_dsts(ui, &self.transformation);
                 draw_dyn_value_refs_list(ui, &mut dsts, "in-pipeline dynamic destinations");
 
-                ui.separator();
-
-                ui.collapsing(
-                    gui_style.tfm_big_title_decorate(egui::RichText::new("Transformation")),
-                    |ui| {
-                        self.transformation
-                            .egui(gui_in_common, ui)
-                            .inspect(|out| *gui_out_mut = Some(out.clone()))
-                    },
-                );
             });
 
         if gui_out.is_some() {
