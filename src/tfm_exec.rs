@@ -798,7 +798,14 @@ impl WithTfmExec for ScriptCfg {
                                                   args: (String, BaseNumT)|
                           -> std::result::Result<BaseNumT, mlua::Error> {
                         if let Some(tfm) = self.aux_transformations.get(&args.0) {
-                            Ok(tfm.exec(args.1, ctx))
+                            Ok(tfm.exec(
+                                if ctx.is_reactive_mode() || tfm.get_in_relativity().is_absolute() {
+                                    tfm.get_in_interval().clamp(args.1)
+                                } else {
+                                    args.1
+                                },
+                                ctx,
+                            ))
                         } else {
                             Err(mlua::Error::RuntimeError(format!(
                                 "Can't find transformation with key {}",
