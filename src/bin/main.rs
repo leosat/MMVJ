@@ -16,6 +16,10 @@ fn print_app_version_and_built_with_features_banner() {
             "MIDI input (optional, build feature flag: ``midi'')",
             cfg!(feature = "midi"),
         ),
+        (
+            "Scripting with Lua (optional, build feature flag: ``lua'')",
+            cfg!(feature = "lua"),
+        ),
         ("Gui (optional, build feature flag: ``gui'')", cfg!(feature = "gui")),
     ];
 
