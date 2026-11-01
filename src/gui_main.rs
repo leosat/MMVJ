@@ -1044,7 +1044,7 @@ impl GuiMain {
                 }
             }
             GuiCmd::BreakOnErr => {}
-            GuiCmd::SubmitPending(gui_cmd) => self.submit_pending_cmd(*(*gui_cmd).clone()),
+            GuiCmd::_SubmitPending(gui_cmd) => self.submit_pending_cmd(*(*gui_cmd).clone()),
         }
         Ok(())
     }
@@ -1276,7 +1276,7 @@ impl GuiMain {
                             self.draw_device_remove_button(ui, &dmk, true);
                         })
                         .body(|ui| {
-                            if let Some(cmd) = self
+                            if let Some(out) = self
                                 .cfg
                                 .devices
                                 .hid
@@ -1284,16 +1284,25 @@ impl GuiMain {
                                 .unwrap()
                                 .egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui)
                             {
-                                self.submit_post_draw_cmd(GuiCmd::CmdSeqence(vec![
-                                    cmd,
+                                let submit_post_draw = matches!(
+                                    out,
+                                    GuiCmd::DeviceMatcherRename(..) /* TODO: control matcher renaming, when added, goes here to */
+                                );
+
+                                let cmd_seq = GuiCmd::CmdSeqence(vec![
+                                    out,
                                     GuiCmd::BreakOnErr,
-                                    GuiCmd::SubmitPending(
-                                        GuiCmd::ChangeVirtualHid(GuiCmdChangeVirtualHid {
-                                            virtual_hid_key: dmk.clone(),
-                                        })
-                                        .into(),
-                                    ),
-                                ]));
+                                    GuiCmd::ChangeVirtualHid(GuiCmdChangeVirtualHid {
+                                        virtual_hid_key: dmk.clone(),
+                                    })
+                                    .into(),
+                                ]);
+
+                                if submit_post_draw {
+                                    self.submit_post_draw_cmd(cmd_seq);
+                                } else {
+                                    self.submit_pending_cmd(cmd_seq);
+                                }
                             };
                         });
                     }

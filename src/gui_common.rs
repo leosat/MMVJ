@@ -272,7 +272,7 @@ pub(crate) enum GuiCmd {
     CmdSeqence(Vec<GuiCmd>),
     BreakOnErr,
     // -----------------------------
-    SubmitPending(Box<GuiCmd>),
+    _SubmitPending(Box<GuiCmd>),
     // -----------------------------
     LoadCfgFile(PathBuf),
     LoadCfgDemo(String),
