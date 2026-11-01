@@ -130,7 +130,7 @@ impl<'s> DrawEgui<'s> for NumInterval<BaseNumT> {
                             .fixed_decimals(2),
                     )
                     .changed();
-                ui.separator();
+                ui.label(",");
                 if !to_label.is_empty() {
                     ui.label(to_label);
                 }
@@ -422,14 +422,14 @@ where
             // --
             ui.separator();
 
-            ui.label("Range: ");
             if params.allow_interval_edit && this.value_is_static() {
+                ui.label("[");
                 let mut interval = this.get_interval();
                 if interval.egui(
                     GuiInInterval::Edit {
                         max_range: HID_AXIS_MAX_RANGE,
-                        from_label: "From: ",
-                        to_label: "To: ",
+                        from_label: "",
+                        to_label: "",
                         sanitize_and_sort: true,
                         truncate: false,
                     },
@@ -438,7 +438,7 @@ where
                     this.set_interval(interval);
                     changed = true;
                 }
-                ui.label("");
+                ui.label("]");
             } else {
                 ui.label(format!("{}", this.get_interval()));
             }
