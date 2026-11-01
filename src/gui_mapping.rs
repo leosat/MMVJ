@@ -83,9 +83,10 @@ impl<'s> DrawEgui<'s> for Mapping {
 
                     ui.collapsing("Idle tick", |ui| {
                         ui.horizontal(|ui| {
-                            self.run_on_idle
-                                .egui("Run on idle", ui)
-                                .inspect(|out| *gui_out_mut = Some(out.clone()));
+                            if self.run_on_idle
+                                .egui("Run on idle", ui).is_some() {
+                                *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouterIdleTickOnly));
+                            }
                             ui.separator();
                             if *self.run_on_idle {
                                 let shadowing_hint = "Running on idle tick can be automatically shadowed (temporarily disabled) \
