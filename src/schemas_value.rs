@@ -67,6 +67,7 @@ pub(crate) trait ValueIface:
     fn value_identity(&self) -> String;
     fn value_is_static(&self) -> bool;
     fn value_is_xrc_sink(&self) -> bool;
+    fn value_is_void(&self) -> bool;
 }
 
 pub(crate) trait _WithDstRefCount {
@@ -686,6 +687,10 @@ impl ValueIface for ValueSrcs {
     fn value_is_xrc_sink(&self) -> bool {
         false
     }
+
+    fn value_is_void(&self) -> bool {
+        false
+    }
 }
 
 impl WithNumIntervalSettable for ValueSrcs {
@@ -1153,6 +1158,10 @@ impl ValueIface for ValueXrcs {
     fn value_is_static(&self) -> bool {
         false
     }
+
+    fn value_is_void(&self) -> bool {
+        false
+    }
 }
 
 impl WithRelativity for ValueXrcs {
@@ -1252,6 +1261,10 @@ impl ValueIface for ValueDsts {
     }
 
     fn value_is_static(&self) -> bool {
+        self.value_is_void()
+    }
+
+    fn value_is_void(&self) -> bool {
         matches!(self, Self::Void(..))
     }
 }

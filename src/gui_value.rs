@@ -400,6 +400,10 @@ where
                     .value_identity_decorate(egui::RichText::new(this.value_identity())),
             );
 
+            if this.value_is_void() {
+                return None;
+            }
+
             ui.label("Value:");
             let mut value = this.get_numeric_value();
 

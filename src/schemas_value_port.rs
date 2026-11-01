@@ -771,6 +771,10 @@ macro_rules! make_port_inner_nutype {
             fn value_is_static(&self) -> bool {
                 self.as_ref().is_static()
             }
+
+            fn value_is_void(&self) -> bool {
+                self.as_ref().value_is_void()
+            }
         }
 
         impl ::schemars::JsonSchema for $name {
