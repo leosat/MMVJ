@@ -838,6 +838,8 @@ impl GuiMain {
     }
 
     fn execute_gui_command(&mut self, mut gui_cmd: GuiCmd) -> Result<(), String> {
+        const RX_TIMEOUT_MS: u64 = 5000;
+
         match &mut gui_cmd {
             GuiCmd::ScriptAuxRename(cmd) => {
                 if self.cfg.traverse_mut(cmd).is_break() {
@@ -988,69 +990,34 @@ impl GuiMain {
                     report_done_tx: tx,
                 });
                 let _ = rx
-                    .recv_timeout(Duration::from_millis(3000))
+                    .recv_timeout(Duration::from_millis(RX_TIMEOUT_MS))
                     .inspect_err(|e| log::error!("{e}"));
             }
-            GuiCmd::LoadCfgDemo(demo_name) => {
+            GuiCmd::LoadCfgDemo(..) | GuiCmd::LoadCfgFile(..) | GuiCmd::LoadCfgBlank() => {
                 self.reset_available_devices_caches();
+
                 let (resp_tx, resp_rx) = std::sync::mpsc::channel::<Result<Config, String>>();
                 self.send_driver_cmd(DriverCmd::LoadCfg {
-                    cfg_source: crate::driver::LoadCfgSource::Demo(demo_name.clone()),
+                    cfg_source: match gui_cmd {
+                        GuiCmd::LoadCfgDemo(demo_name) => crate::driver::LoadCfgSource::Demo(demo_name.clone()),
+                        GuiCmd::LoadCfgFile(path) => crate::driver::LoadCfgSource::File(path.clone()),
+                        GuiCmd::LoadCfgBlank() => crate::driver::LoadCfgSource::Blank(),
+                        _ => unreachable!(),
+                    },
                     resp_tx,
                 });
-                match resp_rx.recv_timeout(Duration::from_millis(5000)) {
+
+                match resp_rx.recv_timeout(Duration::from_millis(RX_TIMEOUT_MS)) {
                     Ok(Ok(new_cfg)) => {
                         self.cfg = new_cfg;
                         self.update_cfg_yaml();
                         self.pending_cmds.clear();
                     }
                     Ok(Err(e)) => {
-                        return Err(format!("Failed to load demo config: {e:?}"));
+                        return Err(format!("Failed to load config: {e:?}"));
                     }
                     Err(e) => {
-                        return Err(format!("Failed to receive opened demo config from driver: {e:?}"));
-                    }
-                }
-            }
-            GuiCmd::LoadCfgFile(path) => {
-                self.reset_available_devices_caches();
-                let (resp_tx, resp_rx) = std::sync::mpsc::channel::<Result<Config, String>>();
-                self.send_driver_cmd(DriverCmd::LoadCfg {
-                    cfg_source: crate::driver::LoadCfgSource::File(path.clone()),
-                    resp_tx,
-                });
-                match resp_rx.recv_timeout(Duration::from_millis(5000)) {
-                    Ok(Ok(new_cfg)) => {
-                        self.cfg = new_cfg;
-                        self.update_cfg_yaml();
-                        self.pending_cmds.clear();
-                    }
-                    Ok(Err(e)) => {
-                        return Err(format!("Failed to load config from file: {e:?}"));
-                    }
-                    Err(e) => {
-                        return Err(format!("Failed to receive config opened from file from driver: {e:?}"));
-                    }
-                }
-            }
-            GuiCmd::LoadCfgBlank() => {
-                self.reset_available_devices_caches();
-                let (resp_tx, resp_rx) = std::sync::mpsc::channel::<Result<Config, String>>();
-                self.send_driver_cmd(DriverCmd::LoadCfg {
-                    cfg_source: crate::driver::LoadCfgSource::Blank(),
-                    resp_tx,
-                });
-                match resp_rx.recv_timeout(Duration::from_millis(5000)) {
-                    Ok(Ok(new_cfg)) => {
-                        self.cfg = new_cfg;
-                        self.update_cfg_yaml();
-                        self.pending_cmds.clear();
-                    }
-                    Ok(Err(e)) => {
-                        return Err(format!("Failed to load blank config: {e}."));
-                    }
-                    Err(e) => {
-                        return Err(format!("Failed to receive blank config: {e}"));
+                        return Err(format!("Failed to receive opened config from driver: {e:?}"));
                     }
                 }
             }
