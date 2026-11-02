@@ -17,8 +17,8 @@ mod default_config_tests {
     use crate::schemas_hid::HidDeviceCfg;
     use crate::schemas_transform::TfmStepCfg;
     use crate::schemas_value_port::ValuePortIface;
+    use crate::test_utils::TestingLoggerHelper;
     use clap::Parser;
-    use log::LevelFilter;
     use std::collections::HashMap;
     use std::env;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -388,11 +388,7 @@ mod default_config_tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_default_config() {
-        env_logger::builder()
-            .is_test(true)
-            .filter_module("mmvj_lib", LevelFilter::Debug)
-            .try_init()
-            .unwrap();
+        let _testing_logger_helper = TestingLoggerHelper::init();
 
         let cli =
             crate::cli::Cli::parse_from(env::args().skip_while(|arg| arg != &format!("--{}", crate::config::APP_NAME)));

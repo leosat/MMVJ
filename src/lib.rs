@@ -6,6 +6,8 @@ pub mod config;
 pub mod debug;
 pub mod driver;
 pub mod stats;
+#[macro_use]
+pub mod status;
 pub use debug::DebugLevel;
 
 // --------------------------
@@ -76,6 +78,8 @@ pub(crate) mod gui_mapping;
 pub(crate) mod gui_midi;
 #[cfg(feature = "gui")]
 pub(crate) mod gui_monitors;
+#[cfg(feature = "gui")]
+pub mod gui_status;
 #[cfg(feature = "gui")]
 pub(crate) mod gui_style;
 #[cfg(feature = "gui")]

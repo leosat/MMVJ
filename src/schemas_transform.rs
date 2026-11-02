@@ -19,6 +19,7 @@ use crate::schemas_value_port::{
     PortRemapPolicy, RemapPolicyUserDefined, SanPolicyNone, SanPolicyUseFromPortInner, TfmPolicyDisabled, ValuePort,
     ValuePortIface,
 };
+use crate::status::{Status, StatusHayShared, StatusHaySharedAccessor, WithStatus, WithStatusAccessor};
 use crate::tfm_exec::{RaiseFallExeState, SteeringExeState, TfmExeState};
 
 #[cfg(feature = "scripting")]
@@ -156,7 +157,10 @@ pub(crate) struct TfmStepCommonState {
     #[cfg(feature = "gui")]
     pub(crate) gui_trace_graph_opened: Arc<AtomicBool>,
     pub(crate) trace_channel: Option<Arc<TraceChannel>>,
+    status: StatusHayShared,
 }
+
+implement_status_for!(TfmStepCommonState, status);
 
 impl WithLastKnownIO for TfmStepCommonState {
     type LastKnownIOValueT = (BaseNumT, BaseNumT);
@@ -189,6 +193,7 @@ impl Default for TfmStepCommonState {
             trace_channel: None,
             last_in: Default::default(),
             last_out: Default::default(),
+            status: Default::default(),
         }
     }
 }
@@ -1857,6 +1862,8 @@ impl TfmSeqCfg {
         &mut self,
         input: Option<AutoOrManual<InputValueMetadata<BaseNumT>>>,
     ) {
+        // crate::status::set_test_statuses_for(self);
+
         self.out_meta = {
             self.in_meta = input.unwrap_or(self.in_meta);
             let mut cur_relativity = self.in_meta.relativity;
@@ -2007,6 +2014,7 @@ impl From<TfmSeqVariants> for TfmSeqCfg {
                 out_meta: Default::default(),
                 last_io: Default::default(),
                 desc: Default::default(),
+                status: Default::default(),
             },
             TfmSeqVariants::Full(f) => Self {
                 id: f.id,
@@ -2018,6 +2026,7 @@ impl From<TfmSeqVariants> for TfmSeqCfg {
                 out_meta: Default::default(),
                 last_io: Default::default(),
                 desc: f.desc,
+                status: Default::default(),
             },
         }
     }
@@ -2033,6 +2042,7 @@ impl From<TfmSeqCfg> for TfmSeqVariants {
                 last_io: Default::default(),
                 out_meta: Default::default(),
                 desc: value.desc,
+                status: Default::default(),
             })
         } else {
             Self::Short(value.steps)
@@ -2065,6 +2075,10 @@ macro_rules! tfm_seq_tpl {
             #[garde(skip)]
             out_meta: (NumInterval<BaseNumT>, Relativity),
             #[traverse(skip)]
+            #[serde(skip)]
+            #[garde(skip)]
+            status: StatusHayShared,
+            #[traverse(skip)]
             // #[serde(default)]
             #[serde(flatten)]
             #[garde(skip)]
@@ -2081,6 +2095,8 @@ tfm_seq_tpl!(
     name: TfmSeqCfg,
     meta: serde(from = "TfmSeqVariants", into = "TfmSeqVariants")
 );
+
+implement_status_for!(TfmSeqCfg, status);
 
 impl TfmSeqCfg {
     pub(crate) fn skip_serializing(&self) -> bool {

@@ -28,6 +28,8 @@ use crate::schemas_transform::*;
 use crate::schemas_value::AutoOrManual;
 use crate::schemas_value::WithLastKnownIO;
 use crate::schemas_value_port::ValuePortIface;
+use crate::status::WithStatusAccessor;
+use crate::status::WithStatusUtils;
 use crate::tracing::GraphDisplayStyle;
 use egui::{Button, CollapsingHeader, Sense};
 use std::collections::BTreeMap;
@@ -228,6 +230,12 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
         let gui_out_mut = &mut gui_out;
 
         ui.scope(|ui| {
+            if !self.status_hay_accessor().is_empty() {
+                self.clear_expired_status();
+                for status in self.status_hay_accessor().iter_mut() {
+                    status.egui((), ui);
+                }
+            }
 
             let is_win_opened_egui_id = ui.make_persistent_id("+ add step").with(*self.id);
             let mut is_win_opened =

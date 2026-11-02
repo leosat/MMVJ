@@ -112,6 +112,7 @@ include_dir = { version = "0.7.4", features = ["glob"] }
 [dev-dependencies]
 tempfile = "3.10"
 pretty_assertions = "1.4"
+testing_logger = "0.1.1"
 
 [profile.release]
 opt-level = 3
