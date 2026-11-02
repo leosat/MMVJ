@@ -4,7 +4,7 @@ use std::io::IsTerminal;
 
 use anyhow::{Result, bail};
 use clap::Parser;
-use mmvj_lib::config;
+use mmvj_lib::{cli::Cli, config};
 
 fn print_app_version_and_built_with_features_banner() {
     const FEATURES: &[(&str, bool)] = &[
@@ -41,6 +41,15 @@ async fn main() -> Result<()> {
     // -------------------------------------------
     // console_subscriber::init();
 
+    fn running_from_terminal() -> bool {
+        std::io::stdin().is_terminal()
+    }
+
+    #[cfg(feature = "gui")]
+    fn foce_gui(cli: &Cli) -> bool {
+        !cli.force_cli && !cli.gui_monitors && !running_from_terminal()
+    }
+
     // -------------------------------------------
     print_app_version_and_built_with_features_banner();
 
@@ -48,7 +57,7 @@ async fn main() -> Result<()> {
     let cli = {
         let mut cli = mmvj_lib::cli::Cli::parse();
         #[cfg(feature = "gui")]
-        if !cli.force_cli && !cli.gui_monitors && !std::io::stdin().is_terminal() {
+        if foce_gui(&cli) {
             cli.gui_full = true;
         }
         cli
@@ -96,7 +105,12 @@ async fn main() -> Result<()> {
     log::info!("------------====--=-=--=--==--====-=-=--==-=--===-=---=------------");
 
     if cfg!(target_os = "linux") {
-        mmvj_lib::driver::check_linux_system_requirements()?;
+        #[cfg(feature = "gui")]
+        if running_from_terminal() {
+            mmvj_lib::driver::check_system_requirements()?;
+        }
+        #[cfg(not(feature = "gui"))]
+        mmvj_lib::driver::check_system_requirements()?;
     } else {
         bail!("This application requires Linux.");
     }

@@ -5,6 +5,7 @@ use crate::device_and_device_manager::DeviceKind;
 use crate::device_and_device_manager::DeviceManagerCommon;
 use crate::device_and_device_manager::WithDeviceClassification;
 use crate::driver::DriverCmd;
+use crate::driver::check_system_requirements;
 use crate::gui_common::GuiDndJob;
 use crate::gui_common::{
     DrawEgui, GuiCmd, GuiCmdChangeVirtualHid, GuiCmdVariableChange, GuiCmdVariableRemove, GuiInKinds, ScriptAuxKind,
@@ -130,6 +131,7 @@ pub(crate) fn run(
                     #[cfg(feature = "midi")]
                     available_midi: None,
                     style: GUI_STYLE_LIGHT,
+                    system_requirements_chk_status: check_system_requirements().err().map(|e| format!("{e}")),
                 };
                 app.cfg_yaml = app.get_config_string();
                 if let Some(storage) = cc.storage {
@@ -201,6 +203,7 @@ struct PendingCommand {
 }
 
 pub(crate) struct GuiMain {
+    system_requirements_chk_status: Option<String>, // TODO: common status notifications abstraction #121
     exit_app: bool,
     // ---
     pub(crate) style: GuiStyle,
@@ -282,6 +285,22 @@ impl eframe::App for GuiMain {
                     ),
                 }
             }
+        }
+
+        if branches::unlikely(self.system_requirements_chk_status.is_some()) {
+            egui::CentralPanel::default().show(ui, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(40.0);
+                    ui.add_space(10.0);
+                    ui.label(self.system_requirements_chk_status.as_ref().unwrap());
+                    ui.add_space(30.0);
+                    if ui.button("Close").clicked() {
+                        self.system_requirements_chk_status = None;
+                        // ui.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                });
+            });
+            return;
         }
 
         if self.monitors_only {

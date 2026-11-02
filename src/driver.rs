@@ -319,7 +319,17 @@ pub async fn run(
                 if !is_persistent {
                     hid_mgr.destroy_virtual_device_if_exists(key);
                 }
-                hid_mgr.create_virtual_device(key, resolved_joystick, is_persistent)?;
+
+                let create_virtual_device_res = hid_mgr.create_virtual_device(key, resolved_joystick, is_persistent);
+                #[cfg(feature = "gui")]
+                if gui_full && create_virtual_device_res.is_err() {
+                    log::error!("{create_virtual_device_res:?}");
+                } else {
+                    create_virtual_device_res?;
+                }
+
+                #[cfg(not(feature = "gui"))]
+                create_virtual_device_res?;
             }
         }
 
@@ -669,10 +679,11 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
     (main_loop_action, post_reload_report_back_tx)
 }
 
-pub fn check_linux_system_requirements() -> Result<()> {
+pub fn check_system_requirements() -> Result<()> {
     if !std::path::Path::new("/dev/uinput").exists() {
-        error!("/dev/uinput not found. Force feedback will not work.");
-        error!("Run: sudo modprobe uinput");
+        let msg = "Error: /dev/uinput not found. Force feedback will not work. Run: sudo modprobe uinput";
+        error!("{msg}");
+        bail!(msg);
     }
 
     if !nix::unistd::Uid::current().is_root() {
@@ -682,9 +693,9 @@ pub fn check_linux_system_requirements() -> Result<()> {
         if let Some(gid) = input_gid
             && !groups.contains(&gid)
         {
-            warn!("Warning: Current user not in 'input' group");
-            warn!("Run: sudo usermod -a -G input $USER");
-            warn!("Then logout and login again");
+            let msg = "Error: Current user not in 'input' group\nRun: sudo usermod -a -G input $USER\nThen logout and login again";
+            error!("{msg}");
+            bail!(msg);
         }
     }
 
