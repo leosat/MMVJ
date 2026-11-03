@@ -785,12 +785,16 @@ impl<'s> DrawEgui<'s> for IntegrateCfg {
             {
                 *gui_out_mut = bool_to_simple_change_gui_cmd(true);
             };
+            ui.label(")");
             ui.label(
                 egui::RichText::new(format!(
-                    ") * ({:+011.04} -> {:+011.04} -> map to acc. range {} -> {:+011.04})",
+                    "* {:+011.04} {}  {:+011.04} {} map to acc. range {} {} {:+011.04}",
                     current_input,
+                    egui_phosphor::regular::ARROW_FAT_RIGHT,
                     current_input * self.in_gain,
+                    egui_phosphor::regular::ARROW_FAT_RIGHT,
                     self.accumulator.port_get_interval(),
+                    egui_phosphor::regular::ARROW_FAT_RIGHT,
                     self.get_delta_acc_norm(current_input * self.in_gain, gui_in.mode.is_reactive())
                 ))
                 .monospace(),

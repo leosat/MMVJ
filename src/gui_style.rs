@@ -18,7 +18,13 @@ pub(crate) const GUI_STYLE_LIGHT: GuiStyle = GuiStyle {
         cc.egui_ctx.set_pixels_per_point(1.2);
 
         let mut fonts = egui::FontDefinitions::default();
+
         egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+
+        if let Some(font_list) = fonts.families.get_mut(&egui::FontFamily::Monospace) {
+            font_list.push("phosphor".to_owned());
+        }
+
         cc.egui_ctx.set_fonts(fonts);
     },
 };
