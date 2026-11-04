@@ -290,7 +290,7 @@ where
 // ------------------
 #[macro_export]
 macro_rules! implement_status_for {
-    ($type:path, $member:tt) => {
+    ($type:path, $($tail:tt)+) => {
         impl WithStatus for $type {
             type StatusT = Status;
         }
@@ -298,7 +298,7 @@ macro_rules! implement_status_for {
         impl WithStatusAccessor for $type {
             type StatusAccessorT<'s> = StatusHaySharedAccessor<'s>;
             fn status_hay_accessor(&self) -> Self::StatusAccessorT<'_> {
-                self.$member.0.lock().unwrap()
+                self$( $tail )+.0.lock().unwrap()
             }
         }
     };

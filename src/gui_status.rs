@@ -1,6 +1,9 @@
 use crate::{
     gui_common::DrawEgui,
-    status::{Status, StatusIface, StatusKind, StatusRetentionPolicy},
+    status::{
+        Status, StatusHaySharedAccessor, StatusIface, StatusKind, StatusRetentionPolicy, WithStatusAccessor,
+        WithStatusUtils,
+    },
 };
 
 fn status_kind_to_frame_color(kind: StatusKind) -> egui::Color32 {
@@ -60,5 +63,19 @@ impl<'s> DrawEgui<'s> for Status {
                 };
                 ui.separator();
             });
+    }
+}
+
+pub(crate) fn draw_status_hay<
+    T: WithStatusUtils + for<'a> WithStatusAccessor<StatusAccessorT<'a> = StatusHaySharedAccessor<'a>>,
+>(
+    obj: &T,
+    ui: &mut egui::Ui,
+) {
+    if !obj.status_hay_accessor().is_empty() {
+        obj.clear_expired_status();
+        for status in obj.status_hay_accessor().iter_mut() {
+            status.egui((), ui);
+        }
     }
 }

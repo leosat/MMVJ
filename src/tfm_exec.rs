@@ -34,6 +34,9 @@ use crate::schemas_value::{ValueDsts, WithNumInterval};
 
 use crate::schemas_value_port::ValuePortIface;
 use crate::stats::StatsIface;
+use crate::status::GlobalLogAs;
+use crate::status::Status;
+use crate::status::WithStatusUtils;
 #[cfg(feature = "gui")]
 use crate::tracing::GraphDisplayStyle;
 #[cfg(feature = "gui")]
@@ -145,30 +148,34 @@ impl WithTfmExec for TfmSeqCfg {
     type InputT = BaseNumT;
     type OutputT = Self::InputT;
     fn exec(&self, mut value: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
+        let handle_abnormal_values = |step: Option<(usize, &TfmStepCfg)>| {
+            let status = Status::default()
+                .make_malfunctioning_kind()
+                .make_interactive(std::time::Duration::from_secs(3))
+                .with_message(&format!(
+                    "Non-finite value detected in pipeline, further pipeline execution skipped.\n\
+                    affected transformation id {} {}",
+                    self.get_id(),
+                    step.and_then(|(step_idx, step)| Some(format!(", affected step {} {}", step_idx + 1, step)))
+                        .unwrap_or("value received at pipeline input".into())
+                ));
+
+            step.inspect(|(_, step)| {
+                step.set_status(status.clone().make_misconfigured_kind(), true, Default::default())
+            });
+            self.set_status(status, true, &[GlobalLogAs::Warn, GlobalLogAs::ConsoleRaw]);
+        };
+
         if branches::unlikely(!value.is_finite()) {
-            // TODO: use malfunction reporting when added.
-            log::error!(
-                "Non-finite value received as transformation input, transformation not executed to prevent propagation.\n\
-                    affected transformation runtime id {}",
-                self.get_id()
-            );
+            handle_abnormal_values(None);
             return Self::InputT::default();
         }
 
         self.set_last_known_io((Some(value), None));
-        for step in &self.steps {
+        for (step_idx, step) in self.steps.iter().enumerate() {
             value = step.exec(value, ctx);
             if branches::unlikely(!value.is_finite()) {
-                // TODO: use malfunction reporting when added.
-                // NB: currently such output is expected only after script transform,
-                //     where a user-defined logic can produce NaN or infinity,
-                //     however, for generality (for now) will check after every step.
-                log::error!(
-                    "In-pipeline non-finite value produced, transform execution interrupted to prevent propagation.\n\
-                    Non-finite value produced by step {} with runtime id {}",
-                    step,
-                    step.get_id()
-                );
+                handle_abnormal_values(Some((step_idx, step)));
                 return Self::InputT::default();
             }
         }

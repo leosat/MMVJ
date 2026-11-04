@@ -160,7 +160,8 @@ pub(crate) struct TfmStepCommonState {
     status: StatusHayShared,
 }
 
-implement_status_for!(TfmStepCommonState, status);
+implement_status_for!(TfmStepCommonState, .status);
+implement_status_for!(TfmStepCfg, .common_state_ref().status);
 
 impl WithLastKnownIO for TfmStepCommonState {
     type LastKnownIOValueT = (BaseNumT, BaseNumT);
@@ -2096,7 +2097,7 @@ tfm_seq_tpl!(
     meta: serde(from = "TfmSeqVariants", into = "TfmSeqVariants")
 );
 
-implement_status_for!(TfmSeqCfg, status);
+implement_status_for!(TfmSeqCfg, .status);
 
 impl TfmSeqCfg {
     pub(crate) fn skip_serializing(&self) -> bool {
