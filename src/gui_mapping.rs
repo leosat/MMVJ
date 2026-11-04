@@ -1,6 +1,6 @@
 use crate::config::{MORE_DEBUG, WithSelfSanitize};
 use crate::gui_common::{
-    DrawEgui, GuiCmd, GuiDndJobMoveTfmStep, bool_to_simple_change_gui_cmd, clear_dyn_srcs_and_dsts_cache,
+    DrawEgui, GuiCmd, GuiDndJobMoveTfmStep, bool_to_simple_change_gui_cmd, clear_dynamic_targets_cache,
     collect_and_cache_dyn_dsts, collect_and_cache_dyn_srcs, draw_collapsing_ui, draw_dyn_value_refs_list,
 };
 use crate::gui_transform_step::GuiInCommon;
@@ -190,7 +190,7 @@ impl<'s> DrawEgui<'s> for Mapping {
             });
 
         if gui_out.is_some() {
-            clear_dyn_srcs_and_dsts_cache(ui, &self.transformation);
+            clear_dynamic_targets_cache(ui);
             self.sanitize_inplace(());
         }
 

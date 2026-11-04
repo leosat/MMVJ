@@ -14,11 +14,13 @@ use crate::{
     schemas_value::{DeviceControlMatcherRef, VariableCfg, VariableRef},
 };
 use eframe::egui;
+use egui::util::IdTypeMap;
 use egui::{
     Ui,
     collapsing_header::{CollapsingState, HeaderResponse},
 };
 use enumflags2::BitFlags;
+use std::collections::HashMap;
 use std::{any::Any, path::PathBuf};
 use traversable::Traversable;
 
@@ -361,28 +363,35 @@ pub(crate) fn draw_collapsing_ui<'a, T, SaltT: std::hash::Hash + std::fmt::Debug
     c
 }
 
-pub(crate) fn clear_dyn_srcs_and_dsts_cache(ui: &mut egui::Ui, obj: &impl Traversable) {
+fn get_or_create_dynamic_targets_cache(cache: &mut IdTypeMap) -> &mut HashMap<egui::Id, Vec<DynValueRefs>> {
+    cache.get_temp_mut_or_insert_with(egui::Id::new("DYNAMIC TARGETS CACHE"), || Default::default())
+}
+
+pub(crate) fn clear_dynamic_targets_cache(ui: &mut egui::Ui) {
     ui.data_mut(|d| {
-        d.remove_temp::<Vec<DynValueRefs>>(egui::Id::new(obj as *const _).with("dynamic dsts"));
-        d.remove_temp::<Vec<DynValueRefs>>(egui::Id::new(obj as *const _).with("dynamic srcs"));
+        get_or_create_dynamic_targets_cache(d).clear();
     })
 }
 
 pub(crate) fn collect_and_cache_dyn_srcs(ui: &mut egui::Ui, obj: &impl Traversable) -> Vec<DynValueRefs> {
     ui.data_mut(|d| {
-        d.get_temp_mut_or_insert_with(egui::Id::new(obj as *const _).with("dynamic srcs"), || {
-            collect_dynamic_value_matchers(obj, |ctx| ctx.contains(DynValFilter::Src))
-        })
-        .clone()
+        get_or_create_dynamic_targets_cache(d)
+            .entry(egui::Id::new(obj as *const _).with("dynamic srcs"))
+            .or_insert(collect_dynamic_value_matchers(obj, |ctx| {
+                ctx.contains(DynValFilter::Src)
+            }))
+            .clone()
     })
 }
 
 pub(crate) fn collect_and_cache_dyn_dsts(ui: &mut egui::Ui, obj: &impl Traversable) -> Vec<DynValueRefs> {
     ui.data_mut(|d| {
-        d.get_temp_mut_or_insert_with(egui::Id::new(obj as *const _).with("dynamic dsts"), || {
-            collect_dynamic_value_matchers(obj, |ctx| ctx.contains(DynValFilter::Dst))
-        })
-        .clone()
+        get_or_create_dynamic_targets_cache(d)
+            .entry(egui::Id::new(obj as *const _).with("dynamic dsts"))
+            .or_insert(collect_dynamic_value_matchers(obj, |ctx| {
+                ctx.contains(DynValFilter::Dst)
+            }))
+            .clone()
     })
 }
 

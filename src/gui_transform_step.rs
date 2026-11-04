@@ -1,5 +1,5 @@
 use crate::base_num::BaseNumT;
-use crate::gui_common::clear_dyn_srcs_and_dsts_cache;
+use crate::gui_common::clear_dynamic_targets_cache;
 use crate::gui_common::collect_and_cache_dyn_dsts;
 use crate::gui_common::collect_and_cache_dyn_srcs;
 use crate::gui_common::draw_dyn_value_refs_list;
@@ -433,7 +433,7 @@ impl<'s> DrawEgui<'s> for TfmSeqCfg {
                 gui_out = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
             }
 
-            clear_dyn_srcs_and_dsts_cache(ui, self);
+            clear_dynamic_targets_cache(ui);
             self.recompute_metadata_and_sanitize_recursive(None);
         }
 
@@ -671,7 +671,7 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
             .inner;
 
         if gui_out.is_some() {
-            clear_dyn_srcs_and_dsts_cache(ui, self);
+            clear_dynamic_targets_cache(ui);
         }
 
         gui_out
