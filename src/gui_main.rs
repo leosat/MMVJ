@@ -990,6 +990,7 @@ impl GuiMain {
                         log::error!("Dnd job failed to complete in 2 traversals. Error in implementation. {dnd_job:?}");
                     }
                 }
+                self.execute_gui_command(GuiCmd::ConfigChangeSimple)?;
             }
             GuiCmd::DragAndDrop(..) | GuiCmd::LocalItemRemove(..) => {
                 log::error!(
