@@ -55,22 +55,40 @@ struct FfEffectPlaybackInfo {
     after_delay_length: std::time::Duration,
 }
 
+fn log_time_instant_calc_overflow_and_get_default() -> std::time::Instant {
+    log::error!(
+        "Failed to calculate FFB effect playback end time due to overflow, \
+        defaulting to now (effect will not be played)"
+    );
+    std::time::Instant::now()
+}
+
 impl FfEffectPlaybackInfo {
     fn new(play_count: i32, now: Instant, replay: &FfEffectReplayInfo) -> Self {
         Self {
             play_counter: play_count,
             played_since: now,
             prev_out: 0.0,
-            after_delay_start_time: now + replay.delay,
-            end_time: now + replay.delay + replay.length,
+            after_delay_start_time: now
+                .checked_add(replay.delay)
+                .unwrap_or_else(|| log_time_instant_calc_overflow_and_get_default()),
+            end_time: now
+                .checked_add(replay.delay)
+                .and_then(|t| t.checked_add(replay.length))
+                .unwrap_or_else(|| log_time_instant_calc_overflow_and_get_default()),
             after_delay_length: replay.length,
         }
     }
 
     fn set_new_play_iteration(&mut self, now: Instant, delay: std::time::Duration) {
         self.played_since = now;
-        self.after_delay_start_time = now + delay;
-        self.end_time = self.after_delay_start_time + self.after_delay_length;
+        self.after_delay_start_time = now
+            .checked_add(delay)
+            .unwrap_or_else(|| log_time_instant_calc_overflow_and_get_default());
+        self.end_time = self
+            .after_delay_start_time
+            .checked_add(self.after_delay_length)
+            .unwrap_or_else(|| log_time_instant_calc_overflow_and_get_default());
     }
 }
 
@@ -171,7 +189,9 @@ enum FfEffect {
 }
 
 const NO_REPLAY: FfEffectReplayInfo = FfEffectReplayInfo {
-    length: std::time::Duration::MAX, // Notice that 0 duration is infinity in accordance to USB PID std.
+    // N.B.: 0 duration encoded in original info means infine replay in accordance to USB PID std.
+    // However here the value uses our internal semantic, so 0 is actually 0 replay length = no replay.
+    length: std::time::Duration::ZERO,
     delay: std::time::Duration::ZERO,
 };
 
