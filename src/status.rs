@@ -1,4 +1,4 @@
-use std::ops::DerefMut;
+use std::{ops::DerefMut, sync::LazyLock};
 use strum_macros::{Display, EnumIter, EnumString};
 
 const DEFAULT_MAX_HAY_ENTRIES: usize = 5;
@@ -290,6 +290,18 @@ where
 // ------------------
 #[macro_export]
 macro_rules! implement_status_for {
+    ($type:path, .$($tail:tt)+) => {
+        impl WithStatus for $type {
+            type StatusT = Status;
+        }
+
+        impl WithStatusAccessor for $type {
+            type StatusAccessorT<'s> = StatusHaySharedAccessor<'s>;
+            fn status_hay_accessor(&self) -> Self::StatusAccessorT<'_> {
+                self.$( $tail )+.0.lock().unwrap()
+            }
+        }
+    };
     ($type:path, $($tail:tt)+) => {
         impl WithStatus for $type {
             type StatusT = Status;
@@ -298,11 +310,14 @@ macro_rules! implement_status_for {
         impl WithStatusAccessor for $type {
             type StatusAccessorT<'s> = StatusHaySharedAccessor<'s>;
             fn status_hay_accessor(&self) -> Self::StatusAccessorT<'_> {
-                self$( $tail )+.0.lock().unwrap()
+                $( $tail )+
             }
         }
     };
 }
+
+#[allow(unused)]
+pub(crate) static GLOBAL_STATUS_HAY: LazyLock<StatusHayShared> = LazyLock::new(|| Default::default());
 
 #[cfg(test)]
 #[test]

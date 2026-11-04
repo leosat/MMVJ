@@ -2098,6 +2098,7 @@ tfm_seq_tpl!(
 );
 
 implement_status_for!(TfmSeqCfg, .status);
+//implement_status_for!(TfmSeqCfg, crate::status::GLOBAL_STATUS_HAY.0.lock().unwrap());
 
 impl TfmSeqCfg {
     pub(crate) fn skip_serializing(&self) -> bool {
