@@ -1,7 +1,8 @@
 use crate::config::{MORE_DEBUG, WithSelfSanitize};
 use crate::gui_common::{
-    DrawEgui, GuiCmd, GuiDndJobMoveTfmStep, bool_to_simple_change_gui_cmd, clear_dynamic_targets_cache,
-    collect_and_cache_dyn_dsts, collect_and_cache_dyn_srcs, draw_collapsing_ui, draw_dyn_value_refs_list,
+    DrawEgui, GuiCmd, GuiDndJobMoveTfmStep, bool_to_simple_change_gui_cmd, clear_clipping_indicators_cache,
+    clear_dynamic_targets_cache, collect_and_cache_dyn_dsts, collect_and_cache_dyn_srcs, draw_collapsing_ui,
+    draw_dyn_value_refs_list, with_clipping_indicator_state,
 };
 use crate::gui_transform_step::GuiInCommon;
 use crate::gui_value::{GuiInValue, GuiInValueEditParams};
@@ -11,7 +12,7 @@ use crate::schemas_common::WithRuntimeId;
 use crate::schemas_mapping::Mapping;
 use crate::schemas_transform::TfmCfgDuplicateTreeWithNewState;
 use crate::schemas_transform::{TfmSeqCfg, TfmStepCfg};
-use crate::schemas_value::{DynValueRefs, ValueDsts, WithLastKnownIO};
+use crate::schemas_value::{DynValueRefs, ValueDsts, WithLastKnownIO, WithNumInterval};
 use std::any::Any;
 use std::sync::atomic::Ordering::Relaxed;
 
@@ -133,6 +134,11 @@ impl<'s> DrawEgui<'s> for Mapping {
                         )
                         .inspect(|out| *gui_out_mut = Some(out.clone()));
                     ui.separator();
+                    with_clipping_indicator_state(ui, ui.id().with("cllll"), self.src.get_interval(), |ui, ci| {
+                        ci.update(self.src.get_last_known_io(), crate::gui_widgets::Clipping::None);
+                        ci.ui(ui);
+                    });
+                    ui.separator();
                     ui.label(
                         egui::RichText::new(format!(" ({:+08.2})", self.get_last_known_io().0))
                             .size(12.0)
@@ -190,6 +196,7 @@ impl<'s> DrawEgui<'s> for Mapping {
             });
 
         if gui_out.is_some() {
+            clear_clipping_indicators_cache(ui);
             clear_dynamic_targets_cache(ui);
             self.sanitize_inplace(());
         }

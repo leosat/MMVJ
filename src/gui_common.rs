@@ -1,8 +1,11 @@
+use crate::base_num::BaseNumT;
 use crate::config::WithSelfSanitize;
 use crate::device_and_device_manager::DeviceKind;
 use crate::gui_mapping::ValueUsageContext;
 use crate::gui_value::GuiInValue;
+use crate::gui_widgets::ClippingIndicator;
 use crate::mapping::MappingEngineCmd;
+use crate::num_interval::NumInterval;
 use crate::schemas_transform::{DynValFilter, collect_dynamic_value_matchers};
 use crate::schemas_value::DynValueRefs;
 use crate::{schemas_common::ObjId, schemas_control_matcher::ControlMatchers};
@@ -21,6 +24,9 @@ use egui::{
 };
 use enumflags2::BitFlags;
 use std::collections::HashMap;
+use std::ops::DerefMut;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::{any::Any, path::PathBuf};
 use traversable::Traversable;
 
@@ -361,6 +367,35 @@ pub(crate) fn draw_collapsing_ui<'a, T, SaltT: std::hash::Hash + std::fmt::Debug
         c.set_open(clicked ^ c.is_open());
     }
     c
+}
+
+pub(crate) fn with_clipping_indicator_state(
+    ui: &mut egui::Ui,
+    id: egui::Id,
+    interval: NumInterval<BaseNumT>,
+    callback: impl Fn(&mut egui::Ui, &mut ClippingIndicator) -> (),
+) -> () {
+    let mut ci = ui.data_mut(|d| {
+        get_or_create_clipping_indicators_cache(d)
+            .entry(id)
+            .or_insert(ClippingIndicator::new(interval).into())
+            .clone()
+    });
+    callback(ui, &mut ci);
+    ui.data_mut(|d| get_or_create_clipping_indicators_cache(d).insert(id, ci));
+}
+
+fn get_or_create_clipping_indicators_cache<'a>(
+    cache: &'a mut IdTypeMap,
+) -> &'a mut HashMap<egui::Id, ClippingIndicator> {
+    let q = cache.get_temp_mut_or_insert_with(egui::Id::new("CLIPPING INDICATORS CACHE"), || Default::default());
+    q
+}
+
+pub(crate) fn clear_clipping_indicators_cache(ui: &mut egui::Ui) {
+    ui.data_mut(|d| {
+        get_or_create_clipping_indicators_cache(d).clear();
+    })
 }
 
 fn get_or_create_dynamic_targets_cache(cache: &mut IdTypeMap) -> &mut HashMap<egui::Id, Vec<DynValueRefs>> {

@@ -88,3 +88,5 @@ pub(crate) mod gui_telemetry_graph;
 pub(crate) mod gui_transform_step;
 #[cfg(feature = "gui")]
 pub(crate) mod gui_value;
+#[cfg(feature = "gui")]
+pub(crate) mod gui_widgets;
