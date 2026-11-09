@@ -1,5 +1,5 @@
 use crate::{
-    base_num::{BaseNumConsts, BaseNumT},
+    base_num::BaseNumT,
     num_interval::NumInterval,
     schemas_value::{Clipping, ClippingIface},
 };
@@ -30,7 +30,7 @@ impl ClippingIndicator {
     pub fn update(&mut self, value: BaseNumT, clipped: Option<Clipping>) {
         let now = Instant::now();
 
-        if (value - self.last_value).abs() > f32::EPSILON {
+        if (value - self.last_value).abs() > BaseNumT::EPSILON {
             self.last_change = now;
             self.blink_start = now;
             self.last_value = value;
@@ -96,7 +96,7 @@ impl ClippingIndicator {
             Some(Clipping::Underflow) => draw_half_circle(&painter, center, r, fill, true),
             Some(Clipping::Overflow) => draw_half_circle(&painter, center, r, fill, false),
             None => {
-                painter.circle_filled(center, r, fill);
+                painter.circle_filled(center, r as f32, fill);
             }
         };
 
@@ -107,9 +107,9 @@ impl ClippingIndicator {
 
 fn draw_half_circle(painter: &egui::Painter, center: egui::Pos2, radius: f32, fill: egui::Color32, left: bool) {
     let (start, end) = if left {
-        (BaseNumConsts::FRAC_PI_2, 3.0 * BaseNumConsts::FRAC_PI_2)
+        (core::f32::consts::FRAC_PI_2, 3.0 * core::f32::consts::FRAC_PI_2)
     } else {
-        (-BaseNumConsts::FRAC_PI_2, BaseNumConsts::FRAC_PI_2)
+        (-core::f32::consts::FRAC_PI_2, core::f32::consts::FRAC_PI_2)
     };
 
     let segments = 8;
