@@ -115,11 +115,18 @@ impl<'s> DrawEgui<'s> for Mapping {
                 });
                 ui.separator();
                 // ----------------------------------
-                /*Last mapping in*/
-
                 ui.horizontal(|ui| {
                     ui.label(
-                        egui::RichText::new("Src: ").strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
+                        egui::RichText::new("Src").strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
+                    );
+                    let mut srcs = collect_and_cache_dyn_srcs(ui, &self.transformation);
+                    if !srcs.is_empty() {
+                        ui.label("(+...)").on_hover_ui(|ui| {
+                            draw_dyn_value_refs_list(ui, &mut srcs, "in-pipeline dynamic sources");
+                        });
+                    }
+                    ui.label(
+                        egui::RichText::new(":").strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
                     );
                     self.src
                         .egui(
@@ -142,9 +149,6 @@ impl<'s> DrawEgui<'s> for Mapping {
                     ui.separator();
                 });
 
-                let mut srcs = collect_and_cache_dyn_srcs(ui, &self.transformation);
-                draw_dyn_value_refs_list(ui, &mut srcs, "in-pipeline dynamic sources");
-
                 ui.separator();
                 ui.collapsing(
                     gui_style.tfm_big_title_decorate(egui::RichText::new("Transformation")),
@@ -160,7 +164,16 @@ impl<'s> DrawEgui<'s> for Mapping {
                 /*Last mapping out*/
                 ui.horizontal(|ui| {
                     ui.label(
-                        egui::RichText::new("Dst: ").strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
+                        egui::RichText::new("Dst").strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
+                    );
+                    let mut dsts = collect_and_cache_dyn_dsts(ui, &self.transformation);
+                    if !dsts.is_empty() {
+                        ui.label("(+...)").on_hover_ui(|ui| {
+                            draw_dyn_value_refs_list(ui, &mut dsts, "in-pipeline dynamic destinations");
+                        });
+                    }
+                    ui.label(
+                        egui::RichText::new(":").strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
                     );
                     self.dst
                         .egui(
@@ -182,11 +195,6 @@ impl<'s> DrawEgui<'s> for Mapping {
                     ).on_hover_text("Value output on last mapping run");
                     ui.separator();
                 });
-
-                //---------------------------------------------
-                let mut dsts = collect_and_cache_dyn_dsts(ui, &self.transformation);
-                draw_dyn_value_refs_list(ui, &mut dsts, "in-pipeline dynamic destinations");
-
             });
 
         if gui_out.is_some() {
