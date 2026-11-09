@@ -1,6 +1,7 @@
 use crate::{
     base_num::{BaseNumConsts, BaseNumT},
     num_interval::NumInterval,
+    schemas_value::{Clipping, ClippingIface},
 };
 use eframe::egui;
 use std::time::{Duration, Instant};
@@ -11,27 +12,7 @@ pub struct ClippingIndicator {
     last_value: BaseNumT,
     last_change: Instant,
     blink_start: Instant,
-    clip: Clipping,
-}
-
-#[derive(Clone, Copy, PartialEq)]
-#[repr(i8)]
-pub(crate) enum Clipping {
-    None = 0,
-    Underflow = -1,
-    Overflow = 1,
-}
-
-impl Clipping {
-    pub(crate) fn is_not_clipping(&self) -> bool {
-        matches!(self, Self::None)
-    }
-    pub(crate) fn _is_underflow(&self) -> bool {
-        matches!(self, Self::Underflow)
-    }
-    pub(crate) fn _is_overflow(&self) -> bool {
-        matches!(self, Self::Overflow)
-    }
+    clip: Option<Clipping>,
 }
 
 impl ClippingIndicator {
@@ -42,11 +23,11 @@ impl ClippingIndicator {
             last_value: 0.0,
             last_change: now - Duration::from_secs(10),
             blink_start: now,
-            clip: Clipping::None,
+            clip: None,
         }
     }
 
-    pub fn update(&mut self, value: BaseNumT, clipped: Clipping) {
+    pub fn update(&mut self, value: BaseNumT, clipped: Option<Clipping>) {
         let now = Instant::now();
 
         if (value - self.last_value).abs() > f32::EPSILON {
@@ -56,16 +37,16 @@ impl ClippingIndicator {
         }
 
         if value < self.interval.from() {
-            self.clip = Clipping::Underflow;
+            self.clip = Clipping::Underflow.into();
         } else if value > self.interval.to() {
-            self.clip = Clipping::Overflow;
+            self.clip = Clipping::Overflow.into();
         } else {
             self.clip = clipped
         }
     }
 
     pub fn reset(&mut self) {
-        self.clip = Clipping::None;
+        self.clip = None;
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui) -> egui::Response {
@@ -80,8 +61,8 @@ impl ClippingIndicator {
         let now = Instant::now();
         let time_since_change = now.duration_since(self.last_change).as_secs_f32();
         let is_changing = time_since_change < 0.25;
-        let is_under = matches!(self.clip, Clipping::Underflow);
-        let is_over = matches!(self.clip, Clipping::Overflow);
+        let is_under = matches!(self.clip, Some(Clipping::Underflow));
+        let is_over = matches!(self.clip, Some(Clipping::Overflow));
         let is_clipping = is_under || is_over;
 
         let color = if !self.clip.is_not_clipping() {
@@ -112,9 +93,9 @@ impl ClippingIndicator {
         let r = rect.width().min(rect.height()) / 2.0 - 2.0;
 
         match self.clip {
-            Clipping::Underflow => draw_half_circle(&painter, center, r, fill, true),
-            Clipping::Overflow => draw_half_circle(&painter, center, r, fill, false),
-            Clipping::None => {
+            Some(Clipping::Underflow) => draw_half_circle(&painter, center, r, fill, true),
+            Some(Clipping::Overflow) => draw_half_circle(&painter, center, r, fill, false),
+            None => {
                 painter.circle_filled(center, r, fill);
             }
         };

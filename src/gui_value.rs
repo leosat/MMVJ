@@ -296,7 +296,7 @@ where
                                 ci.update(
                                     // port.port_inner_ref().get_last_known_io().into(),
                                     port.get_last_known_io().into(),
-                                    crate::gui_widgets::Clipping::None,
+                                    None,
                                 );
                                 ci.ui(ui);
                             },

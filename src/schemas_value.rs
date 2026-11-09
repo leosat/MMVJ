@@ -88,6 +88,40 @@ pub(crate) struct InputValueMetadata<ValueT: NumIntervalValue> {
     pub(crate) relativity: Relativity,
 }
 
+// --------------------------
+
+#[derive(Clone, Copy, PartialEq)]
+#[repr(i8)]
+pub(crate) enum Clipping {
+    Underflow = -1,
+    Overflow = 1,
+}
+
+pub(crate) trait ClippingIface {
+    fn is_not_clipping(&self) -> bool;
+    fn _is_underflow(&self) -> bool;
+    fn _is_overflow(&self) -> bool;
+}
+
+impl ClippingIface for Option<Clipping> {
+    fn is_not_clipping(&self) -> bool {
+        matches!(self, None)
+    }
+    fn _is_underflow(&self) -> bool {
+        matches!(self, Some(Clipping::Underflow))
+    }
+    fn _is_overflow(&self) -> bool {
+        matches!(self, Some(Clipping::Overflow))
+    }
+}
+
+// --------------------------
+pub(crate) trait _WithClippingState {
+    fn get_clipping_state(&self) -> Option<Clipping>;
+    fn set_clipping_state(&self, clipping: Option<Clipping>);
+}
+
+// --------------------------
 /// The point of this trait vs WithNumericValue trait is to give access to memorized
 /// last input/output value(s) which is different from giving access to the current one.
 /// The difference takes place for relative values, where current (in-the-moment) value may be 0,
