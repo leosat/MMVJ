@@ -224,8 +224,10 @@ fn draw_egui_for_port<'s, SanPolicyT, PortT>(
     ui: &mut egui::Ui,
 ) -> Option<GuiCmd>
 where
-    PortT: ValuePortIface,
+    PortT: ValuePortIface + WithLastKnownIO,
+    BaseNumT: From<<PortT as WithLastKnownIO>::LastKnownIOValueT>,
     <PortT as ValuePortIface>::InnerT: WithLastKnownIO<LastKnownIOValueT = BaseNumT>,
+    <PortT as WithLastKnownIO>::LastKnownIOValueT: std::fmt::Display,
     <PortT as ValuePortIface>::InnerT: ValueIface,
     <PortT as ValuePortIface>::InnerT: ValueIface + DrawEgui<'s, In = GuiInValue<'s>, Out = Option<GuiCmd>>,
     <<PortT as ValuePortIface>::InnerT as WithNumericValue>::ValueT: eframe::emath::Numeric,
@@ -287,14 +289,25 @@ where
                         ui.separator();
                         crate::gui_common::with_clipping_indicator_state(
                             ui,
-                            ui.id().with("clip indicator"),
-                            port.port_inner_ref().get_interval().cast::<BaseNumT>().unwrap(),
+                            ui.id().with(port as *mut PortT),
+                            // port.port_inner_ref().get_interval().cast::<BaseNumT>().unwrap(),
+                            port.port_get_interval().cast::<BaseNumT>().unwrap(),
                             |ui, ci| {
-                                ci.update(port.port_get_last_known_io().into(), crate::gui_widgets::Clipping::None);
+                                ci.update(
+                                    // port.port_inner_ref().get_last_known_io().into(),
+                                    port.get_last_known_io().into(),
+                                    crate::gui_widgets::Clipping::None,
+                                );
                                 ci.ui(ui);
                             },
                         );
-                        ui.label("...");
+                        ui.label("...").on_hover_ui(|ui| {
+                            ui.label(format!("Port last I/O: {}", port.get_last_known_io()));
+                            ui.label(format!(
+                                "Port inner last I/O: {}",
+                                port.port_inner_ref().get_last_known_io()
+                            ));
+                        });
                     })
                     .body(|ui| {
                         ui.separator();

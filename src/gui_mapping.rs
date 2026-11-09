@@ -121,7 +121,6 @@ impl<'s> DrawEgui<'s> for Mapping {
                     ui.label(
                         egui::RichText::new("Src: ").strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
                     );
-                    ui.separator();
                     self.src
                         .egui(
                             GuiInValue::Edit(GuiInValueEditParams {
@@ -163,7 +162,6 @@ impl<'s> DrawEgui<'s> for Mapping {
                     ui.label(
                         egui::RichText::new("Dst: ").strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
                     );
-                    ui.separator();
                     self.dst
                         .egui(
                             GuiInValue::Edit(GuiInValueEditParams {

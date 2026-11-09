@@ -1,10 +1,13 @@
 use std::marker::PhantomData;
+use std::sync::Arc;
+use std::sync::atomic::Ordering::Relaxed;
 
+use crate::base_num::BaseAtomicT;
 use crate::num_interval::NumIntervalValue;
 use crate::schemas_transform::TfmSeqCfg;
 use crate::schemas_value::{
     AutoOrManual, InputValueMetadata, ValueDsts, ValueIface, ValueSrcs, ValueXrcs, WithDeviceControlMatcherRef,
-    WithLastKnownIO,
+    WithLastKnownIO, WithLastKnownIOSettable,
 };
 use crate::tfm_exec::{TfmExecCtx, WithTfmExec, get_out_of_range_policy};
 use crate::{config::WithSelfSanitize, schemas_value::WithRelativity};
@@ -23,6 +26,41 @@ pub(crate) trait WithMappingTriggerPredicate {
     fn _eval_triggers_mapping_pred(&self) -> bool;
     fn _set_triggers_mapping_pred(&mut self, pred: Self::PredicateT);
     fn _get_triggers_mapping_pred(&mut self) -> Self::PredicateT;
+}
+
+impl<InnerT, SanT, RemapT, TfmT> WithLastKnownIO for ValuePort<InnerT, SanT, RemapT, TfmT>
+where
+    InnerT: ValueIface,
+    SanT: PortSanPolicy<InnerT>,
+    RemapT: PortRemapPolicy<InnerT::ValueT>,
+    TfmT: TfmPolicyIface,
+{
+    type LastKnownIOValueT = BaseNumT;
+
+    fn get_last_known_io(&self) -> Self::LastKnownIOValueT {
+        self.last_known_io.load(Relaxed).into()
+        // {
+        //     // if let Some(tfm) = self.port_transformation_ref() {
+        //     //     tfm.get_last_known_io().0.into()
+        //     // } else {
+        //     //     self.inner.get_last_known_io().into()
+        //     // }
+        // }
+    }
+}
+
+impl<InnerT, SanT, RemapT, TfmT> WithLastKnownIOSettable for ValuePort<InnerT, SanT, RemapT, TfmT>
+where
+    InnerT: ValueIface,
+    SanT: PortSanPolicy<InnerT>,
+    RemapT: PortRemapPolicy<InnerT::ValueT>,
+    TfmT: TfmPolicyIface,
+{
+    type LastKnownIOSettableValueT = BaseNumT;
+
+    fn set_last_known_io(&self, value: Self::LastKnownIOSettableValueT) {
+        self.last_known_io.store(value, Relaxed);
+    }
 }
 
 // --------------------------------------------------------
@@ -46,10 +84,10 @@ pub(crate) trait ValuePortIface:
         BaseNumT: From<<Self::InnerT as WithNumericValue>::ValueT>,
         <Self::InnerT as WithNumericValue>::ValueT: From<BaseNumT>;
 
-    fn port_get_last_known_io(&self) -> <Self::InnerT as WithLastKnownIO>::LastKnownIOValueT
-    where
-        BaseNumT: From<<Self::InnerT as WithLastKnownIO>::LastKnownIOValueT>,
-        <Self::InnerT as WithLastKnownIO>::LastKnownIOValueT: From<BaseNumT>;
+    // fn port_get_last_known_io(&self) -> <Self::InnerT as WithLastKnownIO>::LastKnownIOValueT
+    // where
+    //     BaseNumT: From<<Self::InnerT as WithLastKnownIO>::LastKnownIOValueT>,
+    //     <Self::InnerT as WithLastKnownIO>::LastKnownIOValueT: From<BaseNumT>;
 
     fn port_set_numeric_value(&self, value: <Self::InnerT as WithNumericValue>::ValueT, ctx: Option<&impl TfmExecCtx>)
     where
@@ -152,6 +190,7 @@ where
                 },
                 _port_effective_interval: Default::default(),
                 _port_effective_relativity: Default::default(),
+                last_known_io: Default::default(),
             },
         };
         port.sanitize_inplace(());
@@ -364,7 +403,7 @@ impl TfmPolicyDefaultChoice for ValueXrcs {
 }
 
 // -------------------------------------------
-#[derive(JsonSchema, Debug, Clone, PartialOrd, PartialEq, Deserialize, Serialize, Traversable, TraversableMut)]
+#[derive(JsonSchema, Debug, Clone, PartialEq, Deserialize, Serialize, Traversable, TraversableMut)]
 #[serde(from = "ValuePortSerdeHelper<InnerT>", into = "ValuePortSerdeHelper<InnerT>")]
 #[serde(bound(serialize = "
     TfmT: TfmPolicyIface,
@@ -389,6 +428,9 @@ pub(crate) struct ValuePort<
     SanT: PortSanPolicy<InnerT>,
     RemapT: PortRemapPolicy<InnerT::ValueT>,
 {
+    #[serde(skip)]
+    #[traverse(skip)]
+    last_known_io: Arc<BaseAtomicT>,
     inner: InnerT,
     #[serde(skip)]
     #[traverse(skip)]
@@ -405,6 +447,46 @@ pub(crate) struct ValuePort<
     #[serde(skip)]
     #[traverse(skip)]
     _port_effective_relativity: Relativity,
+}
+
+impl<InnerT, SanT, RemapT, TfmT> PartialOrd for ValuePort<InnerT, SanT, RemapT, TfmT>
+where
+    InnerT: ValueIface,
+    SanT: PortSanPolicy<InnerT>,
+    RemapT: PortRemapPolicy<InnerT::ValueT>,
+    TfmT: TfmPolicyIface,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match self.inner.partial_cmp(&other.inner) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        match self.san_policy.partial_cmp(&other.san_policy) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        match self.remap_policy.partial_cmp(&other.remap_policy) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        match self.tfm_policy.partial_cmp(&other.tfm_policy) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        match self.triggers_mapping.partial_cmp(&other.triggers_mapping) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        match self
+            ._port_effective_interval
+            .partial_cmp(&other._port_effective_interval)
+        {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        self._port_effective_relativity
+            .partial_cmp(&other._port_effective_relativity)
+    }
 }
 
 // ----------------------------------------------
@@ -424,6 +506,7 @@ where
             tfm_policy: Default::default(),
             _port_effective_interval: Default::default(),
             _port_effective_relativity: Default::default(),
+            last_known_io: Default::default(),
         };
         tmp.sanitize_inplace(());
         tmp
@@ -448,6 +531,7 @@ where
             tfm_policy: Default::default(),
             _port_effective_interval: Default::default(),
             _port_effective_relativity: Default::default(),
+            last_known_io: Default::default(),
         }
     }
 }
@@ -543,18 +627,6 @@ where
     type RemapT = RemapT;
     type SanT = SanT;
 
-    fn port_get_last_known_io(&self) -> <Self::InnerT as WithLastKnownIO>::LastKnownIOValueT
-    where
-        BaseNumT: From<<Self::InnerT as WithLastKnownIO>::LastKnownIOValueT>,
-        <Self::InnerT as WithLastKnownIO>::LastKnownIOValueT: From<BaseNumT>,
-    {
-        if let Some(tfm) = self.port_transformation_ref() {
-            tfm.get_last_known_io().1.into()
-        } else {
-            self.inner.get_last_known_io().into()
-        }
-    }
-
     fn port_get_numeric_value(&self, ctx: Option<&impl TfmExecCtx>) -> InnerT::ValueT
     where
         BaseNumT: From<<InnerT as WithNumericValue>::ValueT>,
@@ -589,12 +661,20 @@ where
                 .into();
         }
 
-        SanT::san_policy_sanitize_numeric_value(value.into())
+        let value = SanT::san_policy_sanitize_numeric_value(value.into());
+
+        self.set_last_known_io(value.into());
+
+        value
     }
 
-    fn port_set_numeric_value(&self, mut value: InnerT::ValueT, ctx: Option<&impl TfmExecCtx>) {
+    fn port_set_numeric_value(&self, mut value: InnerT::ValueT, ctx: Option<&impl TfmExecCtx>)
+    where
+        BaseNumT: From<<InnerT as WithNumericValue>::ValueT>,
+    {
         value = SanT::san_policy_sanitize_numeric_value(value);
 
+        self.set_last_known_io(value.into());
         self.inner.set_numeric_value(self.inner.get_interval().map_from(
             value,
             &self.port_get_interval(),

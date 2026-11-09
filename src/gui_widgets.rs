@@ -96,7 +96,7 @@ impl ClippingIndicator {
             };
             egui::Color32::from_rgb((255.0 * t) as u8, 220, 0)
         } else {
-            egui::Color32::from_gray(100)
+            egui::Color32::from_gray(200)
         };
 
         let alpha = if is_changing || is_clipping {
@@ -131,7 +131,7 @@ fn draw_half_circle(painter: &egui::Painter, center: egui::Pos2, radius: f32, fi
         (-BaseNumConsts::FRAC_PI_2, BaseNumConsts::FRAC_PI_2)
     };
 
-    let segments = 24;
+    let segments = 8;
     let mut points = Vec::with_capacity(segments + 2);
     for i in 0..=segments {
         let t = i as f32 / segments as f32;
