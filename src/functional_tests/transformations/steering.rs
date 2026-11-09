@@ -60,7 +60,7 @@ mod steering_tfm_deserialization_and_exec_tests {
             Some(&self.main_dst)
         }
 
-        fn device_control_matcher_ref_write(&self, dcm: &DeviceControlMatcherRef, v: BaseNumT) {
+        fn device_control_matcher_ref_write(&self, dcm: &DeviceControlMatcherRef, v: BaseNumT, _ctx: &impl TfmExecCtx) {
             self.dyn_values
                 .borrow_mut()
                 .insert(format!("{}.{}", dcm.device_matcher_key, dcm.control_matcher_key), v);

@@ -46,6 +46,11 @@ pub(crate) trait ValuePortIface:
         BaseNumT: From<<Self::InnerT as WithNumericValue>::ValueT>,
         <Self::InnerT as WithNumericValue>::ValueT: From<BaseNumT>;
 
+    fn port_get_last_known_io(&self) -> <Self::InnerT as WithLastKnownIO>::LastKnownIOValueT
+    where
+        BaseNumT: From<<Self::InnerT as WithLastKnownIO>::LastKnownIOValueT>,
+        <Self::InnerT as WithLastKnownIO>::LastKnownIOValueT: From<BaseNumT>;
+
     fn port_set_numeric_value(&self, value: <Self::InnerT as WithNumericValue>::ValueT, ctx: Option<&impl TfmExecCtx>)
     where
         BaseNumT: From<<Self::InnerT as WithNumericValue>::ValueT>;
@@ -229,6 +234,14 @@ pub(crate) trait PortRemapPolicy<ValueT: NumIntervalValue>:
 #[derive(Copy, Clone, PartialEq, PartialOrd, Debug, Default)]
 pub(crate) struct RemapPolicyUserDefined;
 impl<ValueT: NumIntervalValue> PortRemapPolicy<ValueT> for RemapPolicyUserDefined {}
+
+#[derive(Copy, Clone, PartialEq, PartialOrd, Debug, Default)]
+pub(crate) struct RemapPolicyNone;
+impl<ValueT: NumIntervalValue> PortRemapPolicy<ValueT> for RemapPolicyNone {
+    fn get_remap_range() -> Option<NumInterval<ValueT>> {
+        None
+    }
+}
 
 // -------------------------------------------
 pub(crate) trait TfmPolicyIface:
@@ -490,6 +503,18 @@ where
     type RemapT = RemapT;
     type SanT = SanT;
 
+    fn port_get_last_known_io(&self) -> <Self::InnerT as WithLastKnownIO>::LastKnownIOValueT
+    where
+        BaseNumT: From<<Self::InnerT as WithLastKnownIO>::LastKnownIOValueT>,
+        <Self::InnerT as WithLastKnownIO>::LastKnownIOValueT: From<BaseNumT>,
+    {
+        if let Some(tfm) = self.port_transformation_ref() {
+            tfm.get_last_known_io().1.into()
+        } else {
+            self.inner.get_last_known_io().into()
+        }
+    }
+
     fn port_get_numeric_value(&self, ctx: Option<&impl TfmExecCtx>) -> InnerT::ValueT
     where
         BaseNumT: From<<InnerT as WithNumericValue>::ValueT>,
@@ -564,7 +589,7 @@ where
     {
         if let Some(dcm_ref) = self.get_device_control_matcher_ref() {
             #[allow(deprecated)]
-            ctx.device_control_matcher_ref_write(dcm_ref, self.inner.get_numeric_value().into());
+            ctx.device_control_matcher_ref_write(dcm_ref, self.inner.get_numeric_value().into(), ctx);
         }
     }
 
@@ -800,6 +825,13 @@ macro_rules! make_port_inner_nutype {
             }
         }
 
+        impl $crate::schemas_value::WithLastKnownIO for $name {
+            type LastKnownIOValueT = BaseNumT;
+
+            fn get_last_known_io(&self) -> Self::LastKnownIOValueT {
+                self.as_ref().get_last_known_io()
+            }
+        }
 
         impl $crate::schemas_value::WithNumericValue for $name {
             type ValueT = BaseNumT;
@@ -1050,7 +1082,12 @@ mod testing {
             }
 
             impl TfmExecCtx for MockExeCtx {
-                fn device_control_matcher_ref_write(&self, _dcm_ref: &DeviceControlMatcherRef, value: BaseNumT) {
+                fn device_control_matcher_ref_write(
+                    &self,
+                    _dcm_ref: &DeviceControlMatcherRef,
+                    value: BaseNumT,
+                    _ctx: &impl TfmExecCtx,
+                ) {
                     self.device_control_value_received.set(value);
                 }
             }

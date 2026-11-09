@@ -161,6 +161,7 @@ impl<'s> DrawEgui<'s> for NumInterval<BaseNumT> {
 impl<'s, PortInnerT, SanPolicyT, RemapT, TfmT> DrawEgui<'s> for ValuePort<PortInnerT, SanPolicyT, RemapT, TfmT>
 where
     <PortInnerT as WithNumericValue>::ValueT: eframe::emath::Numeric,
+    PortInnerT: WithLastKnownIO<LastKnownIOValueT = BaseNumT>,
     RemapT: PortRemapPolicy<PortInnerT::ValueT>,
     TfmT: TfmPolicyIface,
     SanPolicyT: PortSanPolicy<PortInnerT> + GuiSanInfo<PortInnerT>,
@@ -173,7 +174,7 @@ where
     type Out = Option<GuiCmd>;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
-        let gui_out = draw_egui_for_port::<SanPolicyT, Self, PortInnerT>(self, gui_in, ui);
+        let gui_out = draw_egui_for_port::<SanPolicyT, Self>(self, gui_in, ui);
         if gui_out.is_some() {
             self.sanitize_inplace(());
         }
@@ -217,21 +218,22 @@ impl<T: WithNumericValueSanitizerStatic> GuiSanInfo<T> for SanPolicyNone {
     }
 }
 
-fn draw_egui_for_port<'s, SanPolicyT, PortT, PortInnerT>(
+fn draw_egui_for_port<'s, SanPolicyT, PortT>(
     port: &mut PortT,
     mut gui_in: GuiInValue<'s>,
     ui: &mut egui::Ui,
 ) -> Option<GuiCmd>
 where
     PortT: ValuePortIface,
-    PortInnerT: ValueIface,
-    SanPolicyT: GuiSanInfo<PortInnerT>,
+    <PortT as ValuePortIface>::InnerT: WithLastKnownIO<LastKnownIOValueT = BaseNumT>,
+    <PortT as ValuePortIface>::InnerT: ValueIface,
     <PortT as ValuePortIface>::InnerT: ValueIface + DrawEgui<'s, In = GuiInValue<'s>, Out = Option<GuiCmd>>,
+    <<PortT as ValuePortIface>::InnerT as WithNumericValue>::ValueT: eframe::emath::Numeric,
+    <<PortT as ValuePortIface>::InnerT as WithNumericValue>::ValueT: From<BaseNumT>,
+    SanPolicyT: GuiSanInfo<<PortT as ValuePortIface>::InnerT>,
     NumInterval<<<PortT as ValuePortIface>::InnerT as WithNumericValue>::ValueT>:
         DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
-    PortInnerT::ValueT: eframe::emath::Numeric,
     BaseNumT: From<<<PortT as ValuePortIface>::InnerT as WithNumericValue>::ValueT>,
-    <<PortT as ValuePortIface>::InnerT as WithNumericValue>::ValueT: From<BaseNumT>,
 {
     match gui_in {
         GuiInValue::Edit(params) => {
@@ -274,7 +276,7 @@ where
                 );
 
                 ui.separator();
-                SanPolicyT::draw_san_info::<PortInnerT>(ui);
+                SanPolicyT::draw_san_info::<<PortT as ValuePortIface>::InnerT>(ui);
                 ui.separator();
 
                 ui.vertical(|ui| {
@@ -282,6 +284,16 @@ where
                         ui.label(egui::RichText::new(egui_phosphor::bold::PLUGS).size(14.0))
                             .on_hover_text("Value port: allows sanitization and optional range remapping");
                         // ui.label(format!("PORT({})", port.port_get_identity_str()));
+                        ui.separator();
+                        crate::gui_common::with_clipping_indicator_state(
+                            ui,
+                            ui.id().with("clip indicator"),
+                            port.port_inner_ref().get_interval().cast::<BaseNumT>().unwrap(),
+                            |ui, ci| {
+                                ci.update(port.port_get_last_known_io().into(), crate::gui_widgets::Clipping::None);
+                                ci.ui(ui);
+                            },
+                        );
                         ui.label("...");
                     })
                     .body(|ui| {

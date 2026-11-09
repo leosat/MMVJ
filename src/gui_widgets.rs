@@ -26,10 +26,10 @@ impl Clipping {
     pub(crate) fn is_not_clipping(&self) -> bool {
         matches!(self, Self::None)
     }
-    pub(crate) fn is_underflow(&self) -> bool {
+    pub(crate) fn _is_underflow(&self) -> bool {
         matches!(self, Self::Underflow)
     }
-    pub(crate) fn is_overflow(&self) -> bool {
+    pub(crate) fn _is_overflow(&self) -> bool {
         matches!(self, Self::Overflow)
     }
 }

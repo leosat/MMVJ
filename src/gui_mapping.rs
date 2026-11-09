@@ -2,7 +2,7 @@ use crate::config::{MORE_DEBUG, WithSelfSanitize};
 use crate::gui_common::{
     DrawEgui, GuiCmd, GuiDndJobMoveTfmStep, bool_to_simple_change_gui_cmd, clear_clipping_indicators_cache,
     clear_dynamic_targets_cache, collect_and_cache_dyn_dsts, collect_and_cache_dyn_srcs, draw_collapsing_ui,
-    draw_dyn_value_refs_list, with_clipping_indicator_state,
+    draw_dyn_value_refs_list,
 };
 use crate::gui_transform_step::GuiInCommon;
 use crate::gui_value::{GuiInValue, GuiInValueEditParams};
@@ -12,7 +12,8 @@ use crate::schemas_common::WithRuntimeId;
 use crate::schemas_mapping::Mapping;
 use crate::schemas_transform::TfmCfgDuplicateTreeWithNewState;
 use crate::schemas_transform::{TfmSeqCfg, TfmStepCfg};
-use crate::schemas_value::{DynValueRefs, ValueDsts, WithLastKnownIO, WithNumInterval};
+use crate::schemas_value::{DynValueRefs, ValueDsts, WithLastKnownIO};
+use crate::schemas_value_port::ValuePortIface;
 use std::any::Any;
 use std::sync::atomic::Ordering::Relaxed;
 
@@ -98,7 +99,7 @@ impl<'s> DrawEgui<'s> for Mapping {
                                     /* TODO: shadowing. When fully supported this will work for any destination mentioned in a mapping.*/;
                                 ui.label("Shadowing: ").on_hover_text(shadowing_hint);
                                 #[allow(clippy::single_match)]
-                                match &self.dst {
+                                match &self.dst.port_inner_ref() {
                                     ValueDsts::Dynamic(DynValueRefs::DeviceControlMatcher(d)) =>
                                     if d.control_matcher.get_idle_tick_enabled_flag().load(Relaxed) {
                                         ui.label("not shadowed").on_hover_text(shadowing_hint);
@@ -133,11 +134,6 @@ impl<'s> DrawEgui<'s> for Mapping {
                             ui,
                         )
                         .inspect(|out| *gui_out_mut = Some(out.clone()));
-                    ui.separator();
-                    with_clipping_indicator_state(ui, ui.id().with("cllll"), self.src.get_interval(), |ui, ci| {
-                        ci.update(self.src.get_last_known_io(), crate::gui_widgets::Clipping::None);
-                        ci.ui(ui);
-                    });
                     ui.separator();
                     ui.label(
                         egui::RichText::new(format!(" ({:+08.2})", self.get_last_known_io().0))

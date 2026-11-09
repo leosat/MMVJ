@@ -24,9 +24,6 @@ use egui::{
 };
 use enumflags2::BitFlags;
 use std::collections::HashMap;
-use std::ops::DerefMut;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex};
 use std::{any::Any, path::PathBuf};
 use traversable::Traversable;
 

@@ -110,7 +110,13 @@ pub(crate) trait TfmExecCtx {
     }
 
     #[deprecated = "Raw usage of this API is deprecated, replace with ValuePort usage when API is complete."]
-    fn device_control_matcher_ref_write(&self, dcm_ref: &DeviceControlMatcherRef, value: BaseNumT) {}
+    fn device_control_matcher_ref_write(
+        &self,
+        dcm_ref: &DeviceControlMatcherRef,
+        value: BaseNumT,
+        ctx: &impl TfmExecCtx,
+    ) {
+    }
 
     #[cfg(feature = "lua")]
     fn get_lua(&self) -> Option<&mlua::Lua> {

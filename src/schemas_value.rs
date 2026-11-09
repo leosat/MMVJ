@@ -55,6 +55,7 @@ pub(crate) trait ValueIface:
     + WithNumInterval
     + WithNumIntervalSettable
     + WithNumericValue
+    + WithLastKnownIO
     + WithNumericValueSettable
     + WithNumericValueSanitizerStatic
     + Serialize
@@ -1036,6 +1037,17 @@ pub(crate) enum ValueDsts {
     Void(Option<bool>),
 }
 
+impl WithLastKnownIO for ValueDsts {
+    type LastKnownIOValueT = BaseNumT;
+
+    fn get_last_known_io(&self) -> Self::LastKnownIOValueT {
+        match self {
+            ValueDsts::Dynamic(d) => d.get_last_known_io(),
+            ValueDsts::Void(_) => 0.0,
+        }
+    }
+}
+
 #[derive(JsonSchema, Debug, Clone, Serialize, Deserialize)]
 #[serde(from = "BaseNumT", into = "BaseNumT")]
 pub(crate) struct XrcSink(#[schemars(with = "BaseNumT")] pub(crate) Arc<CachePadded<BaseAtomicT>>);
@@ -1096,6 +1108,17 @@ pub(crate) enum ValueXrcs {
     #[traverse(skip)]
     Sink(#[serde(skip)] XrcSink),
     Dynamic(DynValueRefs),
+}
+
+impl WithLastKnownIO for ValueXrcs {
+    type LastKnownIOValueT = BaseNumT;
+
+    fn get_last_known_io(&self) -> Self::LastKnownIOValueT {
+        match self {
+            ValueXrcs::Sink(x) => x.get_numeric_value(), // TODO: support it for sink
+            ValueXrcs::Dynamic(d) => d.get_last_known_io(),
+        }
+    }
 }
 
 impl WithNumericValue for ValueXrcs {
@@ -1339,7 +1362,7 @@ impl ValueDsts {
         }
     }
 
-    pub(crate) fn get_interval(&self) -> NumInterval<BaseNumT> {
+    pub(crate) fn _get_interval(&self) -> NumInterval<BaseNumT> {
         match self {
             ValueDsts::Void(..) => ZERO_INTERVAL,
             Self::Dynamic(d) => match d {

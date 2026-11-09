@@ -10,11 +10,16 @@ use crate::schemas_transform::TfmSeqCfg;
 use crate::schemas_transform::TfmStepCfg;
 use crate::schemas_transform::collect_dynamic_value_matchers;
 use crate::schemas_value::AutoOrManual;
+use crate::schemas_value::ValueDsts;
+use crate::schemas_value::ValueIface;
+use crate::schemas_value::ValueSrcs;
 use crate::schemas_value::WithLastKnownIO;
 use crate::schemas_value::WithLastKnownIOSettable;
-use crate::schemas_value::WithNumInterval;
-use crate::schemas_value::WithRelativity;
-use crate::schemas_value::{ValueDsts, ValueSrcs};
+use crate::schemas_value_port::RemapPolicyNone;
+use crate::schemas_value_port::SanPolicyNone;
+use crate::schemas_value_port::TfmPolicyDisabled;
+use crate::schemas_value_port::ValuePort;
+use crate::schemas_value_port::ValuePortIface;
 use crossbeam_utils::CachePadded;
 use garde::Validate;
 use serde::{Deserialize, Serialize};
@@ -276,7 +281,11 @@ impl MapperMode {
 
 impl std::fmt::Display for Mapping {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = format!("{} -> {}", self.src, self.dst,);
+        let s = format!(
+            "{} -> {}",
+            self.src.port_inner_ref().value_identity(),
+            self.dst.port_inner_ref().value_identity(),
+        );
         f.write_str(&s)
     }
 }
@@ -308,14 +317,14 @@ pub(crate) struct Mapping {
     pub(crate) enabled: EnabledFlagCfg,
     #[serde(rename = "src", alias = "source")]
     #[garde(skip)]
-    pub(crate) src: ValueSrcs,
-    #[serde(rename = "dst", alias = "destination")]
-    #[garde(skip)]
-    pub(crate) dst: ValueDsts,
+    pub(crate) src: ValuePort<ValueSrcs, SanPolicyNone, RemapPolicyNone, TfmPolicyDisabled>,
     #[serde(default, rename = "tfm", alias = "transformation")]
     #[garde(dive)]
     #[serde(skip_serializing_if = "TfmSeqCfg::skip_serializing")]
     pub(crate) transformation: TfmSeqCfg,
+    #[serde(rename = "dst", alias = "destination")]
+    #[garde(skip)]
+    pub(crate) dst: ValuePort<ValueDsts, SanPolicyNone>,
     #[garde(skip)]
     #[traverse(skip)]
     #[serde(default, skip_serializing_if = "AutoOrManual::is_auto")]
@@ -357,15 +366,22 @@ impl Default for Mapping {
 
 impl WithSelfSanitize for Mapping {
     fn sanitize_inplace(&mut self, _input: Self::SanInputT) {
+        self.src.sanitize_inplace(());
+        self.dst.sanitize_inplace(());
+
         if self.name.is_empty() {
-            self.name = format!("{} -> {}", self.src, self.dst);
+            self.name = format!(
+                "{} -> {}",
+                self.src.port_inner_ref().value_identity(),
+                self.dst.port_inner_ref().value_identity()
+            );
         }
 
         self.transformation
             .recompute_metadata_and_sanitize_recursive(Some(AutoOrManual::Auto(
                 crate::schemas_value::InputValueMetadata {
-                    interval: self.src.get_interval(),
-                    relativity: self.src.get_relativity(),
+                    interval: self.src.port_get_interval(),
+                    relativity: self.src.port_get_relativity(),
                 },
             )));
 
@@ -378,16 +394,6 @@ impl WithSelfSanitize for Mapping {
 }
 
 impl Mapping {
-    pub(crate) fn _set_src(&mut self, src: ValueSrcs) {
-        self.src = src;
-        self.sanitize_inplace(());
-    }
-
-    pub(crate) fn _set_dst(&mut self, dst: ValueDsts) {
-        self.dst = dst;
-        self.sanitize_inplace(());
-    }
-
     pub(crate) fn requires_idle_tick(&self) -> bool {
         self.transformation.steps.iter().any(|s| {
             #[allow(unused_mut)]
@@ -408,7 +414,7 @@ impl Mapping {
         })
         .is_empty()
         .not()
-            || self.src.is_static()
+            || self.src.port_inner_ref().is_static()
     }
 }
 
