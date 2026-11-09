@@ -788,7 +788,6 @@ macro_rules! make_port_inner_nutype {
                 self.as_ref().value_is_xrc_sink()
             }
 
-            #[cfg(feature = "gui")]
             fn value_identity(&self) -> String {
                 self.as_ref().value_identity()
             }

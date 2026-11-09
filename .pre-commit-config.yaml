@@ -9,8 +9,16 @@ repos:
       #  types: [rust]
       #  pass_filenames: false
 
+      - id: cargo-check-ndf-all-tgts
+        name: Cargo Check, NDF, All targets 
+        description: Check Rust compilation errors.
+        entry: cargo check --all-targets --no-default-features --color always
+        language: system
+        types: [rust]
+        pass_filenames: false
+
       - id: cargo-check
-        name: Cargo Check
+        name: Cargo Check, Full, All targets
         description: Check Rust compilation errors.
         entry: cargo check --all-targets --all-features --color always
         language: system
@@ -18,7 +26,7 @@ repos:
         pass_filenames: false
 
       - id: cargo-clippy
-        name: Cargo Clippy
+        name: Cargo Clippy, Full, All targets
         description: Check Rust code with clippy.
         entry: cargo clippy --all-targets --all-features
         language: system

@@ -64,7 +64,6 @@ pub(crate) trait ValueIface:
     + Traversable
     + TraversableMut
 {
-    #[cfg(feature = "gui")]
     fn value_identity(&self) -> String;
     fn value_is_static(&self) -> bool;
     fn value_is_xrc_sink(&self) -> bool;
@@ -669,10 +668,12 @@ pub(crate) enum ValueSrcs {
 // }
 
 impl ValueIface for ValueSrcs {
-    #[cfg(feature = "gui")]
     fn value_identity(&self) -> String {
         match self {
+            #[cfg(feature = "gui")]
             ValueSrcs::Static(_) => egui_phosphor::bold::PENCIL.into(),
+            #[cfg(not(feature = "gui"))]
+            ValueSrcs::Static(s) => s.to_string(),
             ValueSrcs::Dynamic(d) => format!(
                 "Src({}({}))",
                 if d._is_device_control_matcher() { "CTL:" } else { "VAR:" },
@@ -1170,7 +1171,6 @@ impl ValueIface for ValueXrcs {
         matches!(self, Self::Sink(..))
     }
 
-    #[cfg(feature = "gui")]
     fn value_identity(&self) -> String {
         match self {
             Self::Dynamic(d) => d.to_string(),
@@ -1271,10 +1271,12 @@ impl ValueIface for ValueDsts {
         false
     }
 
-    #[cfg(feature = "gui")]
     fn value_identity(&self) -> String {
         match self {
+            #[cfg(feature = "gui")]
             Self::Void(_) => egui_phosphor::bold::EMPTY.into(),
+            #[cfg(not(feature = "gui"))]
+            Self::Void(_) => "Void".into(),
             Self::Dynamic(d) => format!(
                 "Dst({}({}))",
                 if d._is_device_control_matcher() { "CTL:" } else { "VAR:" },
