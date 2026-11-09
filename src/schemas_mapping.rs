@@ -318,13 +318,13 @@ pub(crate) struct Mapping {
     #[serde(rename = "src", alias = "source")]
     #[garde(skip)]
     pub(crate) src: ValuePort<ValueSrcs, SanPolicyNone, RemapPolicyNone, TfmPolicyDisabled>,
+    #[serde(rename = "dst", alias = "destination")]
+    #[garde(skip)]
+    pub(crate) dst: ValuePort<ValueDsts, SanPolicyNone, RemapPolicyNone, TfmPolicyDisabled>,
     #[serde(default, rename = "tfm", alias = "transformation")]
     #[garde(dive)]
     #[serde(skip_serializing_if = "TfmSeqCfg::skip_serializing")]
     pub(crate) transformation: TfmSeqCfg,
-    #[serde(rename = "dst", alias = "destination")]
-    #[garde(skip)]
-    pub(crate) dst: ValuePort<ValueDsts, SanPolicyNone>,
     #[garde(skip)]
     #[traverse(skip)]
     #[serde(default, skip_serializing_if = "AutoOrManual::is_auto")]

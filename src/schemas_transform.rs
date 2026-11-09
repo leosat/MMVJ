@@ -2476,22 +2476,70 @@ pub(crate) fn default_autocentering_along_ffb() -> ValueSrcs {
 }
 
 #[derive(
-    PartialEq, PartialOrd, Clone, Copy, std::fmt::Debug, Default, Serialize, Deserialize, TraversableMut, Traversable,
+    PartialEq,
+    PartialOrd,
+    Clone,
+    Copy,
+    std::fmt::Debug,
+    Default,
+    Serialize,
+    Deserialize,
+    TraversableMut,
+    Traversable,
+    JsonSchema,
 )]
 pub(crate) struct RemapPolicySymmUnit {}
 impl PortRemapPolicy<BaseNumT> for RemapPolicySymmUnit {
-    fn get_remap_range() -> Option<NumInterval<BaseNumT>> {
+    fn remap_pol_off(&self) {}
+
+    fn remap_pol_get_interval(&self) -> Option<NumInterval<BaseNumT>> {
         SYMM_UNIT_INTERVAL.into()
+    }
+
+    fn remap_pol_set_interval(&self, _interval: NumInterval<BaseNumT>) -> Option<NumInterval<BaseNumT>> {
+        None
+    }
+
+    fn new(_interval: Option<NumInterval<BaseNumT>>) -> Self {
+        Self {}
+    }
+
+    fn remap_pol_user_defined_allowed(&self) -> bool {
+        false
     }
 }
 
 #[derive(
-    PartialEq, PartialOrd, Clone, Copy, std::fmt::Debug, Default, Serialize, Deserialize, TraversableMut, Traversable,
+    PartialEq,
+    PartialOrd,
+    Clone,
+    Copy,
+    std::fmt::Debug,
+    Default,
+    Serialize,
+    Deserialize,
+    TraversableMut,
+    Traversable,
+    JsonSchema,
 )]
 pub(crate) struct RemapPolicyUnit {}
 impl PortRemapPolicy<BaseNumT> for RemapPolicyUnit {
-    fn get_remap_range() -> Option<NumInterval<BaseNumT>> {
+    fn remap_pol_off(&self) {}
+
+    fn remap_pol_get_interval(&self) -> Option<NumInterval<BaseNumT>> {
         UNIT_INTERVAL.into()
+    }
+
+    fn remap_pol_set_interval(&self, _interval: NumInterval<BaseNumT>) -> Option<NumInterval<BaseNumT>> {
+        None
+    }
+
+    fn new(_interval: Option<NumInterval<BaseNumT>>) -> Self {
+        Self {}
+    }
+
+    fn remap_pol_user_defined_allowed(&self) -> bool {
+        false
     }
 }
 

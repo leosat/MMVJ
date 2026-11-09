@@ -331,49 +331,48 @@ where
                         ui.separator();
                         ui.horizontal(|ui| {
                             if let Some(mut remap_to) = port.port_get_remap_interval() {
-                                ui.label("remap: ");
+                                if port.port_user_defined_remapping_allowed() {
+                                    ui.label("remap: ");
 
-                                if remap_to.egui(
-                                    GuiInInterval::Edit {
-                                        max_range: BaseNumT::MIN..=BaseNumT::MAX, // port.get_max_interval().cast().unwrap().make_range_inclusive(),
-                                        from_label: "",
-                                        to_label: "",
-                                        sanitize_and_sort: true,
-                                        truncate: false,
-                                    },
-                                    ui,
-                                ) {
-                                    port.port_set_remap_interval(remap_to);
-                                    changed_simple = true;
-                                };
+                                    if remap_to.egui(
+                                        GuiInInterval::Edit {
+                                            max_range: BaseNumT::MIN..=BaseNumT::MAX, // port.get_max_interval().cast().unwrap().make_range_inclusive(),
+                                            from_label: "",
+                                            to_label: "",
+                                            sanitize_and_sort: true,
+                                            truncate: false,
+                                        },
+                                        ui,
+                                    ) {
+                                        port.port_set_remap_interval(remap_to);
+                                        changed_simple = true;
+                                    };
 
-                                if remap_to == port.port_get_default_interval_from_inner() {
-                                    ui.label("(=default range)");
-                                } else {
-                                    ui.label("(overridden range)");
-                                }
+                                    if remap_to == port.port_get_default_interval_from_inner() {
+                                        ui.label("(=default range)");
+                                    } else {
+                                        ui.label("(overridden range)");
+                                    }
 
-                                if ui
-                                    .button(egui::RichText::new(egui_phosphor::bold::TRASH).size(14.0))
-                                    .on_hover_text("Turn remapping Off")
-                                    .clicked()
-                                {
-                                    port.port_set_remap_off();
-                                    changed_simple = true;
-                                }
-                            } else {
-                                let policy_enforced_remap_range = PortT::RemapT::get_remap_range();
-                                if policy_enforced_remap_range.is_none()
-                                    && ui
-                                        .button("enable remapping")
-                                        .on_hover_text("Turn remapping On")
+                                    if ui
+                                        .button(egui::RichText::new(egui_phosphor::bold::TRASH).size(14.0))
+                                        .on_hover_text("Turn remapping Off")
                                         .clicked()
-                                {
-                                    port.port_set_remap_from_inner_default();
-                                    changed_simple = true;
-                                } else if let Some(policy_enforced_remap_range) = policy_enforced_remap_range {
-                                    ui.label(format!("Port-enforced remapping range: {policy_enforced_remap_range}",));
+                                    {
+                                        port.port_set_remap_off();
+                                        changed_simple = true;
+                                    }
+                                } else {
+                                    ui.label(format!("Port-enforced remapping range: {remap_to}",));
                                 }
+                            } else if port.port_user_defined_remapping_allowed()
+                                && ui
+                                    .button("enable remapping")
+                                    .on_hover_text("Turn remapping On")
+                                    .clicked()
+                            {
+                                port.port_set_remap_from_inner_default();
+                                changed_simple = true;
                             }
                         });
                     })

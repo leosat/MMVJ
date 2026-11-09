@@ -76,6 +76,7 @@ pub(crate) trait ValuePortIface:
 
     fn port_set_remap_off(&mut self);
     fn port_set_remap_from_inner_default(&mut self);
+    fn port_user_defined_remapping_allowed(&self) -> bool;
     fn port_get_remap_interval(&self) -> Option<NumInterval<<Self::InnerT as WithNumericValue>::ValueT>>;
     fn port_set_remap_interval(&mut self, ri: NumInterval<<Self::InnerT as WithNumericValue>::ValueT>);
 
@@ -135,11 +136,10 @@ where
                 value,
                 transformation,
             } => Self {
-                remap,
                 triggers_mapping,
                 inner: value,
                 san_policy: PhantomData,
-                remap_policy: PhantomData,
+                remap_policy: RemapT::new(remap),
                 tfm_policy: {
                     let mut tfm_pol: TfmT = Default::default();
                     if let Some(tfm_cfg) = transformation {
@@ -167,15 +167,18 @@ where
     TfmT: TfmPolicyIface,
 {
     fn from(port: ValuePort<InnerT, SanT, RemapT, TfmT>) -> Self {
-        if !port.inner.value_is_static() {
+        if port.inner.value_is_static()
+            || ((port.port_get_remap_interval().is_none() || !port.remap_policy.remap_pol_user_defined_allowed())
+                && port.tfm_policy.transformation_ref().is_none())
+        {
+            ValuePortSerdeHelper::AsInner(port.inner)
+        } else {
             ValuePortSerdeHelper::AsPort {
-                remap: port.remap,
+                remap: port.remap_policy.remap_pol_get_interval(),
                 triggers_mapping: port.triggers_mapping,
                 value: port.inner,
                 transformation: port.tfm_policy.transformation_ref().cloned(),
             }
-        } else {
-            ValuePortSerdeHelper::AsInner(port.inner)
         }
     }
 }
@@ -223,23 +226,64 @@ impl<SanProviderT> PortSanPolicy<SanProviderT> for SanPolicyNone {
 
 // -------------------------------------------
 pub(crate) trait PortRemapPolicy<ValueT: NumIntervalValue>:
-    std::fmt::Debug + Copy + Clone + PartialOrd + PartialEq + 'static + Default
+    std::fmt::Debug + Clone + PartialOrd + PartialEq + 'static + Default
 {
-    #[inline(always)]
-    fn get_remap_range() -> Option<NumInterval<ValueT>> {
-        None
+    fn new(interval: Option<NumInterval<ValueT>>) -> Self;
+    fn remap_pol_user_defined_allowed(&self) -> bool;
+    fn remap_pol_off(&self);
+    fn remap_pol_get_interval(&self) -> Option<NumInterval<ValueT>>;
+    fn remap_pol_set_interval(&self, interval: NumInterval<ValueT>) -> Option<NumInterval<ValueT>>;
+}
+
+#[derive(Clone, PartialEq, PartialOrd, Debug, Default, Serialize, Deserialize, JsonSchema)]
+pub(crate) struct RemapPolicyUserDefined {
+    remap: std::cell::Cell<Option<NumInterval<BaseNumT>>>,
+}
+
+impl<ValueT: NumIntervalValue> PortRemapPolicy<ValueT> for RemapPolicyUserDefined {
+    fn new(interval: Option<NumInterval<ValueT>>) -> Self {
+        Self {
+            remap: std::cell::Cell::new(interval.and_then(|interval| interval.cast::<BaseNumT>()).into()),
+        }
+    }
+
+    fn remap_pol_off(&self) {
+        self.remap.set(None);
+    }
+
+    fn remap_pol_get_interval(&self) -> Option<NumInterval<ValueT>> {
+        self.remap.get().map(|interval| interval.cast::<ValueT>().unwrap())
+    }
+
+    fn remap_pol_set_interval(&self, interval: NumInterval<ValueT>) -> Option<NumInterval<ValueT>> {
+        self.remap.set(Some(interval.cast::<BaseNumT>().unwrap()));
+        Some(interval)
+    }
+
+    fn remap_pol_user_defined_allowed(&self) -> bool {
+        true
     }
 }
 
-#[derive(Copy, Clone, PartialEq, PartialOrd, Debug, Default)]
-pub(crate) struct RemapPolicyUserDefined;
-impl<ValueT: NumIntervalValue> PortRemapPolicy<ValueT> for RemapPolicyUserDefined {}
-
-#[derive(Copy, Clone, PartialEq, PartialOrd, Debug, Default)]
+#[derive(Copy, Clone, PartialEq, PartialOrd, Debug, Default, Serialize, Deserialize, JsonSchema)]
 pub(crate) struct RemapPolicyNone;
 impl<ValueT: NumIntervalValue> PortRemapPolicy<ValueT> for RemapPolicyNone {
-    fn get_remap_range() -> Option<NumInterval<ValueT>> {
+    fn remap_pol_off(&self) {}
+
+    fn remap_pol_get_interval(&self) -> Option<NumInterval<ValueT>> {
         None
+    }
+
+    fn remap_pol_set_interval(&self, _interval: NumInterval<ValueT>) -> Option<NumInterval<ValueT>> {
+        None
+    }
+
+    fn new(_interval: Option<NumInterval<ValueT>>) -> Self {
+        Self {}
+    }
+
+    fn remap_pol_user_defined_allowed(&self) -> bool {
+        false
     }
 }
 
@@ -346,14 +390,12 @@ pub(crate) struct ValuePort<
     RemapT: PortRemapPolicy<InnerT::ValueT>,
 {
     inner: InnerT,
-    #[traverse(skip)]
-    remap: Option<NumInterval<<InnerT as WithNumericValue>::ValueT>>,
     #[serde(skip)]
     #[traverse(skip)]
     san_policy: PhantomData<SanT>,
-    #[serde(skip)]
+    #[serde(flatten)]
     #[traverse(skip)]
-    remap_policy: PhantomData<RemapT>,
+    remap_policy: RemapT,
     tfm_policy: Box<TfmT>,
     #[traverse(skip)]
     triggers_mapping: bool,
@@ -375,11 +417,10 @@ where
 {
     fn default() -> Self {
         let mut tmp = Self {
-            remap: Default::default(),
             triggers_mapping: Default::default(),
             inner: Default::default(),
             san_policy: PhantomData,
-            remap_policy: PhantomData,
+            remap_policy: Default::default(),
             tfm_policy: Default::default(),
             _port_effective_interval: Default::default(),
             _port_effective_relativity: Default::default(),
@@ -400,11 +441,10 @@ where
 {
     fn from(value: InnerT) -> Self {
         Self {
-            remap: None,
             triggers_mapping: false,
             inner: value,
             san_policy: PhantomData,
-            remap_policy: PhantomData,
+            remap_policy: RemapT::default(),
             tfm_policy: Default::default(),
             _port_effective_interval: Default::default(),
             _port_effective_relativity: Default::default(),
@@ -453,13 +493,13 @@ where
     type SanInputT = ();
     fn sanitize_inplace(&mut self, _: Self::SanInputT) {
         if self.inner.value_is_static() {
-            self.remap = None;
             self._port_effective_interval = self.inner.get_interval();
             self._port_effective_relativity = self.inner.get_relativity();
         } else {
-            if let Some(remap) = &mut self.remap {
+            if let Some(mut remap) = self.remap_policy.remap_pol_get_interval() {
                 remap.from = SanT::san_policy_sanitize_numeric_value(remap.from);
                 remap.to = SanT::san_policy_sanitize_numeric_value(remap.to);
+                self.remap_policy.remap_pol_set_interval(remap);
             }
 
             let inner_interval = self.port_inner_ref().get_interval();
@@ -480,8 +520,8 @@ where
             }
 
             self._port_effective_interval = self
-                .remap
-                .or(RemapT::get_remap_range().map(|r| r.cast().unwrap()))
+                .port_get_remap_interval()
+                .map(|interval| interval.cast().unwrap())
                 .or(self
                     .port_transformation_ref()
                     .as_ref()
@@ -536,7 +576,7 @@ where
             )
         };
 
-        if let Some(remap) = RemapT::get_remap_range().or(self.remap) {
+        if let Some(remap) = self.port_get_remap_interval() {
             value = remap
                 .map_from(
                     value,
@@ -594,21 +634,21 @@ where
     }
 
     fn port_set_remap_off(&mut self) {
-        self.remap = None;
+        self.remap_policy.remap_pol_off();
         self.sanitize_inplace(());
     }
 
     fn port_set_remap_from_inner_default(&mut self) {
-        self.remap = Some(InnerT::default().get_interval());
-        self.sanitize_inplace(());
+        self.port_set_remap_interval(InnerT::default().get_interval());
+        // self.sanitize_inplace(());
     }
 
     fn port_get_remap_interval(&self) -> Option<NumInterval<InnerT::ValueT>> {
-        self.remap
+        self.remap_policy.remap_pol_get_interval()
     }
 
-    fn port_set_remap_interval(&mut self, ri: NumInterval<InnerT::ValueT>) {
-        self.remap = Some(ri);
+    fn port_set_remap_interval(&mut self, interval: NumInterval<InnerT::ValueT>) {
+        self.remap_policy.remap_pol_set_interval(interval);
         self.sanitize_inplace(());
     }
 
@@ -648,6 +688,10 @@ where
 
     fn port_is_transformable(&self) -> bool {
         TfmT::is_transformable()
+    }
+
+    fn port_user_defined_remapping_allowed(&self) -> bool {
+        self.remap_policy.remap_pol_user_defined_allowed()
     }
 }
 
