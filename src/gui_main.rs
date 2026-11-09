@@ -341,6 +341,7 @@ impl eframe::App for GuiMain {
                         FilePickingAction::None => {}
                     };
 
+                    ui.separator();
                     ui.menu_button("File", |ui| {
                         ui.separator();
                         if ui
@@ -448,8 +449,15 @@ impl eframe::App for GuiMain {
                             self.exit_app = true;
                         }
                     });
-
                     ui.separator();
+                    ui.menu_button("View", |ui| {
+                        ui.separator();
+                        if ui.button("Reset UI cache").clicked() {
+                            ui.data_mut(|d| d.clear());
+                        }
+                    });
+                    ui.separator();
+
                     self.draw_and_handle_pending_changes_button(ui);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
                         ui.separator();

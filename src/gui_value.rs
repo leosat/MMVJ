@@ -1,6 +1,7 @@
 use std::ops::RangeInclusive;
 
 use eframe::egui;
+use egui::scroll_area::ScrollSource;
 
 use crate::config::WithSelfSanitize;
 use crate::gui_common::{GuiCmd, bool_to_simple_change_gui_cmd, draw_collapsing_ui};
@@ -266,6 +267,86 @@ where
                 let gui_out_mut = &mut gui_out;
                 let mut changed_simple = false;
 
+                let mut value_port_editor = |ui: &mut egui::Ui, port: &mut PortT| {
+                    ui.separator();
+                    ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui))
+                        .inner
+                        .inspect(|out| *gui_out_mut = Some(out.clone()));
+
+                    if port.port_is_transformable() {
+                        ui.separator();
+
+                        if let Some(tfm) = port.port_transformation_mut() {
+                            let mut remove_tfm = false;
+                            ui.collapsing("Transformation", |ui| {
+                                tfm.egui(*params.gui_common_ctx, ui)
+                                    .inspect(|out| *gui_out_mut = Some(out.clone()));
+                                ui.separator();
+                                if ui.button("remove transformation").clicked() {
+                                    remove_tfm = true;
+                                    *gui_out_mut = bool_to_simple_change_gui_cmd(true);
+                                }
+                            });
+                            if remove_tfm {
+                                port.port_transformation_off();
+                            }
+                        } else {
+                            if ui.small_button("add transformation").clicked() {
+                                port.port_transformation_on();
+                                *gui_out_mut = bool_to_simple_change_gui_cmd(true);
+                            }
+                        }
+                    }
+
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        if let Some(mut remap_to) = port.port_get_remap_interval() {
+                            if port.port_user_defined_remapping_allowed() {
+                                ui.label("remap: ");
+
+                                if remap_to.egui(
+                                    GuiInInterval::Edit {
+                                        max_range: BaseNumT::MIN..=BaseNumT::MAX, // port.get_max_interval().cast().unwrap().make_range_inclusive(),
+                                        from_label: "",
+                                        to_label: "",
+                                        sanitize_and_sort: true,
+                                        truncate: false,
+                                    },
+                                    ui,
+                                ) {
+                                    port.port_set_remap_interval(remap_to);
+                                    changed_simple = true;
+                                };
+
+                                if remap_to == port.port_get_default_interval_from_inner() {
+                                    ui.label("(=default range)");
+                                } else {
+                                    ui.label("(overridden range)");
+                                }
+
+                                if ui
+                                    .button(egui::RichText::new(egui_phosphor::bold::TRASH).size(14.0))
+                                    .on_hover_text("Turn remapping Off")
+                                    .clicked()
+                                {
+                                    port.port_set_remap_off();
+                                    changed_simple = true;
+                                }
+                            } else {
+                                ui.label(format!("Port-enforced remapping range: {remap_to}",));
+                            }
+                        } else if port.port_user_defined_remapping_allowed()
+                            && ui
+                                .button("enable remapping")
+                                .on_hover_text("Turn remapping On")
+                                .clicked()
+                        {
+                            port.port_set_remap_from_inner_default();
+                            changed_simple = true;
+                        }
+                    });
+                };
+
                 ui.label(
                     egui::RichText::new(format!(
                         "{:+012.5} {} {}",
@@ -275,13 +356,22 @@ where
                     ))
                     .monospace()
                     .size(11.0),
-                );
+                )
+                .on_hover_ui_at_pointer(|ui| {
+                    egui::ScrollArea::vertical()
+                        .scroll_source(ScrollSource::ALL)
+                        .min_scrolled_height(300.0)
+                        .show(ui, |ui| {
+                            ui.push_id("on hover editor", |ui| value_port_editor(ui, port));
+                        });
+                });
 
                 ui.separator();
                 SanPolicyT::draw_san_info::<<PortT as ValuePortIface>::InnerT>(ui);
                 ui.separator();
 
                 ui.vertical(|ui| {
+                    ui.set_max_width(1000.0);
                     draw_collapsing_ui(ui, Some(port as *mut PortT), None, |ui| {
                         ui.label(egui::RichText::new(egui_phosphor::bold::PLUGS).size(14.0))
                             .on_hover_text("Value port: allows sanitization and optional range remapping");
@@ -310,84 +400,7 @@ where
                         });
                     })
                     .body(|ui| {
-                        ui.separator();
-
-                        ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui))
-                            .inner
-                            .inspect(|out| *gui_out_mut = Some(out.clone()));
-
-                        if port.port_is_transformable() {
-                            ui.separator();
-
-                            if let Some(tfm) = port.port_transformation_mut() {
-                                let mut remove_tfm = false;
-                                ui.collapsing("Transformation", |ui| {
-                                    tfm.egui(*params.gui_common_ctx, ui)
-                                        .inspect(|out| *gui_out_mut = Some(out.clone()));
-                                    ui.separator();
-                                    if ui.button("remove transformation").clicked() {
-                                        remove_tfm = true;
-                                        *gui_out_mut = bool_to_simple_change_gui_cmd(true);
-                                    }
-                                });
-                                if remove_tfm {
-                                    port.port_transformation_off();
-                                }
-                            } else {
-                                if ui.small_button("add transformation").clicked() {
-                                    port.port_transformation_on();
-                                    *gui_out_mut = bool_to_simple_change_gui_cmd(true);
-                                }
-                            }
-                        }
-
-                        ui.separator();
-                        ui.horizontal(|ui| {
-                            if let Some(mut remap_to) = port.port_get_remap_interval() {
-                                if port.port_user_defined_remapping_allowed() {
-                                    ui.label("remap: ");
-
-                                    if remap_to.egui(
-                                        GuiInInterval::Edit {
-                                            max_range: BaseNumT::MIN..=BaseNumT::MAX, // port.get_max_interval().cast().unwrap().make_range_inclusive(),
-                                            from_label: "",
-                                            to_label: "",
-                                            sanitize_and_sort: true,
-                                            truncate: false,
-                                        },
-                                        ui,
-                                    ) {
-                                        port.port_set_remap_interval(remap_to);
-                                        changed_simple = true;
-                                    };
-
-                                    if remap_to == port.port_get_default_interval_from_inner() {
-                                        ui.label("(=default range)");
-                                    } else {
-                                        ui.label("(overridden range)");
-                                    }
-
-                                    if ui
-                                        .button(egui::RichText::new(egui_phosphor::bold::TRASH).size(14.0))
-                                        .on_hover_text("Turn remapping Off")
-                                        .clicked()
-                                    {
-                                        port.port_set_remap_off();
-                                        changed_simple = true;
-                                    }
-                                } else {
-                                    ui.label(format!("Port-enforced remapping range: {remap_to}",));
-                                }
-                            } else if port.port_user_defined_remapping_allowed()
-                                && ui
-                                    .button("enable remapping")
-                                    .on_hover_text("Turn remapping On")
-                                    .clicked()
-                            {
-                                port.port_set_remap_from_inner_default();
-                                changed_simple = true;
-                            }
-                        });
+                        value_port_editor(ui, port);
                     })
                 });
 
