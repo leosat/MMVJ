@@ -6,8 +6,8 @@ use crate::base_num::BaseAtomicT;
 use crate::num_interval::NumIntervalValue;
 use crate::schemas_transform::TfmSeqCfg;
 use crate::schemas_value::{
-    AutoOrManual, InputValueMetadata, ValueDsts, ValueIface, ValueSrcs, ValueXrcs, WithDeviceControlMatcherRef,
-    WithLastKnownIO, WithLastKnownIOSettable,
+    AutoOrManual, InputValueMetadata, TfmValueData, ValueDsts, ValueIface, ValueSrcs, ValueXrcs,
+    WithDeviceControlMatcherRef, WithLastKnownIO, WithLastKnownIOSettable,
 };
 use crate::tfm_exec::{TfmExecCtx, WithTfmExec, get_out_of_range_policy};
 use crate::{config::WithSelfSanitize, schemas_value::WithRelativity};
@@ -98,6 +98,11 @@ pub(crate) trait ValuePortIface:
 
     fn port_get_default_interval_from_inner(&self) -> NumInterval<<Self::InnerT as WithNumericValue>::ValueT>;
     // fn _port_get_identity_str(&self) -> String;
+
+    fn port_set_tfm_value_and_flush_to_devices(&self, value: TfmValueData<BaseNumT>, ctx: &impl TfmExecCtx)
+    where
+        BaseNumT: From<<Self::InnerT as WithNumericValue>::ValueT>,
+        <Self::InnerT as WithNumericValue>::ValueT: From<BaseNumT>;
 
     fn port_set_numeric_value_and_flush_to_devices(
         &self,
@@ -692,6 +697,21 @@ where
     // fn _port_get_identity_str(&self) -> String {
     //     self.inner.value_identity()
     // }
+    fn port_set_tfm_value_and_flush_to_devices(&self, input: TfmValueData<BaseNumT>, ctx: &impl TfmExecCtx)
+    where
+        BaseNumT: From<<Self::InnerT as WithNumericValue>::ValueT>,
+        <Self::InnerT as WithNumericValue>::ValueT: From<BaseNumT>,
+    {
+        let value = tfm_value_port_writeback_praelude(
+            WritebackPraeludeInput {
+                from: input,
+                to_interval: self.port_get_interval().cast::<BaseNumT>().unwrap(),
+                to_relativity: self.port_get_relativity(),
+            },
+            ctx,
+        );
+        self.port_set_numeric_value_and_flush_to_devices(value.into(), ctx);
+    }
 
     fn port_set_numeric_value_and_flush_to_devices(&self, value: InnerT::ValueT, ctx: &impl TfmExecCtx)
     where
@@ -1245,4 +1265,30 @@ mod testing {
             assert_eq!(exe_ctx.device_control_value_received.get(), 0.5);
         }
     }
+}
+
+// -----------------------------
+struct WritebackPraeludeInput {
+    from: TfmValueData<BaseNumT>,
+    to_interval: NumInterval<BaseNumT>,
+    to_relativity: Relativity,
+    /* TODO: writeback mode */
+}
+
+fn tfm_value_port_writeback_praelude(params: WritebackPraeludeInput, exe_ctx: &impl TfmExecCtx) -> BaseNumT {
+    let mut value = params.from.value;
+
+    if params.from.interval != params.to_interval {
+        value = params.to_interval.map_from(
+            value,
+            &params.from.interval,
+            get_out_of_range_policy(params.from.relativity, exe_ctx.is_reactive_mode()),
+        );
+    }
+
+    if !exe_ctx.is_reactive_mode() && params.from.relativity.is_relative() && params.to_relativity.is_absolute() {
+        value = params.to_interval.clamp(value);
+    }
+
+    value
 }

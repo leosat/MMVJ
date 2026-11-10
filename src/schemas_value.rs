@@ -75,6 +75,14 @@ pub(crate) trait _WithDstRefCount {
     fn _set_dst_refs_count(&mut self, refs_count: usize);
 }
 
+// -------------------------------
+pub(crate) struct TfmValueData<ValueT: NumIntervalValue> {
+    pub(crate) value: ValueT,
+    pub(crate) interval: NumInterval<ValueT>,
+    pub(crate) relativity: Relativity,
+}
+
+// -------------------------------
 #[derive(Clone, Copy, Default, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub(crate) struct InputValueMetadata<ValueT: NumIntervalValue> {
     #[serde(

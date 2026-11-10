@@ -20,6 +20,7 @@ use crate::schemas_mapping::Mapping;
 #[cfg(feature = "midi")]
 use crate::schemas_midi::MidiMatcherCfg;
 use crate::schemas_transform::{DynValFilter, collect_dynamic_value_matchers};
+use crate::schemas_value::TfmValueData;
 use crate::schemas_value::ValueIface;
 use crate::schemas_value::ValueSrcs;
 use crate::schemas_value::WithNumericValue;
@@ -29,7 +30,6 @@ use crate::schemas_value::{
 
 use crate::schemas_value_port::ValuePortIface;
 use crate::stats::StatsIface;
-use crate::tfm_exec::get_out_of_range_policy;
 use crate::tfm_exec::{TfmExecCtx, WithTfmExec};
 use anyhow::Result;
 use crossbeam_utils::CachePadded;
@@ -703,62 +703,25 @@ impl<
             exe_ctx.current_mapping_src = Some(mapping.src.port_inner_ref());
             exe_ctx.current_mapping_dst = Some(mapping.dst.port_inner_ref());
 
-            let value = mapping.src.port_get_numeric_value(Some(&exe_ctx));
+            let input = mapping.src.port_get_numeric_value(Some(&exe_ctx));
 
-            mapping.set_last_known_io((Some(value), None));
+            mapping.set_last_known_io((Some(input), None));
+            let output = mapping.transformation.exec(input, &exe_ctx);
+            mapping.set_last_known_io((None, Some(output)));
 
-            let value = {
-                let mut value = mapping.transformation.exec(value, &exe_ctx);
+            mapping.dst.port_set_tfm_value_and_flush_to_devices(
+                TfmValueData {
+                    value: output,
+                    relativity: mapping.transformation.get_out_relativity(),
+                    interval: mapping.transformation.get_out_interval(),
+                },
+                &exe_ctx,
+            );
 
-                let mapping_dst_interval = mapping.dst.port_get_interval();
-                let tfm_out_interval = mapping.transformation.get_out_interval();
-
-                // TODO: Currently only two points of writeback are possible: mapping destination and
-                //        script tfm destination ports. The below remapping+clamp is only done for mapping dst,
-                //        but not for script dst, where user is supposed to do it manually.
-                //        In case more writeback points (e.g. write/tee tfm step) are added,
-                //        will need to move this logic to common writeback routine.
-                if tfm_out_interval != mapping_dst_interval {
-                    value = mapping_dst_interval.map_from(
-                        value,
-                        &tfm_out_interval,
-                        get_out_of_range_policy(
-                            mapping.transformation.get_out_relativity(),
-                            self.get_mode().is_reactive(),
-                        ),
-                    );
-                }
-
-                // TODO:
-                //
-                // Reinterpreting relative output as absolute control position
-                // e.g. in case of a joystick axis may or may not be feasible.
-                // for a physical device that could result in abrupt movements.
-                //
-                // Currently it is allowed.
-                // The mode of "clever" remapping of Rel to Abs is being proposed.
-                // Alternatively, we may further mark such conigurations as invalid,
-                // discarding writebacks.
-                //
-                // While allowed, in non-reactive mode relative delta can overshoot the
-                // range of abs dst control which may or may not be handled properly
-                // by the further processing logic.
-                if !self.get_mode().is_reactive()
-                    && mapping.transformation.get_out_relativity().is_relative()
-                    && mapping.dst.port_get_relativity().is_absolute()
-                {
-                    value = mapping_dst_interval.clamp(value);
-                }
-
-                value
-            };
-
-            mapping.dst.port_set_numeric_value_and_flush_to_devices(value, &exe_ctx);
             self.set_idle_tick_enabled_on_device_control_for_mapping(mapping);
-            mapping.set_last_known_io((None, Some(value)));
 
             if self.debug.is_on() {
-                debug!("Mapped {} ({mapping}): {value} -> {value}", mapping.name);
+                debug!("Mapped {} ({mapping}): {output} -> {output}", mapping.name);
             }
         }
     }
@@ -823,11 +786,6 @@ impl<
     }
 
     fn dcm_write_to_devices(&self, d: &DeviceControlMatcherRef, value: BaseNumT, debug: DebugLevel) {
-        // TODO !!!: stable mode: for relative deltas do not reset those buffers
-        // TODO !!!: stable mode: just emit event for the value to be re-fed into engine later
-        d.control_matcher.set_last_known_io(value);
-        d.control_matcher.set_numeric_value(value);
-
         match d.control_matcher {
             #[cfg(feature = "midi")]
             ControlMatchers::Midi(_) => {
