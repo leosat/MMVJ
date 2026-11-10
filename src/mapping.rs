@@ -52,6 +52,13 @@ const EMERGENCY_THROTTLE_DURATION_SEC_MAX: BaseNumT = 15.0 as BaseNumT;
 const EMERGENCY_THROTTLE_TIMEOUT_RESET_AFTER_PROCESSED_EVENTS_NUM: usize = 10000;
 
 // ---------------------------------------------
+// N.B. this can reduce index size, however will result in unmapped control matchers
+//      having their values not updated when corresponding device events arrive,
+//      which is unexpected behavior when observing cm state via Gui.
+//      Currenly disabled irrespective to cfg!(not(feature = "gui"));
+const ROUTER_INDEX_RETAIN_ONLY_MAPPED_ENTRIES: bool = false;
+
+// ---------------------------------------------
 #[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) enum MappingEngineCmd {
     _None,
@@ -352,8 +359,10 @@ impl<
             );
         }
 
-        self.router_index_sysdev_and_ctl_type_to_cms_and_mappings
-            .retain(|_, v| v.1.iter().any(|v| !v.is_empty()));
+        if ROUTER_INDEX_RETAIN_ONLY_MAPPED_ENTRIES {
+            self.router_index_sysdev_and_ctl_type_to_cms_and_mappings
+                .retain(|_, v| v.1.iter().any(|v| !v.is_empty()));
+        }
 
         for v in info_sysdev_to_enabled_mappings.values_mut() {
             v.sort();

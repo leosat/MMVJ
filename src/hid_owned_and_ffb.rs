@@ -540,7 +540,7 @@ pub(crate) async fn owned_hid_device_thread(
                                     crate::num_interval::OutOfRangePolicy::WarnIfDebugAndClamp,
                                 ),
                             },
-                        });
+                        }).await.inspect_err(|e| log::error!("{e}"));
                     }
                     // --------------------------
                     owned_virtual_device_thread_io.force_sum[axis_idx].store(play_sums[axis_idx] as BaseNumT, Ordering::Release);
