@@ -12,7 +12,7 @@ use crate::schemas_common::WithRuntimeId;
 use crate::schemas_mapping::Mapping;
 use crate::schemas_transform::TfmCfgDuplicateTreeWithNewState;
 use crate::schemas_transform::{TfmSeqCfg, TfmStepCfg};
-use crate::schemas_value::{DynValueRefs, ValueDsts, WithLastKnownIO};
+use crate::schemas_value::{DynValueRefs, ValueDsts, ValueIface};
 use crate::schemas_value_port::ValuePortIface;
 use std::any::Any;
 use std::sync::atomic::Ordering::Relaxed;
@@ -119,6 +119,11 @@ impl<'s> DrawEgui<'s> for Mapping {
                     ui.label(
                         egui::RichText::new("Src").strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
                     );
+                    ui.label(
+                        egui::RichText::new(format!("{}", self.src.port_inner_ref().value_identity()))
+                            .size(12.0)
+                            .strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
+                    );
                     let mut srcs = collect_and_cache_dyn_srcs(ui, &self.transformation);
                     if !srcs.is_empty() {
                         ui.label("(+...)").on_hover_ui(|ui| {
@@ -140,13 +145,6 @@ impl<'s> DrawEgui<'s> for Mapping {
                             ui,
                         )
                         .inspect(|out| *gui_out_mut = Some(out.clone()));
-                    ui.separator();
-                    ui.label(
-                        egui::RichText::new(format!(" ({:+08.2})", self.get_last_known_io().0))
-                            .size(12.0)
-                            .strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
-                    ).on_hover_text("Value input on last mapping run");
-                    ui.separator();
                 });
 
                 ui.separator();
@@ -165,6 +163,11 @@ impl<'s> DrawEgui<'s> for Mapping {
                 ui.horizontal(|ui| {
                     ui.label(
                         egui::RichText::new("Dst").strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
+                    );
+                    ui.label(
+                        egui::RichText::new(format!("{}", self.dst.port_inner_ref().value_identity()))
+                            .size(12.0)
+                            .strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
                     );
                     let mut dsts = collect_and_cache_dyn_dsts(ui, &self.transformation);
                     if !dsts.is_empty() {
@@ -187,13 +190,6 @@ impl<'s> DrawEgui<'s> for Mapping {
                             ui,
                         )
                         .inspect(|out| *gui_out_mut = Some(out.clone()));
-                    ui.separator();
-                    ui.label(
-                        egui::RichText::new(format!("({:+08.2})", self.get_last_known_io().1))
-                            .size(12.0)
-                            .strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
-                    ).on_hover_text("Value output on last mapping run");
-                    ui.separator();
                 });
             });
 
