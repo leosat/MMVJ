@@ -1,6 +1,8 @@
 use crate::config::MORE_DEBUG;
 use crate::config::WithSelfSanitize;
 use crate::debug::DebugLevel;
+use crate::device_and_device_manager::AvailableDeviceInfoIface;
+use crate::device_and_device_manager::CommonDeviceCfgIface;
 use crate::device_and_device_manager::DeviceKind;
 use crate::device_and_device_manager::DeviceManagerCommon;
 use crate::device_and_device_manager::WithDeviceClassification;
@@ -1228,14 +1230,13 @@ impl GuiMain {
                             self.draw_device_remove_button(ui, &dmk, false);
                         })
                         .body(|ui| {
-                            if let Some(cmd) = self
-                                .cfg
-                                .devices
-                                .midi
-                                .get_mut(&dmk)
-                                .unwrap()
-                                .egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui)
-                            {
+                            let dm = self.cfg.devices.midi.get_mut(&dmk).unwrap();
+
+                            ui.separator();
+                            Self::draw_matching_available_devices(&mut self.available_midi, dm, ui);
+                            ui.separator();
+
+                            if let Some(cmd) = dm.egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui) {
                                 // dbg!(&cmd);
                                 self.submit_post_draw_cmd(cmd);
                             }
@@ -1244,6 +1245,34 @@ impl GuiMain {
                 });
             }
         });
+    }
+
+    fn draw_matching_available_devices<AvailDevInfoT>(
+        ads: &mut Option<Vec<AvailDevInfoT>>,
+        dm: &impl CommonDeviceCfgIface,
+        ui: &mut egui::Ui,
+    ) where
+        AvailDevInfoT: AvailableDeviceInfoIface + for<'a> DrawEgui<'a, In = ()>,
+    {
+        if let Some(ads) = ads {
+            let mut mads = ads
+                .iter_mut()
+                .filter(|ad| dm.matches_available_device(*ad))
+                .collect::<Vec<_>>();
+            if mads.is_empty() {
+                ui.label("No available devices are matched by this matcher.");
+            } else {
+                ui.collapsing(format!("Matching available devices"), |ui| {
+                    mads.iter_mut().for_each(|ad| {
+                        ui.collapsing(ad.get_name().to_owned(), |ui| {
+                            ad.egui((), ui);
+                        });
+                    });
+                });
+            }
+        } else {
+            ui.label("Devices availability info is not provided...");
+        }
     }
 
     // ================================================================================
@@ -1374,7 +1403,11 @@ impl GuiMain {
                         })
                         .body(|ui| {
                             let dm = self.cfg.devices.hid.get_mut(&dmk).unwrap();
+
                             ui.separator();
+                            Self::draw_matching_available_devices(&mut self.available_hid, dm, ui);
+                            ui.separator();
+
                             ui.label(format!("Matcher classification: {}", dm.get_classification()));
                             if let Some(cmd) = dm.egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui) {
                                 dm.update_classification();
