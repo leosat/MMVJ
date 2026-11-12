@@ -551,6 +551,25 @@ impl ConfigManager {
     }
 
     pub(crate) fn load_from_file(&mut self, cfg_file_path: PathBuf) -> Result<&mut Self> {
+        fn sanitize_cfg_file_path(cfg_file_path: &std::path::Path) -> Result<()> {
+            if !cfg_file_path.exists() {
+                let e = format!(
+                    "Configuration file is not found at {}, current dir is {}.\n\
+                    Please specify proper location of the configuration file via -c command line option.\n\
+                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+                    cfg_file_path.to_str().unwrap_or("Empty file path..."),
+                    std::env::current_dir()?
+                        .to_str()
+                        .unwrap_or("Unknown curent working dir...")
+                );
+                log::error!("{e}");
+                bail!("Config file not found.");
+            }
+            Ok(())
+        }
+
+        sanitize_cfg_file_path(&cfg_file_path)?;
+
         Ok({
             let cfg_file_path_canon =
                 fs::canonicalize(cfg_file_path.clone()).context("Failed to canonicalize config file path")?;

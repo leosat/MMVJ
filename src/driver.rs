@@ -99,32 +99,6 @@ pub enum AuxDriverTask {
     },
 }
 
-fn sanitize_cfg_file_path(cfg_file_path: &std::path::Path) -> Result<()> {
-    if !cfg_file_path.exists() {
-        let e = format!(
-            "Configuration file is not found at {}, current dir is {}.\n\
-            Please specify proper location of the configuration file via -c command line option.\n\
-            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-            cfg_file_path.to_str().unwrap_or("Empty file path..."),
-            std::env::current_dir()?
-                .to_str()
-                .unwrap_or("Unknown curent working dir...")
-        );
-        log::error!("{e}");
-
-        if cfg_file_path.is_relative() {
-            let nb = "NB: You have specified relative config file path. \n\
-              NB: if running an appimage, the program gets running in a temporary directory \n\
-             NB: for the config to be found specify full config path like -c <full path to your config>\n\
-             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-                .to_string();
-            log::warn!("{nb}");
-        }
-        bail!("Config file not found.");
-    }
-    Ok(())
-}
-
 pub async fn run_aux_task(aux_task: &AuxDriverTask, cfg_file_path: Option<PathBuf>, debug: DebugLevel) -> Result<()> {
     match aux_task {
         #[cfg(feature = "midi")]
@@ -166,7 +140,6 @@ pub async fn run_aux_task(aux_task: &AuxDriverTask, cfg_file_path: Option<PathBu
             save_after_validation: save_after_valiadation,
         } => {
             if let Some(cfg_file_path) = cfg_file_path {
-                sanitize_cfg_file_path(&cfg_file_path)?;
                 let mut cfg_mgr = ConfigManager::new();
                 cfg_mgr.load_from_file(cfg_file_path)?;
                 if save_after_valiadation.unwrap_or_default() {
@@ -238,6 +211,8 @@ pub async fn run(
 ) -> Result<()> {
     crate::debug::set_debug_level__(debug);
 
+    let (cfg_watcher_tx, mut cfg_watcher_rx) = tokio::sync::mpsc::channel::<()>(1);
+
     #[cfg(feature = "gui")]
     let any_gui = gui_monitors || gui_full;
 
@@ -246,18 +221,20 @@ pub async fn run(
     #[cfg(feature = "gui")]
     let gui_monitor_only = gui_monitors && !gui_full;
 
-    let (cfg_watcher_tx, mut cfg_watcher_rx) = tokio::sync::mpsc::channel::<()>(1);
-
-    if let Some(ref cfg_file_path) = cfg_file_path {
-        sanitize_cfg_file_path(cfg_file_path)?;
-        watch_config_file(cfg_file_path, cfg_watcher_tx)?;
-    }
-
     //----------------------------- CFG MANAGER --------------------------------------
     let mut cfg_mgr = ConfigManager::new();
 
     if let Some(cfg_file_path) = cfg_file_path.clone() {
-        cfg_mgr.load_from_file(cfg_file_path)?;
+        cfg_mgr.load_from_file(cfg_file_path.clone())?;
+
+        #[cfg(feature = "gui")]
+        if !any_gui {
+            watch_config_file(&cfg_file_path, cfg_watcher_tx)?;
+        }
+        #[cfg(not(feature = "gui"))]
+        {
+            watch_config_file(&cfg_file_path, cfg_watcher_tx)?;
+        }
     } else if blank {
         cfg_mgr.load(("blank".to_string(), Default::default()))?;
     } else {
