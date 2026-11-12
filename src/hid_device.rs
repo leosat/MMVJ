@@ -498,8 +498,12 @@ impl HidDevice {
             client_side_path.to_str().unwrap(),
             ctl_states,
             Some(virtual_device_id),
+            cfg_key.to_owned(),
             creation_spec.debug,
         )?;
+
+        debug_assert_eq!(device.cfg_key, cfg_key.to_owned());
+        debug_assert_eq!(device.id, virtual_device_id);
 
         device.classification.insert(DeviceKind::Virtual);
         device.is_owned_virtual_device = true;
@@ -522,8 +526,7 @@ impl HidDevice {
         }
         device.owned_virtual_device_thread_cancellation = owned_virtual_device_thread_data;
         device.is_owned_virtual_device_persistent = creation_spec.is_persistent;
-        device.cfg_key = cfg_key.into();
-        device.id = virtual_device_id;
+
         anyhow::Ok(device)
     }
 
@@ -531,6 +534,7 @@ impl HidDevice {
         path: &str,
         ctl_states: Option<Arc<DeviceControlStates>>,
         device_id: Option<ObjId>,
+        cfg_key: String,
         debug: DebugLevel,
     ) -> anyhow::Result<HidDevice>
     where
@@ -622,7 +626,7 @@ impl HidDevice {
             ff_enabled: false,
             owned_virtual_device_thread_io: None,
             ff_is_a_condition_effect_enabled: false,
-            cfg_key: "no cfg key".into(),
+            cfg_key,
             classification,
         })
     }

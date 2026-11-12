@@ -410,8 +410,13 @@ impl DeviceManagerCommon for HidManager {
                 opened_device_id: opened_device.borrow().get_id(),
                 available_device_info: device_info.clone(),
             })
-        } else if let Ok(mut d) = HidDevice::open_from_path(device_info.path.to_str().unwrap(), None, None, self.debug)
-        {
+        } else if let Ok(mut d) = HidDevice::open_from_path(
+            device_info.path.to_str().unwrap(),
+            None,
+            None,
+            device_matcher_key.to_owned(),
+            self.debug,
+        ) {
             log::info!(
                 "Opened device {} (matched config key {})",
                 device_info.name,
@@ -419,6 +424,7 @@ impl DeviceManagerCommon for HidManager {
             );
             let id = d.get_id();
             d.attach_events_listener(Some(self.per_device_event_notification_tx.clone()));
+            debug_assert_eq!(device_matcher_key.to_string(), d.get_cfg_key().to_string());
             devices
                 .entry(d.get_cfg_key().to_string())
                 .or_default()
