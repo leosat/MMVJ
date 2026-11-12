@@ -2364,7 +2364,7 @@ pub(crate) struct SteeringCfg {
     #[serde(default)]
     #[garde(skip)]
     pub(crate) auto_center_halflife:
-        ValuePort<SteeringAutocenterAlongFfbCfg, SanPolicyUseFromPortInner, RemapPolicyUserDefined>,
+        ValuePort<SteeringAutocenterHalfLife, SanPolicyUseFromPortInner, RemapPolicyUserDefined>,
 
     /// Allows autocentering to operate **alongside** active force feedback,
     /// scaled by this factor in [0, 1].
@@ -2458,6 +2458,13 @@ make_input_port_inner_nutype!(
     SteeringHoldFactorCfg,
     default: default_zero_range_zero_to_one(),
     san-doc: "Hold factor is >= 0",
+    san-exe: |v: BaseNumT| {v.max(BaseNumT::ZERO)}
+);
+
+make_input_port_inner_nutype!(
+    SteeringAutocenterHalfLife,
+    default: default_steering_auto_center_halflife(),
+    san-doc: "Autocenter halflife must be >= 0 0",
     san-exe: |v: BaseNumT| {v.max(BaseNumT::ZERO)}
 );
 

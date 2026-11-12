@@ -1471,7 +1471,7 @@ impl<'s> DrawEgui<'s> for SteeringCfg {
             ui.horizontal(|ui| {
                 self.auto_center_halflife.egui(
                     GuiInValue::Edit(GuiInValueEditParams {
-                        allow_interval_edit: false,
+                        allow_interval_edit: true,
                         slider_log_scale: false,
                         name: param_name,
                         choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
