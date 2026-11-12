@@ -758,18 +758,13 @@ impl<
             if branches::unlikely(!(self.scheduled_mappings_normal.is_empty())) {
                 return;
             }
+
             debug_assert!(
                 self.scheduled_mappings_immediate.is_empty() && self.scheduled_mappings_normal.is_empty(),
                 "All the input-triggered mappings must be executed by the time of idle tick processing."
             );
-            if !self.get_mode().is_reactive() {
-                self.clear_rel_ctls();
-            } else {
-                debug_assert!(
-                    self.rel_ctls.iter().all(|ctl| ctl.load(Relaxed) == 0.0 as BaseNumT),
-                    "All the relative control matcher values must be reset to 0 (after mappings execution) by the time idle tick processing is triggered."
-                );
-            }
+
+            self.clear_rel_ctls();
         } else {
             Self::dedup_and_shuffle(mappings, true, mappings.len() > 1);
         }
