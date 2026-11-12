@@ -329,11 +329,13 @@ pub(crate) fn bool_to_simple_change_gui_cmd(changed: bool) -> Option<GuiCmd> {
 // }
 
 // -------------------------------
-#[allow(unused)]
+
 pub(crate) trait DrawEgui<'s> {
     type In;
     type Out;
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out;
+    #[allow(unused)]
+    fn egui_immutable(&self, gui_in: Self::In, ui: &mut egui::Ui) {}
 }
 
 pub(crate) fn get_item_name_with_random_suffix(prefix: &str, count: usize) -> String {

@@ -129,9 +129,7 @@ pub(crate) fn run(
                     midi_mgr: MidiManager::new(DebugLevel::Off).expect("Can't create midi manager"),
                     hid_mgr: HidManager::new(DebugLevel::Off, false).expect("Can't create joysticks manager"),
                     _running_virtual_hid: None,
-                    available_hid: None,
-                    #[cfg(feature = "midi")]
-                    available_midi: None,
+                    avail_dev_info_cache: Default::default(),
                     style: GUI_STYLE_LIGHT,
                     system_requirements_chk_status: check_system_requirements().err().map(|e| format!("{e}")),
                 };
@@ -204,6 +202,42 @@ struct PendingCommand {
     /* aux metadata for pending and postponed commands may go here */
 }
 
+#[derive(Default)]
+struct AvailDevInfoCache {
+    available_hid: Option<Vec<AvailableHIDDeviceInfo>>,
+    #[cfg(feature = "midi")]
+    available_midi: Option<Vec<AvailableMidiDeviceInfo>>,
+}
+
+impl AvailDevInfoCache {
+    fn clear(&mut self) {
+        self.available_hid = None;
+        #[cfg(feature = "midi")]
+        {
+            self.available_midi = None;
+        }
+    }
+
+    fn hid(&mut self, hid_mgr: &HidManager) -> &[AvailableHIDDeviceInfo] {
+        self.available_hid
+            .get_or_insert_with(|| {
+                hid_mgr.enumerate_available_devices(Some(
+                    //  HidDeviceKind::Misc |
+                    //  HidDeviceKind::MiscMappable
+                    DeviceKind::Mouse | DeviceKind::Keyboard | DeviceKind::Joystick | DeviceKind::Gamepad,
+                ))
+            })
+            .as_slice()
+    }
+
+    #[cfg(feature = "midi")]
+    fn midi(&mut self, midi_mgr: &MidiManager) -> &[AvailableMidiDeviceInfo] {
+        self.available_midi
+            .get_or_insert_with(|| midi_mgr.enumerate_available_devices(None))
+            .as_slice()
+    }
+}
+
 pub(crate) struct GuiMain {
     system_requirements_chk_status: Option<String>, // TODO: common status notifications abstraction #121
     exit_app: bool,
@@ -241,9 +275,7 @@ pub(crate) struct GuiMain {
     midi_mgr: MidiManager,
     hid_mgr: HidManager,
     _running_virtual_hid: Option<Vec<AvailableHIDDeviceInfo>>,
-    available_hid: Option<Vec<AvailableHIDDeviceInfo>>,
-    #[cfg(feature = "midi")]
-    available_midi: Option<Vec<AvailableMidiDeviceInfo>>,
+    avail_dev_info_cache: AvailDevInfoCache,
 }
 
 impl eframe::App for GuiMain {
@@ -1012,7 +1044,7 @@ impl GuiMain {
             }
             GuiCmd::ChangeVirtualHid(GuiCmdChangeVirtualHid { virtual_hid_key }) => {
                 self.cfg.sanitize_inplace(());
-                self.reset_available_devices_caches();
+                self.avail_dev_info_cache.clear();
                 let (tx, rx) = std::sync::mpsc::channel::<()>();
                 self.send_driver_cmd(DriverCmd::ChangeVirtualHid {
                     cfg: self.cfg.clone(),
@@ -1024,7 +1056,7 @@ impl GuiMain {
                     .inspect_err(|e| log::error!("{e}"));
             }
             GuiCmd::LoadCfgDemo(..) | GuiCmd::LoadCfgFile(..) | GuiCmd::LoadCfgBlank() => {
-                self.reset_available_devices_caches();
+                self.avail_dev_info_cache.clear();
 
                 let (resp_tx, resp_rx) = std::sync::mpsc::channel::<Result<Config, String>>();
                 self.send_driver_cmd(DriverCmd::LoadCfg {
@@ -1190,15 +1222,11 @@ impl GuiMain {
         ui.separator();
         draw_collapsing_ui(ui, None::<()>, Some("Available"), |_| {}).body(|ui| {
             ui.group(|ui| {
-                if let Some(ref mut list) = self.available_midi {
-                    for (ad_idx, ad) in list.iter_mut().enumerate() {
-                        ui.separator();
-                        ui.collapsing(format!("({}) {}", ad_idx, ad.name), |ui| {
-                            ad.egui((), ui);
-                        });
-                    }
-                } else {
-                    self.available_midi = Some(self.midi_mgr.enumerate_available_devices(None));
+                for (ad_idx, ad) in self.avail_dev_info_cache.midi(&self.midi_mgr).iter().enumerate() {
+                    ui.separator();
+                    ui.collapsing(format!("({}) {}", ad_idx, ad.name), |ui| {
+                        ad.egui_immutable((), ui);
+                    });
                 }
             });
         });
@@ -1230,13 +1258,23 @@ impl GuiMain {
                             self.draw_device_remove_button(ui, &dmk, false);
                         })
                         .body(|ui| {
-                            let dm = self.cfg.devices.midi.get_mut(&dmk).unwrap();
-
                             ui.separator();
-                            Self::draw_matching_available_devices(&mut self.available_midi, dm, ui);
+                            let available_midi = self.avail_dev_info_cache.midi(&self.midi_mgr);
+                            Self::draw_matching_available_devices(
+                                available_midi,
+                                self.cfg.devices.midi.get(&dmk).unwrap(),
+                                ui,
+                            );
                             ui.separator();
 
-                            if let Some(cmd) = dm.egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui) {
+                            if let Some(cmd) = self
+                                .cfg
+                                .devices
+                                .midi
+                                .get_mut(&dmk)
+                                .unwrap()
+                                .egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui)
+                            {
                                 // dbg!(&cmd);
                                 self.submit_post_draw_cmd(cmd);
                             }
@@ -1248,30 +1286,26 @@ impl GuiMain {
     }
 
     fn draw_matching_available_devices<AvailDevInfoT>(
-        ads: &mut Option<Vec<AvailDevInfoT>>,
+        ads: &[AvailDevInfoT],
         dm: &impl CommonDeviceCfgIface,
         ui: &mut egui::Ui,
     ) where
         AvailDevInfoT: AvailableDeviceInfoIface + for<'a> DrawEgui<'a, In = ()>,
     {
-        if let Some(ads) = ads {
-            let mut mads = ads
-                .iter_mut()
-                .filter(|ad| dm.matches_available_device(*ad))
-                .collect::<Vec<_>>();
-            if mads.is_empty() {
-                ui.label("No available devices are matched by this matcher.");
-            } else {
-                ui.collapsing(format!("Matching available devices"), |ui| {
-                    mads.iter_mut().for_each(|ad| {
-                        ui.collapsing(ad.get_name().to_owned(), |ui| {
-                            ad.egui((), ui);
-                        });
+        let mut mads = ads
+            .iter()
+            .filter(|ad| dm.matches_available_device(*ad))
+            .collect::<Vec<_>>();
+        if mads.is_empty() {
+            ui.label("No available devices are matched by this matcher.");
+        } else {
+            ui.collapsing(format!("Matching available devices"), |ui| {
+                mads.iter_mut().for_each(|ad| {
+                    ui.collapsing(ad.get_name().to_owned(), |ui| {
+                        ad.egui_immutable((), ui);
                     });
                 });
-            }
-        } else {
-            ui.label("Devices availability info is not provided...");
+            });
         }
     }
 
@@ -1283,18 +1317,11 @@ impl GuiMain {
     fn draw_device_and_matchers_hid(&mut self, ui: &mut egui::Ui) {
         ui.separator();
         draw_collapsing_ui(ui, None::<()>, Some("Available"), |_| {}).body(|ui| {
-            if let Some(ref mut list) = self.available_hid {
-                for (ad_idx, ad) in list.iter_mut().enumerate() {
-                    ui.separator();
-                    ui.collapsing(format!("({}) {}", ad_idx, ad.name), |ui| {
-                        ad.egui((), ui);
-                    });
-                }
-            } else {
-                self.available_hid = Some(self.hid_mgr.enumerate_available_devices(Some(
-                    DeviceKind::Mouse | DeviceKind::Keyboard | DeviceKind::Joystick | DeviceKind::Gamepad, //  HidDeviceKind::Misc |
-                                                                                                           //  HidDeviceKind::MiscMappable
-                )))
+            for (ad_idx, ad) in self.avail_dev_info_cache.hid(&self.hid_mgr).iter().enumerate() {
+                ui.separator();
+                ui.collapsing(format!("({}) {}", ad_idx, ad.name), |ui| {
+                    ad.egui_immutable((), ui);
+                });
             }
         });
         ui.separator();
@@ -1402,12 +1429,15 @@ impl GuiMain {
                             self.draw_device_remove_button(ui, &dmk, false);
                         })
                         .body(|ui| {
+                            ui.separator();
+                            Self::draw_matching_available_devices(
+                                self.avail_dev_info_cache.hid(&self.hid_mgr),
+                                self.cfg.devices.hid.get_mut(&dmk).unwrap(),
+                                ui,
+                            );
+                            ui.separator();
+
                             let dm = self.cfg.devices.hid.get_mut(&dmk).unwrap();
-
-                            ui.separator();
-                            Self::draw_matching_available_devices(&mut self.available_hid, dm, ui);
-                            ui.separator();
-
                             ui.label(format!("Matcher classification: {}", dm.get_classification()));
                             if let Some(cmd) = dm.egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui) {
                                 dm.update_classification();
@@ -1421,14 +1451,6 @@ impl GuiMain {
                 self.submit_post_draw_cmd(command.clone());
             }
         });
-    }
-
-    fn reset_available_devices_caches(&mut self) {
-        self.available_hid = None;
-        #[cfg(feature = "midi")]
-        {
-            self.available_midi = None;
-        }
     }
 
     fn draw_variables(&mut self, ui: &mut egui::Ui) {

@@ -468,7 +468,11 @@ impl<'s> DrawEgui<'s> for HidControlMatcherCfg {
 impl<'s> DrawEgui<'s> for AvailableHIDDeviceInfo {
     type In = ();
     type Out = ();
-    fn egui(&mut self, _gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+    fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+        self.egui_immutable(gui_in, ui);
+    }
+
+    fn egui_immutable(&self, _gui_in: Self::In, ui: &mut egui::Ui) {
         ui.group(|ui| {
             ui.separator();
             ui.label(format!("Device name: {}", self.name));
