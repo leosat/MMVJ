@@ -231,6 +231,7 @@ where
 pub(crate) trait PortSanPolicy<SanProviderT>:
     std::fmt::Debug + Copy + Clone + PartialOrd + PartialEq + 'static
 {
+    #[allow(unused)]
     fn san_policy_doc_str() -> &'static str;
     fn san_policy_sanitize_numeric_value(value: SanProviderT::ValueT) -> SanProviderT::ValueT
     where

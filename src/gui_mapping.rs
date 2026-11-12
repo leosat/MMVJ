@@ -12,7 +12,7 @@ use crate::schemas_common::WithRuntimeId;
 use crate::schemas_mapping::Mapping;
 use crate::schemas_transform::TfmCfgDuplicateTreeWithNewState;
 use crate::schemas_transform::{TfmSeqCfg, TfmStepCfg};
-use crate::schemas_value::{DynValueRefs, ValueDsts, ValueIface};
+use crate::schemas_value::{DynValueRefs, ValueDsts};
 use crate::schemas_value_port::ValuePortIface;
 use std::any::Any;
 use std::sync::atomic::Ordering::Relaxed;
@@ -116,37 +116,34 @@ impl<'s> DrawEgui<'s> for Mapping {
                 ui.separator();
                 // ----------------------------------
                 ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new("Src").strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
-                    );
-                    ui.label(
-                        egui::RichText::new(format!("{}", self.src.port_inner_ref().value_identity()))
-                            .size(12.0)
-                            .strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
-                    );
-                    let mut srcs = collect_and_cache_dyn_srcs(ui, &self.transformation);
-                    if !srcs.is_empty() {
-                        ui.label("(+...)").on_hover_ui(|ui| {
-                            draw_dyn_value_refs_list(ui, &mut srcs, "in-pipeline dynamic sources");
-                        });
-                    }
-                    ui.label(
-                        egui::RichText::new(":").strong(), // .color(Color32::LIGHT_BLUE.gamma_multiply(0.7)),
-                    );
-                    self.src
-                        .egui(
-                            GuiInValue::Edit(GuiInValueEditParams {
-                                allow_interval_edit: true,
-                                slider_log_scale: false,
-                                name: "Choose main mapping source",
-                                choice_case: ValueUsageContext::MappingSrc.into(),
-                                gui_common_ctx: &gui_in_common,
-                            }),
-                            ui,
-                        )
-                        .inspect(|out| *gui_out_mut = Some(out.clone()));
+                    self.src.egui(GuiInValue::Edit(GuiInValueEditParams {
+                        allow_interval_edit: true,
+                        slider_log_scale: false,
+                        name: "Choose main mapping source",
+                        choice_case: ValueUsageContext::MappingSrc.into(),
+                        gui_common_ctx: &gui_in_common,
+                    }), ui).inspect(|out| *gui_out_mut = Some(out.clone()));
                 });
-
+                let mut srcs = collect_and_cache_dyn_srcs(ui, &self.transformation);
+                if !srcs.is_empty() {
+                    ui.separator();
+                    draw_dyn_value_refs_list(ui, &mut srcs, "in-pipeline dynamic sources");
+                }
+                ui.separator();
+                ui.horizontal(|ui| {
+                    self.dst.egui(GuiInValue::Edit(GuiInValueEditParams {
+                        allow_interval_edit: true,
+                        slider_log_scale: false,
+                        name: "Choose main mapping destination",
+                        choice_case: ValueUsageContext::MappingDst.into(),
+                        gui_common_ctx: &gui_in_common,
+                    }), ui).inspect(|out| *gui_out_mut = Some(out.clone()));
+                });
+                let mut dsts = collect_and_cache_dyn_dsts(ui, &self.transformation);
+                if !dsts.is_empty() {
+                    ui.separator();
+                    draw_dyn_value_refs_list(ui, &mut dsts, "in-pipeline dynamic destinations");
+                }
                 ui.separator();
                 ui.collapsing(
                     gui_style.tfm_big_title_decorate(egui::RichText::new("Transformation")),
@@ -157,40 +154,6 @@ impl<'s> DrawEgui<'s> for Mapping {
                     },
                 );
                 ui.separator();
-
-                //---------------------------------------------
-                /*Last mapping out*/
-                ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new("Dst").strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
-                    );
-                    ui.label(
-                        egui::RichText::new(format!("{}", self.dst.port_inner_ref().value_identity()))
-                            .size(12.0)
-                            .strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
-                    );
-                    let mut dsts = collect_and_cache_dyn_dsts(ui, &self.transformation);
-                    if !dsts.is_empty() {
-                        ui.label("(+...)").on_hover_ui(|ui| {
-                            draw_dyn_value_refs_list(ui, &mut dsts, "in-pipeline dynamic destinations");
-                        });
-                    }
-                    ui.label(
-                        egui::RichText::new(":").strong(), // .color(Color32::LIGHT_RED.gamma_multiply(0.7)),
-                    );
-                    self.dst
-                        .egui(
-                            GuiInValue::Edit(GuiInValueEditParams {
-                                allow_interval_edit: true,
-                                slider_log_scale: false,
-                                name: "Choose main mapping destination",
-                                choice_case: ValueUsageContext::MappingDst.into(),
-                                gui_common_ctx: &gui_in_common,
-                            }),
-                            ui,
-                        )
-                        .inspect(|out| *gui_out_mut = Some(out.clone()));
-                });
             });
 
         if gui_out.is_some() {

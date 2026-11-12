@@ -207,15 +207,18 @@ trait GuiSanInfo<T: WithNumericValueSanitizerStatic> {
 
 impl<T: WithNumericValueSanitizerStatic> GuiSanInfo<T> for SanPolicyUseFromPortInner {
     fn draw_san_info<PortInnerT: WithNumericValueSanitizerStatic>(ui: &mut egui::Ui) {
+        ui.separator();
         ui.label(egui::RichText::new(egui_phosphor::bold::BROOM).size(14.0))
             .on_hover_text(PortInnerT::get_value_sanitizer_policy_doc_str());
+        ui.separator();
     }
 }
 
 impl<T: WithNumericValueSanitizerStatic> GuiSanInfo<T> for SanPolicyNone {
+    #[allow(unused)]
     fn draw_san_info<PortInnerT: WithNumericValueSanitizerStatic>(ui: &mut egui::Ui) {
-        ui.label(egui::RichText::new(egui_phosphor::bold::FUNNEL_X).size(14.0))
-            .on_hover_text(<Self as PortSanPolicy<T>>::san_policy_doc_str());
+        // ui.label(egui::RichText::new(egui_phosphor::bold::FUNNEL_X).size(14.0))
+        //     .on_hover_text(<Self as PortSanPolicy<T>>::san_policy_doc_str());
     }
 }
 
@@ -229,7 +232,6 @@ where
     BaseNumT: From<<PortT as WithLastKnownIO>::LastKnownIOValueT>,
     <PortT as ValuePortIface>::InnerT: WithLastKnownIO<LastKnownIOValueT = BaseNumT>,
     <PortT as WithLastKnownIO>::LastKnownIOValueT: std::fmt::Display,
-    <PortT as ValuePortIface>::InnerT: ValueIface,
     <PortT as ValuePortIface>::InnerT: ValueIface + DrawEgui<'s, In = GuiInValue<'s>, Out = Option<GuiCmd>>,
     <<PortT as ValuePortIface>::InnerT as WithNumericValue>::ValueT: eframe::emath::Numeric,
     <<PortT as ValuePortIface>::InnerT as WithNumericValue>::ValueT: From<BaseNumT>,
@@ -238,6 +240,9 @@ where
         DrawEgui<'s, In = GuiInInterval<'s>, Out = bool>,
     BaseNumT: From<<<PortT as ValuePortIface>::InnerT as WithNumericValue>::ValueT>,
 {
+    let mut gui_out = None;
+    let gui_out_mut = &mut gui_out;
+
     match gui_in {
         GuiInValue::Edit(params) => {
             if let Some(new_target) = get_new_value_target(gui_in, ui) {
@@ -250,23 +255,16 @@ where
             }
 
             if port.port_inner_ref().value_is_static() {
-                let mut gui_out = ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
+                *gui_out_mut = ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui)).inner;
 
                 let default_interval = port.port_get_default_interval_from_inner().cast().unwrap();
-
                 if default_interval != port.port_inner_ref().get_interval()
                     && ui.button(format!("reset to {default_interval}",)).clicked()
                 {
                     port.port_inner_mut().set_interval(default_interval);
-                    gui_out = bool_to_simple_change_gui_cmd(true);
+                    *gui_out_mut = Some(GuiCmd::ConfigChangeSimple);
                 }
-
-                gui_out
             } else {
-                let mut gui_out = None;
-                let gui_out_mut = &mut gui_out;
-                let mut changed_simple = false;
-
                 let mut value_port_editor = |ui: &mut egui::Ui, port: &mut PortT| {
                     ui.separator();
                     ui.horizontal(|ui| port.port_inner_mut().egui(gui_in, ui))
@@ -284,16 +282,16 @@ where
                                 ui.separator();
                                 if ui.button("remove transformation").clicked() {
                                     remove_tfm = true;
-                                    *gui_out_mut = bool_to_simple_change_gui_cmd(true);
                                 }
                             });
                             if remove_tfm {
                                 port.port_transformation_off();
+                                *gui_out_mut = Some(GuiCmd::ConfigChangeSimple);
                             }
                         } else {
                             if ui.small_button("add transformation").clicked() {
                                 port.port_transformation_on();
-                                *gui_out_mut = bool_to_simple_change_gui_cmd(true);
+                                *gui_out_mut = Some(GuiCmd::ConfigChangeSimple);
                             }
                         }
                     }
@@ -315,7 +313,7 @@ where
                                     ui,
                                 ) {
                                     port.port_set_remap_interval(remap_to);
-                                    changed_simple = true;
+                                    *gui_out_mut = Some(GuiCmd::ConfigChangeSimple);
                                 };
 
                                 if remap_to == port.port_get_default_interval_from_inner() {
@@ -330,7 +328,7 @@ where
                                     .clicked()
                                 {
                                     port.port_set_remap_off();
-                                    changed_simple = true;
+                                    *gui_out_mut = Some(GuiCmd::ConfigChangeSimple);
                                 }
                             } else {
                                 ui.label(format!("Port-enforced remapping range: {remap_to}",));
@@ -342,73 +340,83 @@ where
                                 .clicked()
                         {
                             port.port_set_remap_from_inner_default();
-                            changed_simple = true;
+                            *gui_out_mut = Some(GuiCmd::ConfigChangeSimple);
                         }
                     });
                 };
 
-                ui.label(
-                    egui::RichText::new(format!(
-                        "{:+012.5} {} {}",
-                        port.port_get_numeric_value(None::<&()>),
-                        port.port_get_interval(),
-                        port.port_get_relativity()
-                    ))
-                    .monospace()
-                    .size(11.0),
-                )
-                .on_hover_ui_at_pointer(|ui| {
-                    egui::ScrollArea::vertical()
-                        .scroll_source(ScrollSource::ALL)
-                        .min_scrolled_height(300.0)
-                        .show(ui, |ui| {
-                            ui.push_id("on hover editor", |ui| value_port_editor(ui, port));
-                        });
-                });
+                //---------------------------
+                let clipping_indicator = |ui: &mut egui::Ui, port: &mut PortT| {
+                    crate::gui_common::with_clipping_indicator_state(
+                        ui,
+                        ui.id().with(port as *mut PortT),
+                        // port.port_inner_ref().get_interval().cast::<BaseNumT>().unwrap(),
+                        port.port_get_interval().cast::<BaseNumT>().unwrap(),
+                        |ui, ci| {
+                            ci.update(
+                                // port.port_inner_ref().get_last_known_io().into(),
+                                port.get_last_known_io().into(),
+                                None,
+                            );
+                            ci.ui(ui);
+                        },
+                    );
+                    ui.label("...").on_hover_ui(|ui| {
+                        ui.set_min_width(200.0);
+                        ui.label(format!("Port last I/O: {}", port.get_last_known_io()));
+                        ui.label(format!(
+                            "Port inner last I/O: {}",
+                            port.port_inner_ref().get_last_known_io()
+                        ));
+                    });
+                };
 
-                ui.separator();
-                SanPolicyT::draw_san_info::<<PortT as ValuePortIface>::InnerT>(ui);
-                ui.separator();
+                // --------------------------
+                if port.port_transformation_ref().is_none() && port.port_get_remap_interval().is_none() {
+                    value_port_editor(ui, port);
+                    clipping_indicator(ui, port);
+                } else {
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{:+012.5} {} {}",
+                            port.port_get_numeric_value(None::<&()>),
+                            port.port_get_interval(),
+                            port.port_get_relativity()
+                        ))
+                        .monospace()
+                        .size(11.0),
+                    )
+                    .on_hover_ui_at_pointer(|ui| {
+                        egui::ScrollArea::vertical()
+                            .scroll_source(ScrollSource::ALL)
+                            .min_scrolled_height(300.0)
+                            .show(ui, |ui| {
+                                ui.push_id("on hover editor", |ui| value_port_editor(ui, port));
+                            });
+                    });
 
-                ui.vertical(|ui| {
-                    ui.set_max_width(1000.0);
-                    draw_collapsing_ui(ui, Some(port as *mut PortT), None, |ui| {
-                        ui.label(egui::RichText::new(egui_phosphor::bold::PLUGS).size(14.0))
-                            .on_hover_text("Value port: allows sanitization and optional range remapping");
-                        // ui.label(format!("PORT({})", port.port_get_identity_str()));
-                        ui.separator();
-                        crate::gui_common::with_clipping_indicator_state(
-                            ui,
-                            ui.id().with(port as *mut PortT),
-                            // port.port_inner_ref().get_interval().cast::<BaseNumT>().unwrap(),
-                            port.port_get_interval().cast::<BaseNumT>().unwrap(),
-                            |ui, ci| {
-                                ci.update(
-                                    // port.port_inner_ref().get_last_known_io().into(),
-                                    port.get_last_known_io().into(),
-                                    None,
-                                );
-                                ci.ui(ui);
-                            },
-                        );
-                        ui.label("...").on_hover_ui(|ui| {
-                            ui.label(format!("Port last I/O: {}", port.get_last_known_io()));
-                            ui.label(format!(
-                                "Port inner last I/O: {}",
-                                port.port_inner_ref().get_last_known_io()
-                            ));
-                        });
-                    })
-                    .body(|ui| {
-                        value_port_editor(ui, port);
-                    })
-                });
+                    SanPolicyT::draw_san_info::<<PortT as ValuePortIface>::InnerT>(ui);
 
-                gui_out.or(bool_to_simple_change_gui_cmd(changed_simple))
+                    ui.vertical(|ui| {
+                        ui.set_max_width(1000.0);
+                        draw_collapsing_ui(ui, Some(port as *mut PortT), None, |ui| {
+                            ui.label(egui::RichText::new(egui_phosphor::bold::PLUGS).size(14.0))
+                                .on_hover_text("Value port: allows sanitization and optional range remapping");
+                            // ui.label(format!("PORT({})", port.port_get_identity_str()));
+                            ui.separator();
+                            clipping_indicator(ui, port);
+                        })
+                        .body(|ui| {
+                            value_port_editor(ui, port);
+                        })
+                    });
+                }
             }
         }
-        GuiInValue::Display { .. } => None,
+        GuiInValue::Display { .. } => {}
     }
+
+    gui_out
 }
 
 pub(crate) fn draw_egui_for_a_value<'s, ValueT>(
