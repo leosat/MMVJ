@@ -17,7 +17,7 @@ mod steering_tfm_deserialization_and_exec_tests {
     use std::time::{Duration, Instant};
 
     struct MockCtx {
-        is_idle: bool,
+        is_base: bool,
         main_dst: ValueDsts,
         dyn_values: RefCell<HashMap<String, BaseNumT>>,
         ff_x: BaseNumT,
@@ -27,7 +27,7 @@ mod steering_tfm_deserialization_and_exec_tests {
     impl MockCtx {
         fn active() -> Self {
             Self {
-                is_idle: false,
+                is_base: false,
                 main_dst: ValueDsts::Void(None),
                 dyn_values: Default::default(),
                 ff_x: 0.0,
@@ -35,9 +35,9 @@ mod steering_tfm_deserialization_and_exec_tests {
             }
         }
 
-        fn idle() -> Self {
+        fn base() -> Self {
             Self {
-                is_idle: true,
+                is_base: true,
                 ..Self::active()
             }
         }
@@ -48,11 +48,11 @@ mod steering_tfm_deserialization_and_exec_tests {
     }
 
     impl TfmExecCtx for MockCtx {
-        fn is_idle_tick(&self) -> bool {
-            self.is_idle
+        fn is_base_tick(&self) -> bool {
+            self.is_base
         }
 
-        fn get_idle_tick_rate(&self) -> u32 {
+        fn get_base_tick_rate(&self) -> u32 {
             100
         }
 
@@ -75,8 +75,8 @@ mod steering_tfm_deserialization_and_exec_tests {
         }
     }
 
-    /// Simulate a zero-input idle tick.
-    fn idle_input() -> BaseNumT {
+    /// Simulate a zero-input base tick.
+    fn base_input() -> BaseNumT {
         0.0 as BaseNumT
     }
 
@@ -215,11 +215,11 @@ mod steering_tfm_deserialization_and_exec_tests {
         let turned = tfm.exec(100.0, &MockCtx::active());
         assert!(turned > 0.1, "must have turned, got {turned}");
 
-        let ctx_idle = MockCtx::idle();
+        let ctx_base = MockCtx::base();
         let mut pos = turned;
         for _ in 0..20 {
             rewind_steering_clock(&tfm, Duration::from_millis(100));
-            let out = tfm.exec(idle_input(), &ctx_idle);
+            let out = tfm.exec(base_input(), &ctx_base);
             assert!(out < pos, "autocentering must reduce |pos|");
             pos = out;
         }
@@ -228,7 +228,7 @@ mod steering_tfm_deserialization_and_exec_tests {
             pos.abs() < turned.abs() * 0.1,
             "after 2 s the wheel must be near zero, got {pos}"
         );
-        println!("Autocentering: {turned:.4} → {pos:.6} after 2 s idle");
+        println!("Autocentering: {turned:.4} → {pos:.6} after 2 s base");
     }
 
     #[test]
@@ -245,10 +245,10 @@ mod steering_tfm_deserialization_and_exec_tests {
 
         let turned = tfm.exec(100.0, &MockCtx::active());
 
-        let ctx_idle = MockCtx::idle();
+        let ctx_base = MockCtx::base();
         for _ in 0..10 {
             rewind_steering_clock(&tfm, Duration::from_millis(100));
-            let out = tfm.exec(idle_input(), &ctx_idle);
+            let out = tfm.exec(base_input(), &ctx_base);
             assert!(approx(out, turned), "halflife=0 → wheel must stay");
         }
         println!("halflife=0: stayed at {turned:.6}");
@@ -267,10 +267,10 @@ mod steering_tfm_deserialization_and_exec_tests {
         setup_mouse_metadata(&mut tfm);
 
         let turned = tfm.exec(100.0, &MockCtx::active());
-        let ctx_idle = MockCtx::idle();
+        let ctx_base = MockCtx::base();
         for _ in 0..10 {
             rewind_steering_clock(&tfm, Duration::from_millis(100));
-            let out = tfm.exec(idle_input(), &ctx_idle);
+            let out = tfm.exec(base_input(), &ctx_base);
             assert!(approx(out, turned), "hold=1.0 → locked");
         }
         println!("hold_factor=1.0: locked at {turned:.6}");
@@ -358,10 +358,10 @@ mod steering_tfm_deserialization_and_exec_tests {
         // Tiny nudge so the wheel is not exactly at zero
         let _ = tfm.exec(1.0, &MockCtx::active());
 
-        // Idle tick with 500 ms simulated gap.
+        // Base tick with 500 ms simulated gap.
         // Expected FFB offset ≈ 0.8 * 1.0 * (1−0.0) * 0.5 = 0.4
         rewind_steering_clock(&tfm, Duration::from_millis(500));
-        let out = tfm.exec(idle_input(), &MockCtx::idle());
+        let out = tfm.exec(base_input(), &MockCtx::base());
 
         assert!(out > 0.05, "FFB must push wheel rightward");
         println!("FFB custom_source=0.8, dt=0.5 s → wheel={:.6}", out);
@@ -400,8 +400,8 @@ mod steering_tfm_deserialization_and_exec_tests {
         rewind_steering_clock(&normal, Duration::from_millis(500));
         rewind_steering_clock(&inverted, Duration::from_millis(500));
 
-        let n = normal.exec(idle_input(), &MockCtx::idle());
-        let i = inverted.exec(idle_input(), &MockCtx::idle());
+        let n = normal.exec(base_input(), &MockCtx::base());
+        let i = inverted.exec(base_input(), &MockCtx::base());
 
         assert!(n > 0.0 && i < n, "inverted must push opposite");
         println!("FFB invert: normal={n:.6}, inverted={i:.6}");

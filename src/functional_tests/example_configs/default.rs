@@ -372,7 +372,7 @@ mod default_config_tests {
         )
         .expect("Failed to create engine");
 
-        engine.set_mode(*engine.get_mode().clone().set_idle_rate(MAPPING_ENGINE_IDLE_RATE));
+        engine.set_mode(*engine.get_mode().clone().set_base_rate(MAPPING_ENGINE_IDLE_RATE));
         engine.init().expect("Failed to init engine");
 
         let scenario_fut = scenario(outputs.clone(), event_tx, ff_spring_enabled.clone());

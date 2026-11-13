@@ -125,8 +125,8 @@ async fn main() -> Result<()> {
         cli.no_hot_reload,
         cli.debug,
         cli.debug_ff,
-        cli.debug_idle_tick,
-        cli.idle_tick_update_rate,
+        cli.debug_base_tick,
+        cli.base_tick_update_rate,
         cli.persistent_joysticks,
         cli.write_schema_and_predefined_controls_dump,
         #[cfg(feature = "gui")]

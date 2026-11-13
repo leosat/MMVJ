@@ -911,7 +911,7 @@ impl<'s> DrawEgui<'s> for EmaCfg {
         });
         if self.common_state_ref().is_in_relative() {
             ui.separator();
-            gui_out = gui_out.or(bool_to_simple_change_gui_cmd(draw_gui_idle_tick_params(ui, self)));
+            gui_out = gui_out.or(bool_to_simple_change_gui_cmd(draw_gui_base_tick_params(ui, self)));
         }
         gui_out
     }
@@ -1266,7 +1266,7 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
 
         if self.common_state_ref().is_in_relative() {
             ui.separator();
-            bool_to_simple_change_gui_cmd(draw_gui_idle_tick_params(ui, self))
+            bool_to_simple_change_gui_cmd(draw_gui_base_tick_params(ui, self))
                 .inspect(|out| *gui_out_mut = Some(out.clone()));
         }
 
@@ -1584,18 +1584,18 @@ impl TfmStepCommonState {
 
 // --------------------------------------------
 
-fn draw_gui_idle_tick_params(ui: &mut egui::Ui, tfm: &mut impl TfmStepIdleBehavior) -> bool {
+fn draw_gui_base_tick_params(ui: &mut egui::Ui, tfm: &mut impl TfmStepBaseBehavior) -> bool {
     let mut changed = false;
-    ui.collapsing("Relative input on idle tick behavior:", |ui| {
+    ui.collapsing("Relative input on base tick behavior:", |ui| {
         if !*tfm.relative_input_feed_on_idle_mut() && !*tfm.relative_input_reset_on_idle_mut() {
             ui.separator();
-            ui.label("Current: applied only on user input, skipped on idle.");
+            ui.label("Current: applied only on user input, skipped on base.");
         }
         ui.separator();
         ui.horizontal(|ui| {
-            let frequency_warning = "Warning: behavior depends on idle tick frequency.".to_string();
+            let frequency_warning = "Warning: behavior depends on base tick frequency.".to_string();
             changed |= ui
-                .checkbox(tfm.relative_input_feed_on_idle_mut(), "Feed on idle tick.")
+                .checkbox(tfm.relative_input_feed_on_idle_mut(), "Run on idle relative input.")
                 .on_hover_text(&frequency_warning)
                 .changed();
 
@@ -1606,7 +1606,7 @@ fn draw_gui_idle_tick_params(ui: &mut egui::Ui, tfm: &mut impl TfmStepIdleBehavi
 
             ui.separator();
             changed |= ui
-                .checkbox(tfm.relative_input_reset_on_idle_mut(), "Reset on idle tick.")
+                .checkbox(tfm.relative_input_reset_on_idle_mut(), "Reset on idle relative input.")
                 .on_hover_text(&frequency_warning)
                 .changed();
             if *tfm.relative_input_reset_on_idle_mut() {

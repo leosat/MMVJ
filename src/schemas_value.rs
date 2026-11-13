@@ -1018,11 +1018,11 @@ impl ValueSrcs {
         }
     }
 
-    pub(crate) fn _get_idle_tick_enabled_flag(&self) -> Option<&AtomicBool> {
+    pub(crate) fn _get_base_tick_enabled_flag(&self) -> Option<&AtomicBool> {
         match self {
             Self::Static(..) => None,
             Self::Dynamic(dynamic_value_ref_rt) => match dynamic_value_ref_rt {
-                DynValueRefs::DeviceControlMatcher(d) => Some(d.control_matcher.get_idle_tick_enabled_flag()),
+                DynValueRefs::DeviceControlMatcher(d) => Some(d.control_matcher.get_base_tick_enabled_flag()),
                 DynValueRefs::Variable(_) => None,
             },
         }
@@ -1388,9 +1388,9 @@ impl ValueDsts {
         matches!(self, Self::Void(..))
     }
 
-    pub(crate) fn get_idle_tick_enabled_flag(&self) -> Option<&AtomicBool> {
+    pub(crate) fn get_base_tick_enabled_flag(&self) -> Option<&AtomicBool> {
         if let ValueDsts::Dynamic(DynValueRefs::DeviceControlMatcher(d)) = self {
-            Some(d.control_matcher.get_idle_tick_enabled_flag())
+            Some(d.control_matcher.get_base_tick_enabled_flag())
         } else {
             None
         }

@@ -7,7 +7,7 @@ use crate::{
     num_interval::NumInterval,
     schemas_cfg::DescriptionCfg,
     schemas_common::{
-        ControlCfgCommonIface, EnabledFlagCfg, IdleTickEnabledFlag, MarkedAsFromPredefinedControl, ObjId,
+        BaseTickEnabledFlag, ControlCfgCommonIface, EnabledFlagCfg, MarkedAsFromPredefinedControl, ObjId,
         WithRuntimeId, deserialize_device_controls,
     },
     schemas_predefined::MidiControlPredefined,
@@ -298,7 +298,7 @@ pub(crate) struct MidiControlMatcherCfg {
     pub(crate) id: ObjId,
     #[serde(skip)]
     #[traverse(skip)]
-    pub(crate) idle_tick_enabled: IdleTickEnabledFlag,
+    pub(crate) base_tick_enabled: BaseTickEnabledFlag,
     #[serde(skip)]
     #[traverse(skip)]
     current_value: Arc<CachePadded<BaseAtomicT>>,
@@ -363,7 +363,7 @@ impl From<MidiControlPredefined> for MidiControlMatcherCfg {
             range: value.range,
             description: value.description,
             id: Default::default(),
-            idle_tick_enabled: Default::default(),
+            base_tick_enabled: Default::default(),
             current_value: Default::default(),
             from_predefined: Default::default(),
             _dst_refs_count: Default::default(),

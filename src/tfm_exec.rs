@@ -97,11 +97,11 @@ pub(crate) trait TfmExecCtx {
         true
     }
 
-    fn is_idle_tick(&self) -> bool {
+    fn is_base_tick(&self) -> bool {
         false
     }
 
-    fn get_idle_tick_rate(&self) -> u32 {
+    fn get_base_tick_rate(&self) -> u32 {
         crate::config::MIN_BASE_FREQ_HZ
     }
 
@@ -335,7 +335,7 @@ impl WithTfmExec for OneEuroFilterCfg {
     type InputT = BaseNumT;
     type OutputT = Self::InputT;
     fn exec(&self, mut value: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
-        if !ctx.is_idle_tick()
+        if !ctx.is_base_tick()
             || self.common_state_ref().get_in_relativity().is_absolute()
             || self.on_relative_input_feed_on_idle
         {
@@ -408,7 +408,7 @@ impl WithTfmExec for RaiseFallCfg {
 
         filter_data.prev_out_time = now;
 
-        let target = if !ctx.is_idle_tick() {
+        let target = if !ctx.is_base_tick() {
             filter_data.last_target = value;
             value
         } else {
@@ -416,7 +416,7 @@ impl WithTfmExec for RaiseFallCfg {
         };
 
         let mut final_out = filter_data.prev_out;
-        if ctx.is_idle_tick() {
+        if ctx.is_base_tick() {
             let delta_v = target - filter_data.prev_out;
             let rate_limit = if delta_v > 0.0 {
                 self.raise_rate
@@ -479,7 +479,7 @@ impl WithTfmExec for EmaCfg {
     type InputT = BaseNumT;
     type OutputT = Self::InputT;
     fn exec(&self, mut value: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
-        if !ctx.is_idle_tick()
+        if !ctx.is_base_tick()
             || self.common_state_ref().get_in_relativity().is_absolute()
             || self.on_relative_input_feed_on_idle
         {
@@ -827,12 +827,12 @@ impl WithTfmExec for ScriptCfg {
                         }
                     };
 
-                    let is_idle_closure = move |_lua: &mlua::Lua, _: ()| -> std::result::Result<bool, mlua::Error> {
-                        Ok(ctx.is_idle_tick())
+                    let is_base_closure = move |_lua: &mlua::Lua, _: ()| -> std::result::Result<bool, mlua::Error> {
+                        Ok(ctx.is_base_tick())
                     };
 
                     let base_tick_closure = move |_lua: &mlua::Lua, _: ()| -> std::result::Result<u32, mlua::Error> {
-                        Ok(ctx.get_idle_tick_rate())
+                        Ok(ctx.get_base_tick_rate())
                     };
 
                     let read_src_closure = {
@@ -901,7 +901,7 @@ impl WithTfmExec for ScriptCfg {
 
                         // TODO: consider using Lua userdata ref and setup those routines only once on state reset.
                         let _ = env.set("transform", s.create_function(transform_closure).unwrap());
-                        let _ = env.set("is_idle", s.create_function(is_idle_closure).unwrap());
+                        let _ = env.set("is_base", s.create_function(is_base_closure).unwrap());
                         let _ = env.set("base_rate", s.create_function(base_tick_closure).unwrap());
                         let _ = env.set("read", s.create_function(read_src_closure).unwrap());
                         let _ = env.set("write", s.create_function_mut(write_dst_closure).unwrap());

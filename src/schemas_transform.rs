@@ -1289,13 +1289,13 @@ pub(crate) struct OneEuroFilterCfg {
     pub(crate) enabled: EnabledFlagCfg,
 
     /// When `true` and the input has **relative** semantics, the last
-    /// known value is re-fed into the filter on idle ticks so the
+    /// known value is re-fed into the filter on base ticks so the
     /// output continues to converge.
     ///
     /// Ignored for absolute inputs (always processed every tick).
     /// Mutually exclusive with `on_relative_input_reset_on_idle`.
     ///
-    /// **Warning:** convergence speed depends on `global.idle_tick_rate`.
+    /// **Warning:** convergence speed depends on `global.base_tick_rate`.
     #[serde(default = "default_false")]
     #[serde(skip_serializing_if = "is_false")]
     #[garde(skip)]
@@ -1305,7 +1305,7 @@ pub(crate) struct OneEuroFilterCfg {
 
     /// When `true` and the input has **relative** semantics, the filter
     /// state (`x̂_prev`, `dx̂_prev`) is **reset** to the current input
-    /// on idle ticks.
+    /// on base ticks.
     ///
     /// Use when the relative source may jump to a new baseline after a
     /// pause and you want to avoid a smoothing transient.
@@ -2359,7 +2359,7 @@ pub(crate) struct SteeringCfg {
     /// - `1.0+`: slow drift to center.
     ///
     /// Decay per tick: `(1 - 2^(-dt / halflife)) * (1 - hold_factor)`.
-    /// Only active when the user is idle and (FFB is negligible or
+    /// Only active when the user is base and (FFB is negligible or
     /// `auto_center_along_force_feedback > 0`).
     #[serde(default)]
     #[garde(skip)]
@@ -2688,12 +2688,12 @@ impl Default for RaiseFallCfg {
 }
 
 // -----------------------------------
-pub(crate) trait TfmStepIdleBehavior {
+pub(crate) trait TfmStepBaseBehavior {
     fn relative_input_feed_on_idle_mut(&mut self) -> &mut bool;
     fn relative_input_reset_on_idle_mut(&mut self) -> &mut bool;
 }
 
-impl TfmStepIdleBehavior for EmaCfg {
+impl TfmStepBaseBehavior for EmaCfg {
     fn relative_input_feed_on_idle_mut(&mut self) -> &mut bool {
         &mut self.on_relative_input_feed_on_idle
     }
@@ -2702,7 +2702,7 @@ impl TfmStepIdleBehavior for EmaCfg {
     }
 }
 
-impl TfmStepIdleBehavior for OneEuroFilterCfg {
+impl TfmStepBaseBehavior for OneEuroFilterCfg {
     fn relative_input_feed_on_idle_mut(&mut self) -> &mut bool {
         &mut self.on_relative_input_feed_on_idle
     }
@@ -2748,8 +2748,8 @@ impl Default for ScriptLanguage {
 /// | `read(key)` | Read the main input (`0`) or an auxiliary source (string / 1-based index). |
 /// | `write(key, value)` | Write the main output (`0`) or an auxiliary destination. |
 /// | `transform(name, value)` | Invoke a named sub-pipeline from `aux_transformations`. |
-/// | `is_idle()` | `true` when the tick is an idle-clock tick (no user input). |
-/// | `base_rate()` | The configured idle tick rate in Hz. |
+/// | `is_base()` | `true` when the tick is an base-clock tick (no user input). |
+/// | `base_rate()` | The configured base tick rate in Hz. |
 ///
 /// See `doc/script.md` for a full guide, signal-flow diagram, API
 /// reference, and configuration examples.

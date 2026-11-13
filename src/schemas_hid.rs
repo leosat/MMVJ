@@ -8,7 +8,7 @@ use crate::{
     num_interval::NumInterval,
     schemas_cfg::DescriptionCfg,
     schemas_common::{
-        ControlCfgCommonIface, EnabledFlagCfg, IdleTickEnabledFlag, MarkedAsFromPredefinedControl, ObjId,
+        BaseTickEnabledFlag, ControlCfgCommonIface, EnabledFlagCfg, MarkedAsFromPredefinedControl, ObjId,
         WithRuntimeId, deserialize_device_controls, is_false, is_none_or_default, is_zero,
     },
     schemas_predefined::HidControlPredefined,
@@ -293,7 +293,7 @@ impl HidDeviceCfg {
                             properties: Default::default(),
                             initial_value: 0.0,
                             id: Default::default(),
-                            idle_tick_enabled: Default::default(),
+                            base_tick_enabled: Default::default(),
                             last_known_io_value: Default::default(),
                             from_predefined: Default::default(),
                             _dst_refs_count: Default::default(),
@@ -627,7 +627,7 @@ pub(crate) struct HidControlMatcherCfg {
     pub(crate) id: ObjId,
     #[serde(skip)]
     #[traverse(skip)]
-    pub(crate) idle_tick_enabled: IdleTickEnabledFlag,
+    pub(crate) base_tick_enabled: BaseTickEnabledFlag,
     #[serde(skip)]
     #[traverse(skip)]
     last_known_io_value: Arc<CachePadded<BaseAtomicT>>,
@@ -697,7 +697,7 @@ impl From<HidControlPredefined> for HidControlMatcherCfg {
             properties: predef.properties,
             initial_value: predef.initial_value,
             id: Default::default(),
-            idle_tick_enabled: Default::default(),
+            base_tick_enabled: Default::default(),
             last_known_io_value: Arc::new(CachePadded::new(BaseAtomicT::from(predef.initial_value))),
             _dst_refs_count: Default::default(),
             current_value: Default::default(),

@@ -63,7 +63,7 @@ const ROUTER_INDEX_RETAIN_ONLY_MAPPED_ENTRIES: bool = false;
 pub(crate) enum MappingEngineCmd {
     _None,
     #[default]
-    UpdateMappingRouterIdleTickOnly,
+    UpdateMappingRouterBaseTickOnly,
     UpdateMappingRouter,
 }
 
@@ -97,7 +97,7 @@ pub(crate) struct MappingEngine<
     running: bool,
     // ---
     debug: DebugLevel,
-    debug_idle_tick: bool,
+    debug_base_tick: bool,
     // ---
     cfg: Config,
     hid_mgr: &'d HidManagerT,
@@ -115,7 +115,7 @@ pub(crate) struct MappingEngine<
     scheduled_mappings_normal: Vec<usize>,
     rel_ctls: Vec<Arc<CachePadded<BaseAtomicT>>>,
     // ---
-    idle_tick_mappings: Vec<usize>,
+    base_tick_mappings: Vec<usize>,
     #[cfg(feature = "lua")]
     lua: &'d mlua::Lua,
     mapped_events_dt_stats: MappingEngineStats,
@@ -128,7 +128,7 @@ pub(crate) trait Mapper<'d> {
 
     fn new(
         debug: DebugLevel,
-        debug_idle_tick: bool,
+        debug_base_tick: bool,
         cfg: Config,
         hid_mgr: &'d Self::HidManagerT,
         #[cfg(feature = "midi")] midi_mgr: &'d Self::MidiManagerT,
@@ -145,7 +145,7 @@ pub(crate) trait Mapper<'d> {
     fn get_mode(&self) -> &MapperMode;
 
     fn init(&mut self) -> Result<()>;
-    fn idle_tick_mappings_reset(&mut self);
+    fn base_tick_mappings_reset(&mut self);
 
     async fn run(&mut self);
     fn stop(&mut self) -> Result<()>;
@@ -168,13 +168,13 @@ impl<
 #[derive(Clone, Copy)]
 enum MapppingSchedContext {
     Normal,
-    Idle,
+    Base,
     Immediate,
 }
 
 impl MapppingSchedContext {
-    fn is_idle(&self) -> bool {
-        matches!(self, MapppingSchedContext::Idle)
+    fn is_base(&self) -> bool {
+        matches!(self, MapppingSchedContext::Base)
     }
     #[allow(unused)]
     fn is_immediate(&self) -> bool {
@@ -199,7 +199,7 @@ impl<
     #[allow(clippy::too_many_arguments)]
     fn new(
         debug: DebugLevel,
-        debug_idle_tick: bool,
+        debug_base_tick: bool,
         cfg: Config,
         hid_mgr: &'d Self::HidManagerT,
         #[cfg(feature = "midi")] midi_mgr: &'d Self::MidiManagerT,
@@ -210,7 +210,7 @@ impl<
             running: false,
             // ---
             debug,
-            debug_idle_tick,
+            debug_base_tick,
             // ---
             cfg,
             hid_mgr,
@@ -224,7 +224,7 @@ impl<
             scheduled_mappings_normal: Default::default(),
             rel_ctls: Default::default(),
             // ---
-            idle_tick_mappings: Default::default(),
+            base_tick_mappings: Default::default(),
             #[cfg(feature = "lua")]
             lua,
             mapped_events_dt_stats: MappingEngineStats::default()
@@ -256,7 +256,7 @@ impl<
         info!("Initializing mapping engine router.");
 
         // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-        self.idle_tick_mappings_reset();
+        self.base_tick_mappings_reset();
         self.router_index_sysdev_and_ctl_type_to_cms_and_mappings.clear();
         self.scheduled_mappings_normal.clear();
         self.reset_rel_ctls_cache();
@@ -398,14 +398,14 @@ impl<
         Ok(())
     }
 
-    fn idle_tick_mappings_reset(&mut self) {
-        self.idle_tick_mappings.clear();
+    fn base_tick_mappings_reset(&mut self) {
+        self.base_tick_mappings.clear();
         self.cfg
             .mappings
             .iter()
             .enumerate()
-            .filter(|(_, mapping)| *mapping.enabled && *mapping.run_on_idle)
-            .for_each(|(idx, _)| self.idle_tick_mappings.push(idx));
+            .filter(|(_, mapping)| *mapping.enabled && *mapping.autorun)
+            .for_each(|(idx, _)| self.base_tick_mappings.push(idx));
     }
 
     async fn run(&mut self) {
@@ -416,13 +416,13 @@ impl<
         let is_capped: bool = mode.is_capped();
         let target_mapping_tick_dt = mode.calc_mapping_tick_period();
 
-        let mut idle_ticker = interval(mode.calc_idle_tick_period());
+        let mut base_ticker = interval(mode.calc_base_tick_period());
         let mut mapping_ticker = interval(target_mapping_tick_dt);
 
         let mut events_count: usize = 0;
         let mut last_throttle_at_events_count: usize = 0;
 
-        idle_ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        base_ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
         mapping_ticker.set_missed_tick_behavior(MissedTickBehavior::Burst);
 
         //-------------------------------- MAIN LOOP ----------------------------------
@@ -444,7 +444,6 @@ impl<
             };
 
             select! {
-            biased;
             _ = mapping_ticker.tick(), if !is_reactive => self.process_and_run_mappings(MapppingSchedContext::Normal),
             _ = async {
                 select! {
@@ -487,7 +486,7 @@ impl<
 
                 events_count = events_count.wrapping_add(1);
             },
-            _ = idle_ticker.tick() => self.process_and_run_mappings(MapppingSchedContext::Idle)
+            _ = base_ticker.tick() => self.process_and_run_mappings(MapppingSchedContext::Base)
             }
 
             if DBG_MAIN_LOOP_TIMING {
@@ -589,12 +588,12 @@ impl<
         self.rel_ctls = rel_ctls;
     }
 
-    // TODO: idle tick shadowing.
-    fn set_idle_tick_enabled_on_device_control_for_mapping(&self, mapping: &Mapping) {
-        if let Some(flag) = mapping.dst.port_inner_ref().get_idle_tick_enabled_flag()
+    // TODO: base tick shadowing.
+    fn set_base_tick_enabled_on_device_control_for_mapping(&self, mapping: &Mapping) {
+        if let Some(flag) = mapping.dst.port_inner_ref().get_base_tick_enabled_flag()
             && let Ok(prev) = flag.compare_exchange(
-                !*mapping.run_on_idle,
-                *mapping.run_on_idle,
+                !*mapping.autorun,
+                *mapping.autorun,
                 // Yes, both relaxed because active mapping will retrigger this, no need for stronger.
                 Relaxed,
                 Relaxed,
@@ -602,10 +601,10 @@ impl<
             && self.debug.is_on()
         {
             debug!(
-                "Idle-tick update for {}: {} -> {}",
+                "Base-tick update for {}: {} -> {}",
                 mapping.dst.port_inner_ref().value_identity(),
                 prev,
-                mapping.run_on_idle
+                mapping.autorun
             );
         }
     }
@@ -691,9 +690,9 @@ impl<
         for mapping_idx in mappings.iter() {
             let mapping = &self.cfg.mappings[*mapping_idx];
 
-            if sched_ctx.is_idle() {
-                // TODO: idle tick shadowing.
-                if let Some(flag) = mapping.dst.port_inner_ref().get_idle_tick_enabled_flag()
+            if sched_ctx.is_base() {
+                // TODO: base tick shadowing.
+                if let Some(flag) = mapping.dst.port_inner_ref().get_base_tick_enabled_flag()
                     && !flag.load(Relaxed)
                 {
                     continue;
@@ -718,7 +717,7 @@ impl<
                 &exe_ctx,
             );
 
-            self.set_idle_tick_enabled_on_device_control_for_mapping(mapping);
+            self.set_base_tick_enabled_on_device_control_for_mapping(mapping);
 
             if self.debug.is_on() {
                 debug!("Mapped {} ({mapping}): {output} -> {output}", mapping.name);
@@ -734,7 +733,7 @@ impl<
 
     fn mappings_by_ctx_mut(&mut self, sched_ctx: MapppingSchedContext) -> &mut Vec<usize> {
         match sched_ctx {
-            MapppingSchedContext::Idle => &mut self.idle_tick_mappings,
+            MapppingSchedContext::Base => &mut self.base_tick_mappings,
             MapppingSchedContext::Normal => &mut self.scheduled_mappings_normal,
             MapppingSchedContext::Immediate => &mut self.scheduled_mappings_immediate,
         }
@@ -742,7 +741,7 @@ impl<
 
     fn mappings_by_ctx_ref(&self, sched_ctx: MapppingSchedContext) -> &Vec<usize> {
         match sched_ctx {
-            MapppingSchedContext::Idle => &self.idle_tick_mappings,
+            MapppingSchedContext::Base => &self.base_tick_mappings,
             MapppingSchedContext::Normal => &self.scheduled_mappings_normal,
             MapppingSchedContext::Immediate => &self.scheduled_mappings_immediate,
         }
@@ -754,24 +753,17 @@ impl<
             return;
         }
 
-        if sched_ctx.is_idle() {
-            if branches::unlikely(!(self.scheduled_mappings_normal.is_empty())) {
-                return;
+        if sched_ctx.is_base() {
+            if branches::unlikely(self.scheduled_mappings_normal.is_empty()) {
+                self.clear_rel_ctls()
             }
-
-            debug_assert!(
-                self.scheduled_mappings_immediate.is_empty() && self.scheduled_mappings_normal.is_empty(),
-                "All the input-triggered mappings must be executed by the time of idle tick processing."
-            );
-
-            self.clear_rel_ctls();
         } else {
             Self::dedup_and_shuffle(mappings, true, mappings.len() > 1);
         }
 
         self.run_mappings(self.mappings_by_ctx_ref(sched_ctx), sched_ctx);
 
-        if !sched_ctx.is_idle() {
+        if !sched_ctx.is_base() {
             self.mappings_by_ctx_mut(sched_ctx).clear();
         }
 
@@ -902,20 +894,20 @@ impl<
         self.mapping_engine.dcm_write_to_devices(
             dcm,
             value,
-            if ctx.is_idle_tick() {
-                self.mapping_engine.debug_idle_tick.into()
+            if ctx.is_base_tick() {
+                self.mapping_engine.debug_base_tick.into()
             } else {
                 self.mapping_engine.debug
             },
         );
     }
 
-    fn is_idle_tick(&self) -> bool {
-        matches!(self.sched_ctx, MapppingSchedContext::Idle)
+    fn is_base_tick(&self) -> bool {
+        matches!(self.sched_ctx, MapppingSchedContext::Base)
     }
 
-    fn get_idle_tick_rate(&self) -> u32 {
-        self.mapping_engine.get_mode().get_idle_tick_rate()
+    fn get_base_tick_rate(&self) -> u32 {
+        self.mapping_engine.get_mode().get_base_tick_rate()
     }
 
     #[cfg(feature = "lua")]

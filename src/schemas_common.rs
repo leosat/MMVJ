@@ -76,14 +76,14 @@ pub(crate) struct CfgOpjectIdPath(Vec<ObjId>);
 
 // ---------------------------------------
 #[derive(Debug, Clone, JsonSchema)]
-pub(crate) struct IdleTickEnabledFlag(Arc<AtomicBool>);
-impl Default for IdleTickEnabledFlag {
+pub(crate) struct BaseTickEnabledFlag(Arc<AtomicBool>);
+impl Default for BaseTickEnabledFlag {
     fn default() -> Self {
         Self(Arc::new(AtomicBool::from(true)))
     }
 }
 
-impl Deref for IdleTickEnabledFlag {
+impl Deref for BaseTickEnabledFlag {
     type Target = AtomicBool;
 
     fn deref(&self) -> &Self::Target {

@@ -99,11 +99,12 @@ Some early video demo of MMVJ being applied in rally simulation:
 *   The engine is made to run with **low latency**: a main loop iteration usually takes \< 1ms.
 *   Provides three modes of execution:
     * **Reactive**: mappings run for every sample received (responsive, but high-frequency mice devices may cause higher CPU load).
-    * **Capped**: mappings run with frequency not exceeding the configurable mapping cap frequency (**a balance** between **Reactive** and **Stable** modes).
-    * **Stable**: mappings run with constant frequency (still responsive, depending on mapping frequency configured, good for high-frequency mice devices not to overload the CPU).
+    * **Capped**: mappings triggered by all controls except for buttons/keys run with frequency not exceeding the configurable cap frequency (**a balance** between **Reactive** and **Stable** modes).
+    * **Stable**: mappings triggered by all controls except for buttons/keys run with constant frequency (still responsive, depending on frequency configured, good for high-frequency mice devices not to overload the CPU).
+       * **NB: in all modes** mappings triggered by key/button press events are always scheduled to run immediately.
 * A user may seamlessly switch between modes depending on particular use case.
 * Currently **the default mode** is Reactive, but for high-frequency input you may want to change it to **Capped** (most likely it'll be the default in the future).
-* **Idle tick** (running e.g. filters or autocentering logic when no active user input is happening) frequency is separately configurable from 10 to 1000 Hz. For **Capped** and **Stable** modes mapping frequency is automatically ensured to be not less than idle tick frequency.
+* **Base tick** (running e.g. filters or autocentering logic irrespective to active user input happening or not) frequency is separately configurable from 10 to 1000 Hz. For **Capped** and **Stable** modes mapping frequency is automatically ensured to be not less than base tick frequency.
 
 ### Important notice about Capped and Stable (vs Reactive) modes behavior
 
@@ -111,7 +112,7 @@ While being useful to control CPU load when working with devices reporting at hi
 
 Because of this "non-immediate" reaction and value accumulation the **resultant relative delta values may well exceed estimated/expected per-single sample value**, this **is normal**. During transformations they are not being clamped and are remapped _with extrapolative behavior_, yielding values possibly outside of the configured remapping intervals). As all the normalization is done proportionally to the estimated/expected per-sample range, this behavior is sound and results in similar effects (except for values getting updated in accordance to configured frequency limit and not "immediately" as in **Reactive** mode) for all the built-in transformation steps. 
 
-E.g. moving mouse for the same distance over same time will result in same steering effects whether we are using Reactive, Capped or Stable modes with any settings, except for the fact that in Capped and Stable modes the joystick position will change with the granularity of configured mapping and idle tick frequencies and not "immediately".
+E.g. moving mouse for the same distance over same time will result in same steering effects whether we are using Reactive, Capped or Stable modes with any settings, except for the fact that in Capped and Stable modes the joystick position will change with the granularity of configured mapping and base tick frequencies and not "immediately".
 
 
 ---
@@ -290,10 +291,6 @@ mappings:
 Are abstractions over value sources, destinations or source-destinations. They allow specifying additional remapping and/or a general transformation
 pipeline for value being read or written. Transformation steps allowing both static and dynamic parametrisation
 use value ports to source parameters. Script transformation uses them as auxiliary sources and destinations.
-
-### Idle tick
-
-Processing is happening either due to active user input (**event-driven, with the frequency of user input**) or by the **internal clock with configurable frequency**. The latter is necessary for transformations that require processing post-user-input (e.g. autocentering during steering simulation, filters application) or require by-timer processing irrespective to user input happening or not (such as scripts).
 
 ### Ranges & relativity
 

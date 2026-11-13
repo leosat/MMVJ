@@ -83,25 +83,24 @@ impl<'s> DrawEgui<'s> for Mapping {
 
                     ui.separator();
 
-                    ui.collapsing("Idle tick", |ui| {
+                    ui.collapsing("Autorun", |ui| {
                         ui.horizontal(|ui| {
-                            if self.run_on_idle
-                                .egui("Run on idle", ui).is_some() {
-                                *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouterIdleTickOnly));
+                            if self.autorun
+                                .egui("Always runs on base tick including when no user input", ui).is_some() {
+                                *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouterBaseTickOnly));
                             }
                             ui.separator();
-                            if *self.run_on_idle {
-                                let shadowing_hint = "Running on idle tick can be automatically shadowed (temporarily disabled) \
-                                    if another mapping having same main destination and also requiring running on idle is the last one \
-                                    having active input. This allows multiple such mappings being configured for the same destination \
-                                    and be used alternatively in sequence. \
-                                    NB: this behavior only works for a device control matcher detination referenced in main mapping destination port."
+                            if *self.autorun {
+                                let shadowing_hint = "Running on base tick can be automatically shadowed (temporarily disabled) \
+                                    if another mapping having same main destination but not requiring base tick gets user input. \
+                                    This allows such mappings being configured for the same destination and be used alternatively in sequence. \
+                                    NB: current implementation is limited to above scenario only and applies to main mapping destination port."
                                     /* TODO: shadowing. When fully supported this will work for any destination mentioned in a mapping.*/;
                                 ui.label("Shadowing: ").on_hover_text(shadowing_hint);
                                 #[allow(clippy::single_match)]
                                 match &self.dst.port_inner_ref() {
                                     ValueDsts::Dynamic(DynValueRefs::DeviceControlMatcher(d)) =>
-                                    if d.control_matcher.get_idle_tick_enabled_flag().load(Relaxed) {
+                                    if d.control_matcher.get_base_tick_enabled_flag().load(Relaxed) {
                                         ui.label("not shadowed").on_hover_text(shadowing_hint);
                                     } else { ui.label("shadowed").on_hover_text(shadowing_hint); },
                                     _ => { ui.label("unapplicable").on_hover_text(shadowing_hint); },

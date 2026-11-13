@@ -302,7 +302,7 @@ pub(crate) enum GuiCmd {
     ConfigChangeSimple,
     ConfigChangeDriverRestart,
     // -----------------------------
-    IdleTickRateChange,
+    BaseTickRateChange,
     // -----------------------------
     DragAndDrop(GuiDndJob),
     LocalItemRemove(usize),
