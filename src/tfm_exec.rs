@@ -16,6 +16,7 @@ use crate::schemas_common::WithRuntimeId;
 
 use crate::schemas_transform::ArithCfg;
 use crate::schemas_transform::ArithOpType;
+use crate::schemas_transform::FilterGatingModes;
 #[cfg(feature = "scripting")]
 use crate::schemas_transform::ScriptCfg;
 use crate::schemas_transform::TfmCfgDuplicateWithNewState;
@@ -337,7 +338,10 @@ impl WithTfmExec for OneEuroFilterCfg {
     fn exec(&self, mut value: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
         if !ctx.is_base_tick()
             || self.common_state_ref().get_in_relativity().is_absolute()
-            || self.on_relative_input_feed_on_idle
+            || !self
+                .gating
+                .as_ref()
+                .is_some_and(|g| matches!(g, FilterGatingModes::OnRelInputBaseTick))
         {
             value = self.exe_state_mut().filter(
                 value,
@@ -347,8 +351,6 @@ impl WithTfmExec for OneEuroFilterCfg {
                 self.beta.port_get_numeric_value(Some(ctx)), //get_numeric_value_clamped_predicated(ClampPred::IfDynamic),
                 self.d_cutoff_hz.port_get_numeric_value(Some(ctx)), //.get_numeric_value_clamped_predicated(ClampPred::IfDynamic),
             );
-        } else if self.on_relative_input_reset_on_idle {
-            self.exe_state_reset(value);
         }
         value
     }
@@ -481,13 +483,14 @@ impl WithTfmExec for EmaCfg {
     fn exec(&self, mut value: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
         if !ctx.is_base_tick()
             || self.common_state_ref().get_in_relativity().is_absolute()
-            || self.on_relative_input_feed_on_idle
+            || !self
+                .gating
+                .as_ref()
+                .is_some_and(|g| matches!(g, FilterGatingModes::OnRelInputBaseTick))
         {
             value = self
                 .exe_state_mut()
                 .filter(value, Instant::now(), self.tau.port_get_numeric_value(Some(ctx)));
-        } else if self.on_relative_input_reset_on_idle {
-            self.exe_state_reset(value);
         }
         value
     }

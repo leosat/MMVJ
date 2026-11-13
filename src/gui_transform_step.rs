@@ -911,7 +911,35 @@ impl<'s> DrawEgui<'s> for EmaCfg {
         });
         if self.common_state_ref().is_in_relative() {
             ui.separator();
-            gui_out = gui_out.or(bool_to_simple_change_gui_cmd(draw_gui_base_tick_params(ui, self)));
+            gui_out = gui_out.or(ui.horizontal(|ui| self.gating.egui(true, ui)).inner);
+        }
+        gui_out
+    }
+}
+
+impl<'s> DrawEgui<'s> for Option<FilterGatingModes> {
+    type In = bool;
+    type Out = Option<GuiCmd>;
+
+    fn egui(&mut self, is_relative: Self::In, ui: &mut egui::Ui) -> Self::Out {
+        let mut gui_out = None;
+        ui.label("Gating: ");
+        if is_relative {
+            match self {
+                Some(gating_mode) => {
+                    ui.label(gating_mode.to_string()).on_hover_text(gating_mode.get_desc());
+                    if ui.button("disable").clicked() {
+                        *self = None;
+                        gui_out = GuiCmd::ConfigChangeSimple.into();
+                    }
+                }
+                None => {
+                    if ui.button("enable").clicked() {
+                        *self = Some(FilterGatingModes::OnRelInputBaseTick);
+                        gui_out = GuiCmd::ConfigChangeSimple.into();
+                    }
+                }
+            }
         }
         gui_out
     }
@@ -1266,8 +1294,7 @@ impl<'s> DrawEgui<'s> for OneEuroFilterCfg {
 
         if self.common_state_ref().is_in_relative() {
             ui.separator();
-            bool_to_simple_change_gui_cmd(draw_gui_base_tick_params(ui, self))
-                .inspect(|out| *gui_out_mut = Some(out.clone()));
+            gui_out = gui_out.or(ui.horizontal(|ui| self.gating.egui(true, ui)).inner);
         }
 
         gui_out
@@ -1580,42 +1607,6 @@ impl TfmStepCommonState {
             }
         }
     }
-}
-
-// --------------------------------------------
-
-fn draw_gui_base_tick_params(ui: &mut egui::Ui, tfm: &mut impl TfmStepBaseBehavior) -> bool {
-    let mut changed = false;
-    ui.collapsing("Relative input on base tick behavior:", |ui| {
-        if !*tfm.relative_input_feed_on_idle_mut() && !*tfm.relative_input_reset_on_idle_mut() {
-            ui.separator();
-            ui.label("Current: applied only on user input, skipped on base.");
-        }
-        ui.separator();
-        ui.horizontal(|ui| {
-            let frequency_warning = "Warning: behavior depends on base tick frequency.".to_string();
-            changed |= ui
-                .checkbox(tfm.relative_input_feed_on_idle_mut(), "Run on idle relative input.")
-                .on_hover_text(&frequency_warning)
-                .changed();
-
-            if *tfm.relative_input_feed_on_idle_mut() {
-                ui.label(&frequency_warning);
-                *tfm.relative_input_reset_on_idle_mut() = false;
-            }
-
-            ui.separator();
-            changed |= ui
-                .checkbox(tfm.relative_input_reset_on_idle_mut(), "Reset on idle relative input.")
-                .on_hover_text(&frequency_warning)
-                .changed();
-            if *tfm.relative_input_reset_on_idle_mut() {
-                ui.label(&frequency_warning);
-                *tfm.relative_input_feed_on_idle_mut() = false;
-            }
-        });
-    });
-    changed
 }
 
 // --------------------------------------------

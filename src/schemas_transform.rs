@@ -39,6 +39,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::cell::Cell;
 use std::collections::BTreeMap;
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 #[cfg(feature = "gui")]
 use std::sync::atomic::AtomicBool;
@@ -1139,8 +1140,120 @@ impl TfmCfgDuplicateWithNewState for InvertCfg {
     }
 }
 
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate, Traversable, TraversableMut, WithSelfSanitize)]
+#[derive(JsonSchema, Default, Debug, Clone, PartialEq, Serialize, Deserialize, EnumString)]
+pub(crate) enum FilterGatingModes {
+    #[default]
+    OnRelInputBaseTick,
+}
+
+impl std::fmt::Display for FilterGatingModes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            FilterGatingModes::OnRelInputBaseTick => "Filter is gated on base tick for relative input ",
+        })
+    }
+}
+
+impl FilterGatingModes {
+    pub(crate) fn get_desc(&self) -> &str {
+        match self {
+            FilterGatingModes::OnRelInputBaseTick => "Filter does not execute on base tick in case of relative input",
+        }
+    }
+}
+
+impl From<FilterGatingCfgSerdeHelper> for FilterGatingCfg {
+    fn from(value: FilterGatingCfgSerdeHelper) -> Self {
+        match value {
+            FilterGatingCfgSerdeHelper::Old {
+                on_relative_input_feed_on_idle,
+                on_relative_input_reset_on_idle: _,
+            } => Self(FilterGatingCfgInner {
+                gating: if on_relative_input_feed_on_idle {
+                    AutoOrManual::Manual(None)
+                } else {
+                    AutoOrManual::Auto(Some(FilterGatingModes::OnRelInputBaseTick))
+                },
+            }),
+            FilterGatingCfgSerdeHelper::New(inner) => Self(inner),
+        }
+    }
+}
+
+#[derive(JsonSchema, Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(from = "FilterGatingCfgSerdeHelper")]
+pub(crate) struct FilterGatingCfg(#[garde(skip)] pub(crate) FilterGatingCfgInner);
+
+impl DerefMut for FilterGatingCfg {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Deref for FilterGatingCfg {
+    type Target = FilterGatingCfgInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for FilterGatingCfgInner {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.gating
+    }
+}
+
+impl Deref for FilterGatingCfgInner {
+    type Target = AutoOrManual<Option<FilterGatingModes>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.gating
+    }
+}
+
+#[derive(JsonSchema, Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct FilterGatingCfgInner {
+    #[garde(skip)]
+    #[serde(skip_serializing_if = "AutoOrManual::is_auto")]
+    pub(crate) gating: AutoOrManual<Option<FilterGatingModes>>,
+}
+
+#[derive(JsonSchema, Debug, Clone, Deserialize)]
+#[serde(untagged)]
+#[serde(deny_unknown_fields)]
+pub(crate) enum FilterGatingCfgSerdeHelper {
+    Old {
+        #[serde(default = "default_false", alias = "on_relative_input_feed_on_base")]
+        // #[serde(skip_serializing_if = "is_false")]
+        on_relative_input_feed_on_idle: bool,
+        #[serde(default = "default_false")]
+        // #[serde(skip_serializing_if = "is_false")]
+        #[allow(unused)]
+        on_relative_input_reset_on_idle: bool,
+    },
+    New(#[garde(skip)] FilterGatingCfgInner),
+}
+
+impl FilterGatingCfg {
+    fn skip_serializing(&self) -> bool {
+        self.is_auto()
+    }
+}
+
+impl WithSelfSanitize for FilterGatingCfg {
+    type SanInputT = ();
+
+    fn sanitize_inplace(&mut self, _input: Self::SanInputT) {
+        if self.is_auto() {
+            *self.0.gating = Some(Default::default())
+        }
+    }
+}
+
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate, Traversable, TraversableMut, WithSelfSanitize)]
+//#[serde(deny_unknown_fields)]
 #[with_doc_str]
 /// An Exponential Moving Average (EMA) filter is a recursive lowpass filter.
 /// It reduces noise in real-time data by giving more weight to recent data points.
@@ -1178,18 +1291,10 @@ pub(crate) struct EmaCfg {
     #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
     pub(crate) enabled: EnabledFlagCfg,
     #[traverse(skip)]
-    #[serde(default = "default_false")]
-    #[serde(skip_serializing_if = "is_false")]
+    #[serde(default, flatten, skip_serializing_if = "FilterGatingCfg::skip_serializing")]
     #[garde(skip)]
-    #[sanitize_inplace(skip)]
-    /// ...
-    pub(crate) on_relative_input_feed_on_idle: bool,
-    #[traverse(skip)]
-    #[serde(default = "default_false")]
-    #[serde(skip_serializing_if = "is_false")]
-    #[garde(skip)]
-    #[sanitize_inplace(skip)]
-    pub(crate) on_relative_input_reset_on_idle: bool,
+    /// Gating predicate
+    pub(crate) gating: FilterGatingCfg,
     #[serde(default)]
     #[garde(range(min = BaseNumT::EPSILON))]
     /// The time constant
@@ -1218,11 +1323,7 @@ impl TfmCfgDuplicateWithNewState for EmaCfg {
 
 impl PartialEq for EmaCfg {
     fn eq(&self, other: &Self) -> bool {
-        self.desc == other.desc
-            && self.enabled == other.enabled
-            && self.on_relative_input_feed_on_idle == other.on_relative_input_feed_on_idle
-            && self.on_relative_input_reset_on_idle == other.on_relative_input_reset_on_idle
-            && self.tau == other.tau
+        self.desc == other.desc && self.enabled == other.enabled && self.gating == other.gating && self.tau == other.tau
     }
 }
 
@@ -1230,12 +1331,12 @@ impl Default for EmaCfg {
     fn default() -> Self {
         Self {
             enabled: Default::default(),
-            on_relative_input_feed_on_idle: default_false(),
+
             tau: Default::default(),
-            on_relative_input_reset_on_idle: default_false(),
             desc: Default::default(),
             common_state: Default::default(),
             exe_state: Default::default(),
+            gating: Default::default(),
         }
     }
 }
@@ -1288,34 +1389,11 @@ pub(crate) struct OneEuroFilterCfg {
     #[serde(skip_serializing_if = "EnabledFlagCfg::is_default")]
     pub(crate) enabled: EnabledFlagCfg,
 
-    /// When `true` and the input has **relative** semantics, the last
-    /// known value is re-fed into the filter on base ticks so the
-    /// output continues to converge.
-    ///
-    /// Ignored for absolute inputs (always processed every tick).
-    /// Mutually exclusive with `on_relative_input_reset_on_idle`.
-    ///
-    /// **Warning:** convergence speed depends on `global.base_tick_rate`.
-    #[serde(default = "default_false")]
-    #[serde(skip_serializing_if = "is_false")]
-    #[garde(skip)]
     #[traverse(skip)]
-    #[sanitize_inplace(skip)]
-    pub(crate) on_relative_input_feed_on_idle: bool,
-
-    /// When `true` and the input has **relative** semantics, the filter
-    /// state (`x̂_prev`, `dx̂_prev`) is **reset** to the current input
-    /// on base ticks.
-    ///
-    /// Use when the relative source may jump to a new baseline after a
-    /// pause and you want to avoid a smoothing transient.
-    /// Mutually exclusive with `on_relative_input_feed_on_idle`.
-    #[serde(default = "default_false")]
-    #[serde(skip_serializing_if = "is_false")]
     #[garde(skip)]
-    #[traverse(skip)]
-    #[sanitize_inplace(skip)]
-    pub(crate) on_relative_input_reset_on_idle: bool,
+    #[serde(default, flatten, skip_serializing_if = "FilterGatingCfg::skip_serializing")]
+    /// Gating predicate
+    pub(crate) gating: FilterGatingCfg,
 
     /// Velocity coefficient (β). Controls how much the cutoff frequency
     /// increases in response to fast input movement.
@@ -1400,8 +1478,7 @@ impl PartialEq for OneEuroFilterCfg {
     fn eq(&self, other: &Self) -> bool {
         self.desc == other.desc
             && self.enabled == other.enabled
-            && self.on_relative_input_feed_on_idle == other.on_relative_input_feed_on_idle
-            && self.on_relative_input_reset_on_idle == other.on_relative_input_reset_on_idle
+            && self.gating == other.gating
             && self.beta == other.beta
             && self.min_cutoff_hz == other.min_cutoff_hz
             && self.d_cutoff_hz == other.d_cutoff_hz
@@ -1412,14 +1489,13 @@ impl Default for OneEuroFilterCfg {
     fn default() -> Self {
         Self {
             enabled: Default::default(),
-            on_relative_input_feed_on_idle: default_false(),
             beta: Default::default(),
             min_cutoff_hz: Default::default(),
             d_cutoff_hz: Default::default(),
-            on_relative_input_reset_on_idle: default_false(),
             desc: Default::default(),
             common_state: Default::default(),
             exe_state: Default::default(),
+            gating: Default::default(),
         }
     }
 }
@@ -2684,30 +2760,6 @@ impl Default for RaiseFallCfg {
             common_state: Default::default(),
             exe_state: Default::default(),
         }
-    }
-}
-
-// -----------------------------------
-pub(crate) trait TfmStepBaseBehavior {
-    fn relative_input_feed_on_idle_mut(&mut self) -> &mut bool;
-    fn relative_input_reset_on_idle_mut(&mut self) -> &mut bool;
-}
-
-impl TfmStepBaseBehavior for EmaCfg {
-    fn relative_input_feed_on_idle_mut(&mut self) -> &mut bool {
-        &mut self.on_relative_input_feed_on_idle
-    }
-    fn relative_input_reset_on_idle_mut(&mut self) -> &mut bool {
-        &mut self.on_relative_input_reset_on_idle
-    }
-}
-
-impl TfmStepBaseBehavior for OneEuroFilterCfg {
-    fn relative_input_feed_on_idle_mut(&mut self) -> &mut bool {
-        &mut self.on_relative_input_feed_on_idle
-    }
-    fn relative_input_reset_on_idle_mut(&mut self) -> &mut bool {
-        &mut self.on_relative_input_reset_on_idle
     }
 }
 
