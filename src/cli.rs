@@ -38,16 +38,16 @@ pub struct Cli {
     pub debug_ff: bool,
     #[arg(
         long,
-        help = "Enable debug output for routines being run at idle tick when no user input \
+        help = "Enable debug output for routines being run at base tick when no user input \
         (to debug e.g. autocentering during steering transformation)."
     )]
-    pub debug_idle_tick: bool,
+    pub debug_base_tick: bool,
     #[arg(
         short = 'u',
         long,
-        help = "Rate of processing when no user input (idle tick), in Hz."
+        help = "Rate of processing when no user input (base tick), in Hz."
     )]
-    pub idle_tick_update_rate: Option<u32>,
+    pub base_tick_update_rate: Option<u32>,
     // #[arg(short = 'l', long, default_value = crate::config::APP_DEFAULT_LATENCY_STR)]
     // latency_mode: String,
     #[arg(long, default_value = crate::config::APP_DEFAULT_MAX_LOG_LEVEL, help = "Limit max log level.")]

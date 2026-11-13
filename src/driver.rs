@@ -202,7 +202,7 @@ pub async fn run(
     no_hot_reload: bool,
     debug: DebugLevel,
     debug_ff: bool,
-    debug_idle_tick: bool,
+    debug_base_tick: bool,
     update_rate_hz: Option<u32>,
     persistent_joysticks_cli: Option<Vec<String>>,
     write_schema_and_predefined_controls_dump: bool,
@@ -312,7 +312,7 @@ pub async fn run(
 
         let mut mapping_engine = MappingEngine::new(
             debug,
-            debug_idle_tick,
+            debug_base_tick,
             // TODO: perf: maybe use shared memory and left-right pattern
             cfg_mgr.cfg_ref().clone(),
             &hid_mgr,
@@ -327,7 +327,7 @@ pub async fn run(
         }
 
         if let Some(rate) = update_rate_hz {
-            mapping_engine.set_mode(*cfg_mgr.cfg_ref().global.mode.clone().set_idle_rate(rate));
+            mapping_engine.set_mode(*cfg_mgr.cfg_ref().global.mode.clone().set_base_rate(rate));
         }
 
         // if debug.is_on() {
@@ -538,9 +538,9 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                         MappingEngineCmd::_None => {
                             log::debug!("Mapping update: simple");
                         }
-                        MappingEngineCmd::UpdateMappingRouterIdleTickOnly => {
-                            log::debug!("Mapping update: update idle tick info");
-                            mapping_engine.idle_tick_mappings_reset();
+                        MappingEngineCmd::UpdateMappingRouterBaseTickOnly => {
+                            log::debug!("Mapping update: update base tick info");
+                            mapping_engine.base_tick_mappings_reset();
                         }
                         MappingEngineCmd::UpdateMappingRouter => {
                             log::debug!("Mapping update: update router info");

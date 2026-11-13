@@ -548,7 +548,7 @@ impl eframe::App for GuiMain {
                 ui.horizontal(|ui| {
                     ui.separator();
                     if self.cfg.global.mode.egui((), ui) {
-                        self.submit_post_draw_cmd(GuiCmd::IdleTickRateChange);
+                        self.submit_post_draw_cmd(GuiCmd::BaseTickRateChange);
                     }
                 });
                 ui.separator();
@@ -741,15 +741,17 @@ fn mapper_mode_to_desc(mode: MapperModeKind) -> &'static str {
             gaming mice may cause higher CPU load. "
         }
         MapperModeKind::Capped => {
-            "In Capped mode whenever input rate exceeds the configured threshold, mapping gets delayed to match the \
-            configured frequency ceiling. Any input with rate lower than that is executed immediatly as in Reactive mode. \
+            "In Capped mode whenever input rate exceeds the configured threshold (except for button/key events), mapping gets delayed to match the \
+            configured frequency ceiling. Mappings triggered by button/key events are executed immediately. \
+            Any other input with rate lower than that is executed immediatly as in Reactive mode. \
             Relative deltas get accumulated until consumed by mappings run. \
             Remapping behavior of relative deltas is allowing extrapolation, clamping is not applied."
         }
         MapperModeKind::Stable => {
-            "In Stable mode all the mappings are executed with fixed configured frequency, \
+            "In Stable mode all the mappings except for those triggered by button/key events are executed with fixed configured frequency, \
             irrelevant to the frequency of input. Relative deltas get accumulated until consumed by mappings run. \
-            Remapping behavior of relative deltas is allowing extrapolation, clamping is not applied."
+            Remapping behavior of relative deltas is allowing extrapolation, clamping is not applied. \
+            Mappings triggered by button/key events are executed immediately."
         }
     }
 }
@@ -757,8 +759,8 @@ fn mapper_mode_to_desc(mode: MapperModeKind) -> &'static str {
 fn mapper_mode_to_mapper_frequency_desc(mode: MapperModeKind) -> &'static str {
     match mode {
         MapperModeKind::Reactive => "Mappings are executed immediately",
-        MapperModeKind::Capped => "Mapping frequency ceiling",
-        MapperModeKind::Stable => "Mapping frequency",
+        MapperModeKind::Capped => "Mapping frequency ceiling (except for button/key events)",
+        MapperModeKind::Stable => "Stable mapping frequency (except for button/key events)",
     }
 }
 
@@ -776,22 +778,22 @@ impl<'s> DrawEgui<'s> for MapperMode {
             .on_hover_text(mapper_mode_to_desc((&*self).into()));
 
         ui.separator();
-        let idle_desc = "Mappings scheduled for idle tick run at this frequency when no user input.";
-        ui.label("idle rate:").on_hover_text(idle_desc);
-        let mut idle_rate = self.get_idle_tick_rate();
+        let base_desc = "Mappings scheduled for base tick run at this frequency irrespective to user input.";
+        ui.label("base rate:").on_hover_text(base_desc);
+        let mut base_rate = self.get_base_tick_rate();
         if ui
             .add(
                 egui::Slider::new(
-                    &mut idle_rate,
+                    &mut base_rate,
                     crate::config::MIN_BASE_FREQ_HZ..=crate::config::MAX_BASE_FREQ_HZ,
                 )
                 .logarithmic(true)
                 .suffix(" Hz"),
             )
-            .on_hover_text(idle_desc)
+            .on_hover_text(base_desc)
             .changed()
         {
-            self.set_idle_rate(idle_rate);
+            self.set_base_rate(base_rate);
             changed = true;
         };
 
@@ -807,7 +809,7 @@ impl<'s> DrawEgui<'s> for MapperMode {
                 .add(
                     egui::Slider::new(
                         &mut mapping_rate,
-                        self.get_idle_tick_rate()..=crate::config::MAX_BASE_FREQ_HZ,
+                        self.get_base_tick_rate()..=crate::config::MAX_BASE_FREQ_HZ,
                     )
                     .logarithmic(true)
                     .suffix(" Hz"),
@@ -1089,7 +1091,7 @@ impl GuiMain {
                     cfg_suffix: cfg_suffix.clone(),
                 });
             }
-            GuiCmd::IdleTickRateChange => self.send_driver_cmd(DriverCmd::ChangeMappingMode {
+            GuiCmd::BaseTickRateChange => self.send_driver_cmd(DriverCmd::ChangeMappingMode {
                 mode: self.cfg.global.mode,
             }),
             GuiCmd::CmdSeqence(gui_cmds) => {

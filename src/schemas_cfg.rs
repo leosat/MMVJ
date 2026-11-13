@@ -236,10 +236,10 @@ pub(crate) type VariablesCfg = BTreeMap<String, VariableCfg>;
 //#[serde(deny_unknown_fields)]
 #[with_doc_str]
 pub(crate) struct GlobalSettingsCfg {
-    /// The program will run idle tick with this rate in Hz.
+    /// The program will run base tick with this rate in Hz.
     // #[serde(default = "default_update_rate")]
     // #[garde(range(min=crate::config::MIN_BASE_FREQ_HZ))]
-    // pub(crate) idle_tick_rate: u32,
+    // pub(crate) base_tick_rate: u32,
     #[garde(dive)]
     #[serde(flatten)]
     pub(crate) mode: MapperMode,

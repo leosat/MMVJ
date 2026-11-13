@@ -99,11 +99,11 @@ impl WithRuntimeId for ControlMatchers {
 
 impl ControlMatchers {
     #[allow(dead_code)]
-    pub(crate) fn get_idle_tick_enabled_flag(&self) -> &AtomicBool {
+    pub(crate) fn get_base_tick_enabled_flag(&self) -> &AtomicBool {
         match self {
             #[cfg(feature = "midi")]
-            ControlMatchers::Midi(cm) => &cm.idle_tick_enabled,
-            ControlMatchers::Hid(cm) => &cm.idle_tick_enabled,
+            ControlMatchers::Midi(cm) => &cm.base_tick_enabled,
+            ControlMatchers::Hid(cm) => &cm.base_tick_enabled,
         }
     }
 
