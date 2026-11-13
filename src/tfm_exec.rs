@@ -20,6 +20,7 @@ use crate::schemas_transform::ScriptCfg;
 use crate::schemas_transform::TfmCfgDuplicateWithNewState;
 use crate::schemas_transform::VelocityToDisplacementCfg;
 use crate::schemas_transform::WithCommonState;
+use crate::schemas_transform::WithGatingParams;
 use crate::schemas_transform::{
     ClampCfg, EmaCfg, ForceFeedbackComponent, IntegrateCfg, InvertCfg, LinearCfg, NormExpCfg, OneEuroFilterCfg,
     RaiseFallCfg, SCurveCfg, SignedPowerCfg, SmoothstepCfg, SteeringCfg, TfmSeqCfg, TfmStepCfg,
@@ -335,10 +336,7 @@ impl WithTfmExec for OneEuroFilterCfg {
     type InputT = BaseNumT;
     type OutputT = Self::InputT;
     fn exec(&self, mut value: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
-        if !ctx.is_base_tick()
-            || self.common_state_ref().get_in_relativity().is_absolute()
-            || self.on_relative_input_feed_on_idle
-        {
+        if !ctx.is_base_tick() || self.common_state_ref().get_in_relativity().is_absolute() || !self.is_gated(value) {
             value = self.exe_state_mut().filter(
                 value,
                 Instant::now(),
@@ -347,8 +345,6 @@ impl WithTfmExec for OneEuroFilterCfg {
                 self.beta.port_get_numeric_value(Some(ctx)), //get_numeric_value_clamped_predicated(ClampPred::IfDynamic),
                 self.d_cutoff_hz.port_get_numeric_value(Some(ctx)), //.get_numeric_value_clamped_predicated(ClampPred::IfDynamic),
             );
-        } else if self.on_relative_input_reset_on_idle {
-            self.exe_state_reset(value);
         }
         value
     }
@@ -479,15 +475,10 @@ impl WithTfmExec for EmaCfg {
     type InputT = BaseNumT;
     type OutputT = Self::InputT;
     fn exec(&self, mut value: Self::InputT, ctx: &impl TfmExecCtx) -> Self::OutputT {
-        if !ctx.is_base_tick()
-            || self.common_state_ref().get_in_relativity().is_absolute()
-            || self.on_relative_input_feed_on_idle
-        {
+        if !ctx.is_base_tick() || self.common_state_ref().get_in_relativity().is_absolute() || !self.is_gated(value) {
             value = self
                 .exe_state_mut()
                 .filter(value, Instant::now(), self.tau.port_get_numeric_value(Some(ctx)));
-        } else if self.on_relative_input_reset_on_idle {
-            self.exe_state_reset(value);
         }
         value
     }
