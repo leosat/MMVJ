@@ -16,7 +16,16 @@ pub(crate) const GUI_STYLE_LIGHT: GuiStyle = GuiStyle {
 
         cc.egui_ctx.set_theme(egui::Theme::from_dark_mode(false));
         cc.egui_ctx.set_pixels_per_point(1.2);
-
+        {
+            let drag_value_style_name = "drag_value";
+            cc.egui_ctx.all_styles_mut(|s| {
+                s.text_styles.insert(
+                    egui::TextStyle::Name(drag_value_style_name.into()),
+                    egui::FontId::new(10.0, egui::FontFamily::Monospace),
+                );
+                s.drag_value_text_style = egui::TextStyle::Name(drag_value_style_name.into());
+            });
+        }
         cc.egui_ctx.set_fonts(font_definitions_with_phosphor_fonts());
     },
 };
