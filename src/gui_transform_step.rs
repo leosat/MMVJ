@@ -2,6 +2,7 @@ use crate::base_num::BaseNumT;
 use crate::gui_common::clear_dynamic_targets_cache;
 use crate::gui_common::collect_and_cache_dyn_dsts;
 use crate::gui_common::collect_and_cache_dyn_srcs;
+use crate::gui_common::draw_button_to_window;
 use crate::gui_common::draw_dyn_value_refs_list;
 use crate::gui_status::draw_status_hay;
 use crate::gui_style::GuiStyle;
@@ -71,11 +72,6 @@ fn draw_graph_docked_or_windowed(
 ) -> bool {
     let mut changed = false;
 
-    let is_graph_window_opened_egui_id = ui.make_persistent_id(1);
-    let mut egui_state_is_graph_window_opened =
-        ui.data_mut(|d| *d.get_persisted_mut_or_default::<bool>(is_graph_window_opened_egui_id));
-    let was_graph_window_opened = egui_state_is_graph_window_opened;
-
     // ui.label(state.0.read().get_state_id().to_string());
 
     ui.vertical(|ui| {
@@ -99,66 +95,58 @@ fn draw_graph_docked_or_windowed(
         }
 
         let mut graph_displayed = false;
-        let mut display_graph = |ui: &mut egui::Ui| {
-            if let Some(gui_graph) = gui_graphs.borrow_mut().get_mut(&tfm_step.get_graph_hash_key_string()) {
+
+        ui.horizontal(|ui| {
+            let mut display_graph = |ui: &mut egui::Ui| {
+                if let Some(gui_graph) = gui_graphs.borrow_mut().get_mut(&tfm_step.get_graph_hash_key_string()) {
+                    if !tfm_step.common_state_ref().is_gui_tracing_enabled() {
+                        tfm_step.common_state_ref().enable_gui_tracing();
+                        changed = true;
+                    }
+                    graph_displayed = true;
+                    if gui_graph._in_interval != tfm_step.common_state_ref().get_in_interval() {
+                        gui_graph.legend = tfm_step.get_graph_legend();
+                    }
+                    gui_graph.consume_input_queue_and_draw_gui(ui);
+                };
+            };
+
+            let window_opened = draw_button_to_window(
+                format!("{} transform input-output monitor.", tfm_step),
+                ui.make_persistent_id(1),
+                egui_phosphor::regular::APP_WINDOW,
+                "Open graph in a separate window",
+                "... live monitor graph window opened ... ",
+                ui,
+                |ui| display_graph(ui),
+            );
+
+            if window_opened {
                 if !tfm_step.common_state_ref().is_gui_tracing_enabled() {
                     tfm_step.common_state_ref().enable_gui_tracing();
                     changed = true;
                 }
-                graph_displayed = true;
-                if gui_graph._in_interval != tfm_step.common_state_ref().get_in_interval() {
-                    gui_graph.legend = tfm_step.get_graph_legend();
+            } else {
+                let c = egui::collapsing_header::CollapsingState::load_with_default_open(
+                    ui.ctx(),
+                    ui.scope_id().with("collapsing"),
+                    false,
+                );
+
+                {
+                    let mut header_clicked = false;
+                    let mut r = c.show_header(ui, |ui| {
+                        header_clicked = ui
+                            .add(egui::Label::new("live monitor").sense(egui::Sense::click()))
+                            .clicked();
+                    });
+                    r.set_open(r.is_open() ^ header_clicked);
+                    r.body(|ui| {
+                        display_graph(ui);
+                    });
                 }
-                gui_graph.consume_input_queue_and_draw_gui(ui);
-            };
-        };
-
-        if egui_state_is_graph_window_opened {
-            egui::Window::new(format!("{} transform input-output monitor.", tfm_step))
-                .id(is_graph_window_opened_egui_id.with(42))
-                .open(&mut egui_state_is_graph_window_opened)
-                .resizable(true)
-                .order(egui::Order::TOP)
-                .show(ui.ctx(), move |ui| {
-                    display_graph(ui);
-                })
-                .map(|r| r.inner.unwrap_or_default())
-                .unwrap_or_default();
-            if !tfm_step.common_state_ref().is_gui_tracing_enabled() {
-                tfm_step.common_state_ref().enable_gui_tracing();
-                changed = true;
             }
-            ui.label("... live monitor graph window opened ... ");
-        } else {
-            let c = egui::collapsing_header::CollapsingState::load_with_default_open(
-                ui.ctx(),
-                ui.scope_id().with("collapsing"),
-                false,
-            );
-
-            {
-                let mut header_clicked = false;
-                let mut r = c.show_header(ui, |ui| {
-                    header_clicked = ui
-                        .add(egui::Label::new("live monitor").sense(egui::Sense::click()))
-                        .clicked();
-                    if !was_graph_window_opened
-                        && ui
-                            .button(egui_phosphor::bold::APP_WINDOW.to_string())
-                            .on_hover_text("Open graph in a separate window")
-                            .clicked()
-                    {
-                        egui_state_is_graph_window_opened = true;
-                    }
-                });
-                r.set_open(r.is_open() ^ header_clicked);
-                r.body(|ui| {
-                    display_graph(ui);
-                });
-            }
-        }
-
-        ui.data_mut(|d| d.insert_persisted(is_graph_window_opened_egui_id, egui_state_is_graph_window_opened));
+        });
 
         if !graph_displayed && tfm_step.common_state_ref().is_gui_tracing_enabled() {
             tfm_step.common_state_ref().disable_gui_tracing();

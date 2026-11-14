@@ -447,3 +447,37 @@ pub(crate) fn draw_dyn_value_refs_list(ui: &mut egui::Ui, refs: &mut [DynValueRe
         });
     }
 }
+
+// -----------------
+
+pub(crate) fn draw_button_to_window<'s>(
+    window_title: impl egui::IntoAtoms<'s>,
+    window_id: egui::Id,
+    window_open_button_atoms: impl egui::IntoAtoms<'s>,
+    window_open_button_on_hover_text: impl Into<egui::WidgetText>,
+    window_opened_text: impl Into<egui::WidgetText>,
+    ui: &'s mut egui::Ui,
+    func: impl FnOnce(&mut egui::Ui),
+) -> bool {
+    let mut window_opened = ui.data_mut(|d| d.get_temp_mut_or_default::<bool>(window_id).clone());
+    let was_window_opened = window_opened;
+    ui.vertical(|ui| {
+        if window_opened {
+            ui.label(window_opened_text);
+            egui::Window::new(window_title)
+                .open(&mut window_opened)
+                .id(window_id)
+                .show(ui.ctx(), |ui| func(ui));
+        } else {
+            if ui
+                .button(window_open_button_atoms)
+                .on_hover_text(window_open_button_on_hover_text)
+                .clicked()
+            {
+                window_opened = true;
+            };
+        }
+        ui.data_mut(|d| d.insert_temp(window_id, window_opened));
+    });
+    was_window_opened
+}

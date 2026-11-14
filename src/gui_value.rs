@@ -4,7 +4,7 @@ use eframe::egui;
 use egui::scroll_area::ScrollSource;
 
 use crate::config::WithSelfSanitize;
-use crate::gui_common::{GuiCmd, bool_to_simple_change_gui_cmd};
+use crate::gui_common::{GuiCmd, bool_to_simple_change_gui_cmd, draw_button_to_window};
 use crate::gui_transform_step::GuiInCommon;
 use crate::mapping::MappingEngineCmd;
 use crate::relativity::Relativity;
@@ -415,27 +415,16 @@ where
                     port.port_get_relativity().egui(GuiInKinds::Display, ui);
                     ui.separator();
                     port.port_get_interval().egui(GuiInInterval::Display, ui);
-                    //                    ui.separator();
 
-                    let window_id = ui.scope_id().with(port.get_id());
-                    let mut window_opened = ui.data_mut(|d| d.get_temp_mut_or_default::<bool>(window_id).clone());
-                    if window_opened {
-                        egui::Window::new("...")
-                            .open(&mut window_opened)
-                            .id(window_id)
-                            .show(ui.ctx(), |ui| {
-                                value_port_editor(ui, port);
-                            });
-                    } else {
-                        if ui
-                            .button(egui::RichText::new(egui_phosphor::bold::GEAR_SIX).size(14.0))
-                            .on_hover_text("Edit value port remapping and transformation parameters")
-                            .clicked()
-                        {
-                            window_opened = true;
-                        };
-                    }
-                    ui.data_mut(|d| d.insert_temp(window_id, window_opened));
+                    draw_button_to_window(
+                        "Editing value port parameters",
+                        ui.scope_id().with(port.get_id()),
+                        egui::RichText::new(egui_phosphor::bold::GEAR_SIX).size(14.0),
+                        "Edit value port remapping and transformation parameters",
+                        "... editing ...",
+                        ui,
+                        |ui| value_port_editor(ui, port),
+                    );
 
                     ui.separator();
                     clipping_indicator(ui, port);
