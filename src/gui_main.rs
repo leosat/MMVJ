@@ -33,6 +33,7 @@ use crate::schemas_ui::UiMonitorsCfg;
 use crate::schemas_value::VariableCfg;
 use eframe::egui::{self};
 use eframe::egui_glow;
+use eframe::wgpu::naga::FastHashSet;
 use egui::scroll_area::ScrollSource;
 use egui_file_dialog::FileDialog;
 use log::warn;
@@ -132,6 +133,7 @@ pub(crate) fn run(
                     avail_dev_info_cache: Default::default(),
                     style: GUI_STYLE_LIGHT,
                     system_requirements_chk_status: check_system_requirements().err().map(|e| format!("{e}")),
+                    gui_tab_mappings_windowed_mappings: Default::default(),
                 };
                 app.cfg_yaml = app.get_config_string();
                 if let Some(storage) = cc.storage {
@@ -258,6 +260,7 @@ pub(crate) struct GuiMain {
     // ---
     current_opened_tab: GuiMainTabs,
     // ---
+    pub(crate) gui_tab_mappings_windowed_mappings: FastHashSet<usize>,
     pub(crate) gui_tab_mappings_current_opened_mapping_idx: usize,
     // -----------------------------------------
     pub(crate) telemetry_graphs: UncheckedRefCell<GuiTelemetryGraphStates>,

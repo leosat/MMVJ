@@ -642,6 +642,7 @@ impl<'s> DrawEgui<'s> for VariableCfg {
                                 .add(
                                     egui::Slider::new(&mut value, self.get_interval().make_range_inclusive())
                                         .logarithmic(false) // TODO: make configurable
+                                        .custom_formatter(|value, _| format!("{value:+011.4}",))
                                         // .fixed_decimals(4)
                                         .step_by(0.0001),
                                 )

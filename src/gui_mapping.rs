@@ -1,8 +1,8 @@
 use crate::config::{MORE_DEBUG, WithSelfSanitize};
 use crate::gui_common::{
     DrawEgui, GuiCmd, GuiDndJobMoveTfmStep, bool_to_simple_change_gui_cmd, clear_clipping_indicators_cache,
-    clear_dynamic_targets_cache, collect_and_cache_dyn_dsts, collect_and_cache_dyn_srcs, draw_collapsing_ui,
-    draw_dyn_value_refs_list,
+    clear_dynamic_targets_cache, collect_and_cache_dyn_dsts, collect_and_cache_dyn_srcs, draw_button_to_window,
+    draw_collapsing_ui, draw_dyn_value_refs_list,
 };
 use crate::gui_transform_step::GuiInCommon;
 use crate::gui_value::{GuiInValue, GuiInValueEditParams};
@@ -18,6 +18,7 @@ use std::any::Any;
 use std::sync::atomic::Ordering::Relaxed;
 
 use egui::epaint::CornerRadiusF32;
+use egui::scroll_area::ScrollSource;
 use egui::{Frame, Shadow, TextEdit};
 use unchecked_refcell::UncheckedRefCell;
 // -------------------------------
@@ -171,6 +172,11 @@ impl crate::gui_main::GuiMain {
     pub(crate) fn draw_mappings_editor_gui(&mut self, ui: &mut egui::Ui) {
         let mut gui_out = None;
         let gui_out_mut = &mut gui_out;
+
+        let open_mapping_editor_window_text = egui_phosphor::regular::TERMINAL_WINDOW;
+        let open_mapping_editor_window_text_placeholder = "< ... >";
+        let open_mapping_editor_window_tooltip = "Open mapping editor window";
+
         draw_collapsing_ui(
             ui,
             Some("Mappings list"),
@@ -183,7 +189,7 @@ impl crate::gui_main::GuiMain {
                 ui.horizontal(|ui| {
                     if self.cfg.mappings.iter().any(|v| *v.enabled)
                         && ui
-                            .button(egui_phosphor::bold::STOP.to_string())
+                            .button(egui_phosphor::bold::STOP_CIRCLE.to_string())
                             .on_hover_text("Disable all mappings")
                             .clicked()
                     {
@@ -223,10 +229,65 @@ impl crate::gui_main::GuiMain {
                     ui.horizontal(|ui| {
                         {
                             let (label, on_hover_text) = if *mapping.enabled {
-                                (egui_phosphor::bold::STOP.to_string(), "Disable")
+                                (egui_phosphor::bold::STOP_CIRCLE.to_string(), "Disable")
                             } else {
                                 (egui_phosphor::bold::PLAY.to_string(), "Enable")
                             };
+
+                            let window_title = format!("Editing mapping {}", mapping.name);
+                            if self.gui_tab_mappings_current_opened_mapping_idx != mapping_idx {
+                                if draw_button_to_window(
+                                    &window_title,
+                                    egui::Id::unique("window").with(mapping.get_id()),
+                                    open_mapping_editor_window_text,
+                                    open_mapping_editor_window_tooltip,
+                                    open_mapping_editor_window_text_placeholder,
+                                    ui,
+                                    |ui| {
+                                        egui::ScrollArea::vertical()
+                                            .scroll_source(ScrollSource::ALL)
+                                            .show(ui, |ui| {
+                                                mapping
+                                                    .egui(
+                                                        (
+                                                            self.gui_tab_mappings_current_opened_mapping_idx,
+                                                            GuiInCommon {
+                                                                graph_states: &self.telemetry_graphs,
+                                                                cfg_devices: &self.cfg.devices,
+                                                                cfg_variables: &self.cfg.variables,
+                                                                transient_script_aux_edits: &self
+                                                                    .transient_states_script_aux_edit,
+                                                                hier: &UncheckedRefCell::new(Vec::new()),
+                                                                style: &self.style,
+                                                                mode: &self.cfg.global.mode,
+                                                            },
+                                                        ),
+                                                        ui,
+                                                    )
+                                                    .inspect(|out| *gui_out_mut = Some(out.clone()));
+                                            });
+                                    },
+                                ) {
+                                    self.gui_tab_mappings_windowed_mappings.insert(mapping_idx);
+                                }
+                                // else {
+                                //     self.gui_tab_mappings_windowed_mappings.remove(&mapping_idx);
+                                // };
+                            } else {
+                                self.gui_tab_mappings_windowed_mappings.remove(&mapping_idx);
+                                if ui.button(open_mapping_editor_window_text).clicked() {
+                                    ui.data_mut(|d| {
+                                        d.insert_persisted(egui::Id::unique("window").with(mapping.get_id()), true)
+                                    });
+                                    self.gui_tab_mappings_current_opened_mapping_idx = usize::MAX;
+                                };
+                                // ui.horizontal(|ui| {
+                                //     ui.separator();
+                                // });
+                            }
+
+                            ui.separator();
+
                             if ui.button(label).on_hover_text(on_hover_text).clicked() {
                                 *mapping.enabled = !*mapping.enabled;
                                 *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter));
@@ -235,15 +296,21 @@ impl crate::gui_main::GuiMain {
 
                         ui.separator();
 
-                        ui.selectable_value(
-                            &mut self.gui_tab_mappings_current_opened_mapping_idx,
-                            mapping_idx,
-                            format!(
-                                "({mapping_idx}) {} {}",
-                                mapping.name,
-                                egui_phosphor::bold::DOTS_SIX_VERTICAL,
-                            ),
-                        );
+                        if ui
+                            .selectable_value(
+                                &mut self.gui_tab_mappings_current_opened_mapping_idx,
+                                mapping_idx,
+                                format!(
+                                    "({mapping_idx}) {} {}",
+                                    mapping.name,
+                                    egui_phosphor::bold::DOTS_SIX_VERTICAL,
+                                ),
+                            )
+                            .changed()
+                        {
+                            ui.request_discard("");
+                            return;
+                        };
 
                         ui.separator();
 
@@ -260,44 +327,49 @@ impl crate::gui_main::GuiMain {
             ui.separator();
         });
 
-        ui.separator();
-        if self.cfg.mappings.len() > self.gui_tab_mappings_current_opened_mapping_idx {
-            let mapping = &mut self.cfg.mappings[self.gui_tab_mappings_current_opened_mapping_idx];
-            ui.group(|ui| {
-                ui.push_id("mapping editor", |ui| {
-                    mapping
-                        .egui(
-                            (
-                                self.gui_tab_mappings_current_opened_mapping_idx,
-                                GuiInCommon {
-                                    graph_states: &self.telemetry_graphs,
-                                    cfg_devices: &self.cfg.devices,
-                                    cfg_variables: &self.cfg.variables,
-                                    transient_script_aux_edits: &self.transient_states_script_aux_edit,
-                                    hier: &UncheckedRefCell::new(Vec::new()),
-                                    style: &self.style,
-                                    mode: &self.cfg.global.mode,
-                                },
-                            ),
-                            ui,
-                        )
-                        .inspect(|out| *gui_out_mut = Some(out.clone()));
-                })
-            });
-        }
+        if !self
+            .gui_tab_mappings_windowed_mappings
+            .contains(&self.gui_tab_mappings_current_opened_mapping_idx)
+        {
+            ui.separator();
+            if self.cfg.mappings.len() > self.gui_tab_mappings_current_opened_mapping_idx {
+                let mapping = &mut self.cfg.mappings[self.gui_tab_mappings_current_opened_mapping_idx];
+                ui.group(|ui| {
+                    ui.push_id("mapping editor", |ui| {
+                        mapping
+                            .egui(
+                                (
+                                    self.gui_tab_mappings_current_opened_mapping_idx,
+                                    GuiInCommon {
+                                        graph_states: &self.telemetry_graphs,
+                                        cfg_devices: &self.cfg.devices,
+                                        cfg_variables: &self.cfg.variables,
+                                        transient_script_aux_edits: &self.transient_states_script_aux_edit,
+                                        hier: &UncheckedRefCell::new(Vec::new()),
+                                        style: &self.style,
+                                        mode: &self.cfg.global.mode,
+                                    },
+                                ),
+                                ui,
+                            )
+                            .inspect(|out| *gui_out_mut = Some(out.clone()));
+                    })
+                });
+            }
 
-        // if let Some(cmd) = &gui_out_mut {
-        //     dbg!(cmd);
-        // }
+            // if let Some(cmd) = &gui_out_mut {
+            //     dbg!(cmd);
+            // }
 
-        if let Some(GuiCmd::LocalItemRemove(mapping_idx_to_remove)) = *gui_out_mut {
-            self.cfg.mappings.remove(mapping_idx_to_remove);
-            *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter))
-        }
+            if let Some(GuiCmd::LocalItemRemove(mapping_idx_to_remove)) = *gui_out_mut {
+                self.cfg.mappings.remove(mapping_idx_to_remove);
+                *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouter))
+            }
 
-        if let Some(cmd) = gui_out {
-            // dbg!(&cmd);
-            self.submit_post_draw_cmd(cmd);
+            if let Some(cmd) = gui_out {
+                // dbg!(&cmd);
+                self.submit_post_draw_cmd(cmd);
+            }
         }
     }
 }
