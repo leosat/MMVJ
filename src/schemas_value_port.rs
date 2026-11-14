@@ -4,6 +4,7 @@ use std::sync::atomic::Ordering::Relaxed;
 
 use crate::base_num::BaseAtomicT;
 use crate::num_interval::NumIntervalValue;
+use crate::schemas_common::{ObjId, WithRuntimeId};
 use crate::schemas_transform::TfmSeqCfg;
 use crate::schemas_value::{
     AutoOrManual, InputValueMetadata, TfmValueData, ValueDsts, ValueIface, ValueSrcs, ValueXrcs,
@@ -84,11 +85,6 @@ pub(crate) trait ValuePortIface:
         BaseNumT: From<<Self::InnerT as WithNumericValue>::ValueT>,
         <Self::InnerT as WithNumericValue>::ValueT: From<BaseNumT>;
 
-    // fn port_get_last_known_io(&self) -> <Self::InnerT as WithLastKnownIO>::LastKnownIOValueT
-    // where
-    //     BaseNumT: From<<Self::InnerT as WithLastKnownIO>::LastKnownIOValueT>,
-    //     <Self::InnerT as WithLastKnownIO>::LastKnownIOValueT: From<BaseNumT>;
-
     fn port_set_numeric_value(&self, value: <Self::InnerT as WithNumericValue>::ValueT, ctx: Option<&impl TfmExecCtx>)
     where
         BaseNumT: From<<Self::InnerT as WithNumericValue>::ValueT>;
@@ -97,7 +93,7 @@ pub(crate) trait ValuePortIface:
     fn port_get_relativity(&self) -> Relativity;
 
     fn port_get_default_interval_from_inner(&self) -> NumInterval<<Self::InnerT as WithNumericValue>::ValueT>;
-    // fn _port_get_identity_str(&self) -> String;
+    fn port_get_identity_str(&self) -> &str;
 
     fn port_set_tfm_value_and_flush_to_devices(&self, value: TfmValueData<BaseNumT>, ctx: &impl TfmExecCtx)
     where
@@ -181,7 +177,6 @@ where
             } => Self {
                 triggers_mapping,
                 inner: value,
-                san_policy: PhantomData,
                 remap_policy: RemapT::new(remap),
                 tfm_policy: {
                     let mut tfm_pol: TfmT = Default::default();
@@ -193,9 +188,7 @@ where
                     }
                     tfm_pol.into()
                 },
-                _port_effective_interval: Default::default(),
-                _port_effective_relativity: Default::default(),
-                last_known_io: Default::default(),
+                ..Default::default()
             },
         };
         port.sanitize_inplace(());
@@ -436,6 +429,9 @@ pub(crate) struct ValuePort<
 {
     #[serde(skip)]
     #[traverse(skip)]
+    id: ObjId,
+    #[serde(skip)]
+    #[traverse(skip)]
     last_known_io: Arc<BaseAtomicT>,
     inner: InnerT,
     #[serde(skip)]
@@ -453,6 +449,9 @@ pub(crate) struct ValuePort<
     #[serde(skip)]
     #[traverse(skip)]
     _port_effective_relativity: Relativity,
+    #[serde(skip)]
+    #[traverse(skip)]
+    _port_identity_string: String,
 }
 
 impl<InnerT, SanT, RemapT, TfmT> PartialOrd for ValuePort<InnerT, SanT, RemapT, TfmT>
@@ -505,14 +504,16 @@ where
 {
     fn default() -> Self {
         let mut tmp = Self {
-            triggers_mapping: Default::default(),
+            san_policy: Default::default(),
+            id: Default::default(),
+            last_known_io: Default::default(),
             inner: Default::default(),
-            san_policy: PhantomData,
             remap_policy: Default::default(),
             tfm_policy: Default::default(),
+            triggers_mapping: Default::default(),
             _port_effective_interval: Default::default(),
             _port_effective_relativity: Default::default(),
-            last_known_io: Default::default(),
+            _port_identity_string: Default::default(),
         };
         tmp.sanitize_inplace(());
         tmp
@@ -530,15 +531,25 @@ where
 {
     fn from(value: InnerT) -> Self {
         Self {
-            triggers_mapping: false,
             inner: value,
-            san_policy: PhantomData,
-            remap_policy: RemapT::default(),
-            tfm_policy: Default::default(),
-            _port_effective_interval: Default::default(),
-            _port_effective_relativity: Default::default(),
-            last_known_io: Default::default(),
+            ..Default::default()
         }
+    }
+}
+
+impl<InnerT, SanT, RemapT, TfmT> WithRuntimeId for ValuePort<InnerT, SanT, RemapT, TfmT>
+where
+    InnerT: ValueIface,
+    SanT: PortSanPolicy<InnerT>,
+    RemapT: PortRemapPolicy<InnerT::ValueT>,
+    TfmT: TfmPolicyIface,
+{
+    fn get_id(&self) -> ObjId {
+        self.id
+    }
+
+    fn assign_new_id(&mut self) {
+        self.id = Default::default()
     }
 }
 
@@ -582,6 +593,17 @@ where
 {
     type SanInputT = ();
     fn sanitize_inplace(&mut self, _: Self::SanInputT) {
+        self._port_identity_string = {
+            let mut identity_string = self.port_inner_ref().value_identity();
+            if self.port_transformation_ref().is_some() {
+                identity_string = format!("Tfm({identity_string})");
+            }
+            if self.port_get_remap_interval().is_some() {
+                identity_string = format!("Remap({identity_string})");
+            }
+            identity_string
+        };
+
         if self.inner.value_is_static() {
             self._port_effective_interval = self.inner.get_interval();
             self._port_effective_relativity = self.inner.get_relativity();
@@ -632,6 +654,28 @@ where
     type InnerT = InnerT;
     type RemapT = RemapT;
     type SanT = SanT;
+
+    fn port_is_transformable(&self) -> bool {
+        TfmT::is_transformable()
+    }
+
+    fn port_transformation_ref(&self) -> Option<&TfmSeqCfg> {
+        self.tfm_policy.transformation_ref()
+    }
+
+    fn port_transformation_mut(&mut self) -> Option<&mut TfmSeqCfg> {
+        self.tfm_policy.transformation_mut()
+    }
+
+    fn port_transformation_on(&mut self) {
+        self.tfm_policy.transformation_on();
+        self.sanitize_inplace(());
+    }
+
+    fn port_transformation_off(&mut self) {
+        self.tfm_policy.transformation_off();
+        self.sanitize_inplace(());
+    }
 
     fn port_get_numeric_value(&self, ctx: Option<&impl TfmExecCtx>) -> InnerT::ValueT
     where
@@ -691,13 +735,18 @@ where
         ));
     }
 
+    fn port_get_interval(&self) -> NumInterval<<Self::InnerT as WithNumericValue>::ValueT> {
+        self._port_effective_interval
+    }
+
+    fn port_get_relativity(&self) -> Relativity {
+        self._port_effective_relativity
+    }
+
     fn port_get_default_interval_from_inner(&self) -> NumInterval<InnerT::ValueT> {
         InnerT::default().get_interval()
     }
 
-    // fn _port_get_identity_str(&self) -> String {
-    //     self.inner.value_identity()
-    // }
     fn port_set_tfm_value_and_flush_to_devices(&self, input: TfmValueData<BaseNumT>, ctx: &impl TfmExecCtx)
     where
         BaseNumT: From<<Self::InnerT as WithNumericValue>::ValueT>,
@@ -744,6 +793,10 @@ where
         // self.sanitize_inplace(());
     }
 
+    fn port_user_defined_remapping_allowed(&self) -> bool {
+        self.remap_policy.remap_pol_user_defined_allowed()
+    }
+
     fn port_get_remap_interval(&self) -> Option<NumInterval<InnerT::ValueT>> {
         self.remap_policy.remap_pol_get_interval()
     }
@@ -761,38 +814,8 @@ where
         &mut self.inner
     }
 
-    fn port_get_interval(&self) -> NumInterval<<Self::InnerT as WithNumericValue>::ValueT> {
-        self._port_effective_interval
-    }
-
-    fn port_get_relativity(&self) -> Relativity {
-        self._port_effective_relativity
-    }
-
-    fn port_transformation_mut(&mut self) -> Option<&mut TfmSeqCfg> {
-        self.tfm_policy.transformation_mut()
-    }
-
-    fn port_transformation_on(&mut self) {
-        self.tfm_policy.transformation_on();
-        self.sanitize_inplace(());
-    }
-
-    fn port_transformation_off(&mut self) {
-        self.tfm_policy.transformation_off();
-        self.sanitize_inplace(());
-    }
-
-    fn port_transformation_ref(&self) -> Option<&TfmSeqCfg> {
-        self.tfm_policy.transformation_ref()
-    }
-
-    fn port_is_transformable(&self) -> bool {
-        TfmT::is_transformable()
-    }
-
-    fn port_user_defined_remapping_allowed(&self) -> bool {
-        self.remap_policy.remap_pol_user_defined_allowed()
+    fn port_get_identity_str(&self) -> &str {
+        &self._port_identity_string
     }
 }
 

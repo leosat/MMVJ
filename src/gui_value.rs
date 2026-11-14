@@ -4,11 +4,12 @@ use eframe::egui;
 use egui::scroll_area::ScrollSource;
 
 use crate::config::WithSelfSanitize;
-use crate::gui_common::{GuiCmd, bool_to_simple_change_gui_cmd, draw_collapsing_ui};
+use crate::gui_common::{GuiCmd, bool_to_simple_change_gui_cmd};
 use crate::gui_transform_step::GuiInCommon;
 use crate::mapping::MappingEngineCmd;
 use crate::relativity::Relativity;
 
+use crate::schemas_common::WithRuntimeId;
 use crate::schemas_value::ValueIface;
 use crate::schemas_value::{AutoOrManual, ValueXrcs, WithNumIntervalSettable};
 
@@ -152,7 +153,7 @@ impl<'s> DrawEgui<'s> for NumInterval<BaseNumT> {
                 }
             }
             GuiInInterval::Display => {
-                ui.label(format!("Range: {}", self));
+                ui.label(format!("{}", self));
             }
         };
         changed
@@ -210,13 +211,13 @@ impl<T: WithNumericValueSanitizerStatic> GuiSanInfo<T> for SanPolicyUseFromPortI
         ui.separator();
         ui.label(egui::RichText::new(egui_phosphor::bold::BROOM).size(14.0))
             .on_hover_text(PortInnerT::get_value_sanitizer_policy_doc_str());
-        ui.separator();
     }
 }
 
 impl<T: WithNumericValueSanitizerStatic> GuiSanInfo<T> for SanPolicyNone {
     #[allow(unused)]
     fn draw_san_info<PortInnerT: WithNumericValueSanitizerStatic>(ui: &mut egui::Ui) {
+        // ui.separator();
         // ui.label(egui::RichText::new(egui_phosphor::bold::FUNNEL_X).size(14.0))
         //     .on_hover_text(<Self as PortSanPolicy<T>>::san_policy_doc_str());
     }
@@ -228,7 +229,7 @@ fn draw_egui_for_port<'s, SanPolicyT, PortT>(
     ui: &mut egui::Ui,
 ) -> Option<GuiCmd>
 where
-    PortT: ValuePortIface + WithLastKnownIO,
+    PortT: ValuePortIface + WithLastKnownIO + WithRuntimeId,
     BaseNumT: From<<PortT as WithLastKnownIO>::LastKnownIOValueT>,
     <PortT as ValuePortIface>::InnerT: WithLastKnownIO<LastKnownIOValueT = BaseNumT>,
     <PortT as WithLastKnownIO>::LastKnownIOValueT: std::fmt::Display,
@@ -289,7 +290,7 @@ where
                                 *gui_out_mut = Some(GuiCmd::ConfigChangeSimple);
                             }
                         } else {
-                            if ui.small_button("add transformation").clicked() {
+                            if ui.small_button("transform").clicked() {
                                 port.port_transformation_on();
                                 *gui_out_mut = Some(GuiCmd::ConfigChangeSimple);
                             }
@@ -334,10 +335,7 @@ where
                                 ui.label(format!("Port-enforced remapping range: {remap_to}",));
                             }
                         } else if port.port_user_defined_remapping_allowed()
-                            && ui
-                                .button("enable remapping")
-                                .on_hover_text("Turn remapping On")
-                                .clicked()
+                            && ui.button("remap").on_hover_text("Turn remapping On").clicked()
                         {
                             port.port_set_remap_from_inner_default();
                             *gui_out_mut = Some(GuiCmd::ConfigChangeSimple);
@@ -361,30 +359,52 @@ where
                             ci.ui(ui);
                         },
                     );
-                    ui.label("...").on_hover_ui(|ui| {
-                        ui.set_min_width(200.0);
-                        ui.label(format!("Port last I/O: {}", port.get_last_known_io()));
-                        ui.label(format!(
-                            "Port inner last I/O: {}",
-                            port.port_inner_ref().get_last_known_io()
-                        ));
-                    });
+                    // ui.label("...").on_hover_ui(|ui| {
+                    // ui.set_min_width(200.0);
+                    ui.label(
+                        egui::RichText::new(
+                            if port.port_get_remap_interval().is_some() || port.port_transformation_ref().is_some() {
+                                format!(
+                                    "Last I/O: Port({:+09.4}), Inner({:+09.4})",
+                                    port.get_last_known_io(),
+                                    port.port_inner_ref().get_last_known_io()
+                                )
+                            } else {
+                                format!("Last I/O: Port({:+09.4})", port.get_last_known_io(),)
+                            },
+                        )
+                        .monospace()
+                        .size(10.0),
+                    );
+                    // });
                 };
+
+                // --------------------------
+                SanPolicyT::draw_san_info::<<PortT as ValuePortIface>::InnerT>(ui);
 
                 // --------------------------
                 if port.port_transformation_ref().is_none() && port.port_get_remap_interval().is_none() {
                     value_port_editor(ui, port);
                     clipping_indicator(ui, port);
                 } else {
+                    ui.separator();
+
                     ui.label(
-                        egui::RichText::new(format!(
-                            "{:+012.5} {} {}",
-                            port.port_get_numeric_value(None::<&()>),
-                            port.port_get_interval(),
-                            port.port_get_relativity()
-                        ))
-                        .monospace()
-                        .size(11.0),
+                        params
+                            .gui_common_ctx
+                            .style
+                            .value_identity_decorate(egui::RichText::new(port.port_get_identity_str())),
+                    );
+
+                    ui.label("Value:");
+
+                    ui.add(
+                        egui::Slider::new(
+                            &mut port.port_get_numeric_value(None::<&()>),
+                            port.port_get_interval().make_range_inclusive(),
+                        )
+                        .custom_formatter(|value, _| format!("{value:+09.4}",))
+                        .step_by(0.0001),
                     )
                     .on_hover_ui_at_pointer(|ui| {
                         egui::ScrollArea::vertical()
@@ -395,21 +415,48 @@ where
                             });
                     });
 
-                    SanPolicyT::draw_san_info::<<PortT as ValuePortIface>::InnerT>(ui);
+                    ui.separator();
+                    port.port_get_relativity().egui(GuiInKinds::Display, ui);
+                    ui.separator();
+                    port.port_get_interval().egui(GuiInInterval::Display, ui);
+                    //                    ui.separator();
 
-                    ui.vertical(|ui| {
-                        ui.set_max_width(1000.0);
-                        draw_collapsing_ui(ui, Some(port as *mut PortT), None, |ui| {
-                            ui.label(egui::RichText::new(egui_phosphor::bold::PLUGS).size(14.0))
-                                .on_hover_text("Value port: allows sanitization and optional range remapping");
-                            // ui.label(format!("PORT({})", port.port_get_identity_str()));
-                            ui.separator();
-                            clipping_indicator(ui, port);
-                        })
-                        .body(|ui| {
-                            value_port_editor(ui, port);
-                        })
-                    });
+                    let window_id = ui.id().with(port.get_id());
+                    let mut window_opened = ui.data_mut(|d| d.get_temp_mut_or_default::<bool>(window_id).clone());
+                    if window_opened {
+                        egui::Window::new("...")
+                            .open(&mut window_opened)
+                            .id(window_id)
+                            .show(ui.ctx(), |ui| {
+                                value_port_editor(ui, port);
+                            });
+                    } else {
+                        if ui
+                            .button(egui::RichText::new(egui_phosphor::bold::GEAR_SIX).size(14.0))
+                            .on_hover_text("Edit value port remapping and transformation parameters")
+                            .clicked()
+                        {
+                            window_opened = true;
+                        };
+                    }
+                    ui.data_mut(|d| d.insert_temp(window_id, window_opened));
+
+                    ui.separator();
+                    clipping_indicator(ui, port);
+
+                    // ui.vertical(|ui| {
+                    //     ui.set_max_width(1000.0);
+                    //     draw_collapsing_ui(ui, Some(port as *mut PortT), None, |ui| {
+                    //         ui.label(egui::RichText::new(egui_phosphor::bold::PLUGS).size(14.0))
+                    //             .on_hover_text("Value port: allows sanitization and optional range remapping");
+                    //         // ui.label(format!("PORT({})", port.port_get_identity_str()));
+                    //         ui.separator();
+                    //         clipping_indicator(ui, port);
+                    //     })
+                    //     .body(|ui| {
+                    //         value_port_editor(ui, port);
+                    //     })
+                    // });
                 }
             }
         }
@@ -455,7 +502,7 @@ where
             let value_slider = ui.add(
                 egui::Slider::new(&mut value, this.get_interval().make_range_inclusive())
                     .logarithmic(params.slider_log_scale)
-                    .custom_formatter(|value, _| format!("{value:+011.4}",))
+                    .custom_formatter(|value, _| format!("{value:+09.4}",))
                     .step_by(0.0001),
             );
 
@@ -469,6 +516,8 @@ where
             }
 
             // --
+            ui.separator();
+            this.get_relativity().egui(GuiInKinds::Display, ui);
             ui.separator();
 
             if params.allow_interval_edit && this.value_is_static() {
