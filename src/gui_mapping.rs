@@ -86,7 +86,7 @@ impl<'s> DrawEgui<'s> for Mapping {
                     ui.collapsing("Autorun", |ui| {
                         ui.horizontal(|ui| {
                             if self.autorun
-                                .egui("Always runs on base tick including when no user input", ui).is_some() {
+                                .egui("Run on base tick (including when no user input)", ui).is_some() {
                                 *gui_out_mut = Some(GuiCmd::MappingChange(MappingEngineCmd::UpdateMappingRouterBaseTickOnly));
                             }
                             ui.separator();

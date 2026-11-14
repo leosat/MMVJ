@@ -87,6 +87,88 @@ pub(crate) trait MappedMidiManager:
 }
 
 // ---------------------------------------------
+pub(crate) struct MappingEngineDeviceManagers<
+    'd,
+    HidManagerT: MappedHidManager,
+    #[cfg(feature = "midi")] MidiManagerT: MappedMidiManager,
+    #[cfg(not(feature = "midi"))] MidiManagerT,
+> {
+    hid_mgr: &'d HidManagerT,
+    #[cfg(feature = "midi")]
+    midi_mgr: &'d MidiManagerT,
+    #[cfg(not(feature = "midi"))]
+    midi_mgr_placeholder: PhantomData<MidiManagerT>,
+}
+
+impl<
+    'd,
+    HidManagerT: MappedHidManager,
+    #[cfg(feature = "midi")] MidiManagerT: MappedMidiManager,
+    #[cfg(not(feature = "midi"))] MidiManagerT,
+> MappingEngineDeviceManagers<'d, HidManagerT, MidiManagerT>
+{
+    fn dcm_write_to_devices(&self, d: &DeviceControlMatcherRef, value: BaseNumT, debug: DebugLevel) {
+        match d.control_matcher {
+            #[cfg(feature = "midi")]
+            ControlMatchers::Midi(_) => {
+                log::warn!(
+                    "MIDI is not yet supported as a destination device. Only supporting variables and HID destinations."
+                )
+            }
+            // TODO !!!: stable mode: for relative deltas out of bounds of estimated range emit multiple events.
+            ControlMatchers::Hid(_) => self.hid_mgr.set_control_matcher_and_broadcast(
+                &d.device_matcher_key,
+                &d.control_matcher_key,
+                value,
+                !debug.is_on(),
+            ),
+        }
+    }
+}
+
+#[derive(Default, Debug)]
+struct MappingEngineSchedQueues {
+    immediate: Vec<usize>,
+    base_tick: Vec<usize>,
+    normal: Vec<usize>,
+}
+
+impl MappingEngineSchedQueues {
+    fn unschedule_spare_base_tick_mappings(&mut self) {
+        self.base_tick.iter().copied().for_each(|base_tick_mapping_idx| {
+            self.normal = self
+                .normal
+                .extract_if(.., |idx| *idx == base_tick_mapping_idx)
+                .collect::<_>();
+            self.immediate = self
+                .immediate
+                .extract_if(.., |idx| *idx == base_tick_mapping_idx)
+                .collect::<_>();
+        });
+    }
+
+    fn mappings_by_ctx_mut(&mut self, sched_ctx: MappingSchedContext) -> &mut Vec<usize> {
+        match sched_ctx {
+            MappingSchedContext::BaseTick => &mut self.base_tick,
+            MappingSchedContext::Normal => &mut self.normal,
+            MappingSchedContext::Immediate => &mut self.immediate,
+        }
+    }
+
+    fn mappings_by_ctx_ref(&self, sched_ctx: MappingSchedContext) -> &Vec<usize> {
+        match sched_ctx {
+            MappingSchedContext::BaseTick => &self.base_tick,
+            MappingSchedContext::Normal => &self.normal,
+            MappingSchedContext::Immediate => &self.immediate,
+        }
+    }
+
+    fn clear(&mut self) {
+        self.immediate.clear();
+        self.normal.clear();
+        self.base_tick.clear();
+    }
+}
 
 pub(crate) struct MappingEngine<
     'd,
@@ -100,22 +182,16 @@ pub(crate) struct MappingEngine<
     debug_base_tick: bool,
     // ---
     cfg: Config,
-    hid_mgr: &'d HidManagerT,
-    #[cfg(feature = "midi")]
-    midi_mgr: &'d MidiManagerT,
-    #[cfg(not(feature = "midi"))]
-    midi_mgr_placeholder: PhantomData<MidiManagerT>,
+    device_managers: MappingEngineDeviceManagers<'d, HidManagerT, MidiManagerT>,
     // ---
     //  Mapping router algorithm index and runtime buffer.
     // ---
     #[allow(clippy::type_complexity)]
     router_index_sysdev_and_ctl_type_to_cms_and_mappings:
         HashMap<(ObjId, MappedCtls), (Vec<ControlMatchers>, Vec<Vec<usize>>)>,
-    scheduled_mappings_immediate: Vec<usize>,
-    scheduled_mappings_normal: Vec<usize>,
     rel_ctls: Vec<Arc<CachePadded<BaseAtomicT>>>,
+    sched_queues: MappingEngineSchedQueues,
     // ---
-    base_tick_mappings: Vec<usize>,
     #[cfg(feature = "lua")]
     lua: &'d mlua::Lua,
     mapped_events_dt_stats: MappingEngineStats,
@@ -166,22 +242,22 @@ impl<
 }
 
 #[derive(Clone, Copy)]
-enum MapppingSchedContext {
+enum MappingSchedContext {
     Normal,
-    Base,
+    BaseTick,
     Immediate,
 }
 
-impl MapppingSchedContext {
+impl MappingSchedContext {
     fn is_base(&self) -> bool {
-        matches!(self, MapppingSchedContext::Base)
+        matches!(self, MappingSchedContext::BaseTick)
     }
     #[allow(unused)]
     fn is_immediate(&self) -> bool {
-        matches!(self, MapppingSchedContext::Immediate)
+        matches!(self, MappingSchedContext::Immediate)
     }
     fn is_normal(&self) -> bool {
-        matches!(self, MapppingSchedContext::Normal)
+        matches!(self, MappingSchedContext::Normal)
     }
 }
 
@@ -213,29 +289,29 @@ impl<
             debug_base_tick,
             // ---
             cfg,
-            hid_mgr,
-            #[cfg(feature = "midi")]
-            midi_mgr,
-            #[cfg(not(feature = "midi"))]
-            midi_mgr_placeholder: PhantomData,
             // ---
             router_index_sysdev_and_ctl_type_to_cms_and_mappings: Default::default(),
-            scheduled_mappings_immediate: Default::default(),
-            scheduled_mappings_normal: Default::default(),
             rel_ctls: Default::default(),
+            sched_queues: Default::default(),
             // ---
-            base_tick_mappings: Default::default(),
             #[cfg(feature = "lua")]
             lua,
             mapped_events_dt_stats: MappingEngineStats::default()
                 .with_mean_alpha(0.7)
                 .with_threshold_from(1e-6),
+            device_managers: MappingEngineDeviceManagers {
+                hid_mgr,
+                #[cfg(feature = "midi")]
+                midi_mgr,
+                #[cfg(not(feature = "midi"))]
+                midi_mgr_placeholder: PhantomData,
+            },
         })
     }
 
     fn set_cfg(&mut self, cfg: Config) {
         self.cfg = cfg;
-        self.reset_rel_ctls_cache();
+        self.rel_ctls_cache_reset();
     }
 
     fn set_mappings(&mut self, mappings: &[Mapping]) {
@@ -256,10 +332,11 @@ impl<
         info!("Initializing mapping engine router.");
 
         // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-        self.base_tick_mappings_reset();
+        self.sched_queues.clear();
         self.router_index_sysdev_and_ctl_type_to_cms_and_mappings.clear();
-        self.scheduled_mappings_normal.clear();
-        self.reset_rel_ctls_cache();
+        // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        self.base_tick_mappings_reset();
+        self.rel_ctls_cache_reset();
 
         // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         let mut info_sysdev_to_enabled_mappings: HashMap<ObjId, Vec<usize>> = Default::default();
@@ -338,23 +415,23 @@ impl<
             }};
         }
 
-        for available_hid_device_info in &self.hid_mgr.enumerate_available_devices(Some(
+        for available_hid_device_info in &self.device_managers.hid_mgr.enumerate_available_devices(Some(
             (DeviceKind::Mouse | DeviceKind::Keyboard | DeviceKind::Gamepad | DeviceKind::Joystick).into(),
         )) {
             setup_mapping_metadata_for!(
                 available_hid_device_info,
                 self.cfg.devices.hid,
-                self.hid_mgr,
+                self.device_managers.hid_mgr,
                 ControlMatchers::Hid
             );
         }
 
         #[cfg(feature = "midi")]
-        for available_midi_device_info in &self.midi_mgr.enumerate_available_devices(None) {
+        for available_midi_device_info in &self.device_managers.midi_mgr.enumerate_available_devices(None) {
             setup_mapping_metadata_for!(
                 available_midi_device_info,
                 self.cfg.devices.midi,
-                self.midi_mgr,
+                self.device_managers.midi_mgr,
                 ControlMatchers::Midi
             );
         }
@@ -382,30 +459,43 @@ impl<
             );
         }
 
-        // Run all enabled mappings once on init.
-        self.run_mappings(
-            &self
-                .cfg
-                .mappings
-                .iter()
-                .enumerate()
-                .filter(|(_, m)| *m.enabled)
-                .map(|(i, _)| i)
-                .collect::<Vec<_>>(),
-            MapppingSchedContext::Normal,
-        );
+        // Initialize HID device ABS controls to init positions.
+        self.cfg
+            .devices
+            .hid
+            .iter()
+            .filter(|hid| hid.1.virtual_device_bus_info_ref().is_some())
+            .for_each(|hid| {
+                hid.1
+                    .controls
+                    .iter()
+                    .filter(|cm| {
+                        cm.1.r#type.is_absolute()
+                            && !(cm.1.r#type.is_special_force_feedback_x() || cm.1.r#type.is_special_force_feedback_y())
+                    })
+                    .for_each(|cm| {
+                        cm.1.set_numeric_value(cm.1.initial_value);
+                        cm.1.set_last_known_io(cm.1.initial_value);
+                        self.device_managers.hid_mgr.set_control_matcher_and_broadcast(
+                            hid.0,
+                            cm.0,
+                            cm.1.initial_value,
+                            true,
+                        )
+                    })
+            });
 
         Ok(())
     }
 
     fn base_tick_mappings_reset(&mut self) {
-        self.base_tick_mappings.clear();
+        self.sched_queues.base_tick.clear();
         self.cfg
             .mappings
             .iter()
             .enumerate()
             .filter(|(_, mapping)| *mapping.enabled && *mapping.autorun)
-            .for_each(|(idx, _)| self.base_tick_mappings.push(idx));
+            .for_each(|(idx, _)| self.sched_queues.base_tick.push(idx));
     }
 
     async fn run(&mut self) {
@@ -444,10 +534,10 @@ impl<
             };
 
             select! {
-            _ = mapping_ticker.tick(), if !is_reactive => self.process_and_run_mappings(MapppingSchedContext::Normal),
+            _ = mapping_ticker.tick(), if !is_reactive => self.process_and_run_mappings(MappingSchedContext::Normal),
             _ = async {
                 select! {
-                    event = {#[cfg(feature = "midi")] {self.midi_mgr.consume_any_opened_device_event()}
+                    event = {#[cfg(feature = "midi")] {self.device_managers.midi_mgr.consume_any_opened_device_event()}
                              #[cfg(not(feature = "midi"))] std::future::pending::<()>()} =>
                         {#[cfg(feature = "midi")] {
                         match event {
@@ -457,7 +547,7 @@ impl<
                                 },
                             None => { log::error!("MIDI manager connection is gone");
                             self.running = false; }}}},
-                    event = self.hid_mgr.consume_any_opened_device_event() =>
+                    event = self.device_managers.hid_mgr.consume_any_opened_device_event() =>
                         match event {
                             Some(event) =>
                                 if self.on_hid_event(event) {
@@ -471,12 +561,12 @@ impl<
                     .emergency_throttling(last_throttle_at_events_count, events_count, current_throttle_duration)
                     .await;
 
-                self.process_and_run_mappings(MapppingSchedContext::Immediate);
+                self.process_and_run_mappings(MappingSchedContext::Immediate);
                 if is_reactive {
-                    self.process_and_run_mappings(MapppingSchedContext::Normal);
+                    self.process_and_run_mappings(MappingSchedContext::Normal);
                 } else if is_capped {
                     if self.mapped_events_dt_stats.get_mean() > target_mapping_tick_dt.as_secs_f32() as BaseNumT  {
-                        self.process_and_run_mappings(MapppingSchedContext::Normal);
+                        self.process_and_run_mappings(MappingSchedContext::Normal);
                         if DBG_CAPPED_MODE { dbg!("Capped mode: mappings run"); }
                     } else if DBG_CAPPED_MODE {
                         dbg!("Capped mode: mappings throttled");
@@ -486,7 +576,7 @@ impl<
 
                 events_count = events_count.wrapping_add(1);
             },
-            _ = base_ticker.tick() => self.process_and_run_mappings(MapppingSchedContext::Base)
+            _ = base_ticker.tick() => self.process_and_run_mappings(MappingSchedContext::BaseTick)
             }
 
             if DBG_MAIN_LOOP_TIMING {
@@ -574,7 +664,7 @@ impl<
     #[cfg(not(feature = "midi"))] MidiManagerT,
 > MappingEngine<'d, HidManagerT, MidiManagerT>
 {
-    fn reset_rel_ctls_cache(&mut self) {
+    fn rel_ctls_cache_reset(&mut self) {
         let mut rel_ctls: Vec<_> = Default::default();
         self.cfg.devices.hid.iter().for_each(|d| {
             rel_ctls.extend(
@@ -589,7 +679,7 @@ impl<
     }
 
     // TODO: base tick shadowing.
-    fn set_base_tick_enabled_on_device_control_for_mapping(&self, mapping: &Mapping) {
+    fn set_base_tick_enabled_on_device_control_for_mapping(mapping: &Mapping, debug: DebugLevel) {
         if let Some(flag) = mapping.dst.port_inner_ref().get_base_tick_enabled_flag()
             && let Ok(prev) = flag.compare_exchange(
                 !*mapping.autorun,
@@ -598,7 +688,7 @@ impl<
                 Relaxed,
                 Relaxed,
             )
-            && self.debug.is_on()
+            && debug.is_on()
         {
             debug!(
                 "Base-tick update for {}: {} -> {}",
@@ -629,9 +719,9 @@ impl<
                     if cm.triggers_mapping(()) && !mappings[cm_idx].is_empty() {
                         mapped = true;
                         if event.data.message_type.is_a_button() {
-                            self.scheduled_mappings_immediate.extend(&mappings[cm_idx]);
+                            self.sched_queues.immediate.extend(&mappings[cm_idx]);
                         } else {
-                            self.scheduled_mappings_normal.extend(&mappings[cm_idx]);
+                            self.sched_queues.normal.extend(&mappings[cm_idx]);
                         }
                     }
                 });
@@ -657,9 +747,9 @@ impl<
                 if cm.triggers_mapping(()) && !mappings[cm_idx].is_empty() {
                     mapped = true;
                     if event.data.control_type.is_button() || event.data.control_type.is_key() {
-                        self.scheduled_mappings_immediate.extend(&mappings[cm_idx]);
+                        self.sched_queues.immediate.extend(&mappings[cm_idx]);
                     } else {
-                        self.scheduled_mappings_normal.extend(&mappings[cm_idx]);
+                        self.sched_queues.normal.extend(&mappings[cm_idx]);
                     }
                 }
             });
@@ -677,18 +767,21 @@ impl<
         }
     }
 
-    fn run_mappings(&self, mappings: &[usize], sched_ctx: MapppingSchedContext) {
-        let mut exe_ctx = MappingTfmExecCtx {
-            mapping_engine: self,
-            #[cfg(feature = "lua")]
-            lua: Some(self.lua),
-            sched_ctx,
-            current_mapping_src: None,
-            current_mapping_dst: None,
-        };
+    fn run_mappings<'m>(
+        mut exe_ctx: MappingTfmExecCtx<'m, 'd, HidManagerT, MidiManagerT>,
+        cfg: &'m Config,
+        sched_queues: &'m mut MappingEngineSchedQueues,
+        sched_ctx: MappingSchedContext,
+        debug: DebugLevel,
+    ) where
+        Self: 'm,
+    {
+        if sched_ctx.is_base() {
+            sched_queues.unschedule_spare_base_tick_mappings();
+        }
 
-        for mapping_idx in mappings.iter() {
-            let mapping = &self.cfg.mappings[*mapping_idx];
+        for mapping_idx in sched_queues.mappings_by_ctx_ref(sched_ctx) {
+            let mapping = &cfg.mappings[*mapping_idx];
 
             if sched_ctx.is_base() {
                 // TODO: base tick shadowing.
@@ -717,9 +810,9 @@ impl<
                 &exe_ctx,
             );
 
-            self.set_base_tick_enabled_on_device_control_for_mapping(mapping);
+            Self::set_base_tick_enabled_on_device_control_for_mapping(mapping, debug);
 
-            if self.debug.is_on() {
+            if debug.is_on() {
                 debug!("Mapped {} ({mapping}): {output} -> {output}", mapping.name);
             }
         }
@@ -731,62 +824,41 @@ impl<
         });
     }
 
-    fn mappings_by_ctx_mut(&mut self, sched_ctx: MapppingSchedContext) -> &mut Vec<usize> {
-        match sched_ctx {
-            MapppingSchedContext::Base => &mut self.base_tick_mappings,
-            MapppingSchedContext::Normal => &mut self.scheduled_mappings_normal,
-            MapppingSchedContext::Immediate => &mut self.scheduled_mappings_immediate,
-        }
-    }
-
-    fn mappings_by_ctx_ref(&self, sched_ctx: MapppingSchedContext) -> &Vec<usize> {
-        match sched_ctx {
-            MapppingSchedContext::Base => &self.base_tick_mappings,
-            MapppingSchedContext::Normal => &self.scheduled_mappings_normal,
-            MapppingSchedContext::Immediate => &self.scheduled_mappings_immediate,
-        }
-    }
-
-    fn process_and_run_mappings(&mut self, sched_ctx: MapppingSchedContext) {
-        let mappings = self.mappings_by_ctx_mut(sched_ctx);
+    fn process_and_run_mappings(&mut self, sched_ctx: MappingSchedContext) {
+        let mappings = self.sched_queues.mappings_by_ctx_mut(sched_ctx);
         if mappings.is_empty() {
             return;
         }
 
         if sched_ctx.is_base() {
-            if branches::unlikely(self.scheduled_mappings_normal.is_empty()) {
+            if branches::unlikely(self.sched_queues.normal.is_empty()) {
                 self.clear_rel_ctls()
             }
         } else {
             Self::dedup_and_shuffle(mappings, true, mappings.len() > 1);
         }
 
-        self.run_mappings(self.mappings_by_ctx_ref(sched_ctx), sched_ctx);
+        let exe_ctx = MappingTfmExecCtx {
+            #[cfg(feature = "lua")]
+            lua: Some(self.lua),
+            sched_ctx,
+            current_mapping_src: None,
+            current_mapping_dst: None,
+            mapping_mode: *self.get_mode(),
+            device_managers: &self.device_managers,
+            mapped_events_dt_stats: &self.mapped_events_dt_stats,
+            debug: self.debug,
+            debug_base_tick: self.debug_base_tick.into(),
+        };
+
+        Self::run_mappings(exe_ctx, &self.cfg, &mut self.sched_queues, sched_ctx, self.debug);
 
         if !sched_ctx.is_base() {
-            self.mappings_by_ctx_mut(sched_ctx).clear();
+            self.sched_queues.mappings_by_ctx_mut(sched_ctx).clear();
         }
 
         if self.get_mode().is_reactive() || sched_ctx.is_normal() {
             self.clear_rel_ctls();
-        }
-    }
-
-    fn dcm_write_to_devices(&self, d: &DeviceControlMatcherRef, value: BaseNumT, debug: DebugLevel) {
-        match d.control_matcher {
-            #[cfg(feature = "midi")]
-            ControlMatchers::Midi(_) => {
-                log::warn!(
-                    "MIDI is not yet supported as a destination device. Only supporting variables and HID destinations."
-                )
-            }
-            // TODO !!!: stable mode: for relative deltas out of bounds of estimated range emit multiple events.
-            ControlMatchers::Hid(_) => self.hid_mgr.set_control_matcher_and_broadcast(
-                &d.device_matcher_key,
-                &d.control_matcher_key,
-                value,
-                !debug.is_on(),
-            ),
         }
     }
 
@@ -799,12 +871,12 @@ impl<
         if events_count > 0
             && let Some(throttle_reason) = || -> Option<&'static str> {
                 #[cfg(feature = "midi")]
-                if branches::unlikely(self.midi_mgr.events_queue_is_full()) {
-                    self.midi_mgr.drain_events_queue();
+                if branches::unlikely(self.device_managers.midi_mgr.events_queue_is_full()) {
+                    self.device_managers.midi_mgr.drain_events_queue();
                     return "Throttling by incoming MIDI events backlog (events queue is full)".into();
                 }
-                if branches::unlikely(self.hid_mgr.events_queue_is_full()) {
-                    self.hid_mgr.drain_events_queue();
+                if branches::unlikely(self.device_managers.hid_mgr.events_queue_is_full()) {
+                    self.device_managers.hid_mgr.drain_events_queue();
                     return "Throttling by incoming HID events backlog (events queue is full)".into();
                 }
                 return None;
@@ -849,13 +921,18 @@ pub(crate) struct MappingTfmExecCtx<
     #[cfg(feature = "midi")] MidiManagerT: MappedMidiManager,
     #[cfg(not(feature = "midi"))] MidiManagerT,
 > {
-    mapping_engine: &'m MappingEngine<'d, HidManagerT, MidiManagerT>,
+    //    mapping_engine: &'m MappingEngine<'d, HidManagerT, MidiManagerT>,
+    sched_ctx: MappingSchedContext,
+    mapped_events_dt_stats: &'m MappingEngineStats,
+    mapping_mode: MapperMode,
+    device_managers: &'m MappingEngineDeviceManagers<'d, HidManagerT, MidiManagerT>,
     #[allow(unused)]
     current_mapping_src: Option<&'m ValueSrcs>,
     current_mapping_dst: Option<&'m ValueDsts>,
-    sched_ctx: MapppingSchedContext,
     #[cfg(feature = "lua")]
     lua: Option<&'m mlua::Lua>,
+    debug: DebugLevel,
+    debug_base_tick: DebugLevel,
 }
 
 impl<
@@ -867,15 +944,15 @@ impl<
 > TfmExecCtx for MappingTfmExecCtx<'m, 'd, HidManagerT, MidiManagerT>
 {
     fn get_events_dt_stats(&self) -> Option<&impl StatsIface> {
-        Some(&self.mapping_engine.mapped_events_dt_stats)
+        Some(self.mapped_events_dt_stats)
     }
 
     fn is_immediate_mapping(&self) -> bool {
-        matches!(self.sched_ctx, MapppingSchedContext::Immediate)
+        matches!(self.sched_ctx, MappingSchedContext::Immediate)
     }
 
     fn is_reactive_mode(&self) -> bool {
-        self.mapping_engine.get_mode().is_reactive()
+        self.mapping_mode.is_reactive()
     }
 
     fn get_main_dst(&self) -> Option<&ValueDsts> {
@@ -883,31 +960,31 @@ impl<
     }
 
     fn get_ff_x(&self, dk: &str) -> BaseNumT {
-        self.mapping_engine.hid_mgr.ff_get_x_sum_symm_norm(dk)
+        self.device_managers.hid_mgr.ff_get_x_sum_symm_norm(dk)
     }
 
     fn get_ff_y(&self, dk: &str) -> BaseNumT {
-        self.mapping_engine.hid_mgr.ff_get_y_sum_symm_norm(dk)
+        self.device_managers.hid_mgr.ff_get_y_sum_symm_norm(dk)
     }
 
     fn device_control_matcher_ref_write(&self, dcm: &DeviceControlMatcherRef, value: BaseNumT, ctx: &impl TfmExecCtx) {
-        self.mapping_engine.dcm_write_to_devices(
+        self.device_managers.dcm_write_to_devices(
             dcm,
             value,
             if ctx.is_base_tick() {
-                self.mapping_engine.debug_base_tick.into()
+                self.debug_base_tick
             } else {
-                self.mapping_engine.debug
+                self.debug
             },
         );
     }
 
     fn is_base_tick(&self) -> bool {
-        matches!(self.sched_ctx, MapppingSchedContext::Base)
+        matches!(self.sched_ctx, MappingSchedContext::BaseTick)
     }
 
     fn get_base_tick_rate(&self) -> u32 {
-        self.mapping_engine.get_mode().get_base_tick_rate()
+        self.mapping_mode.get_base_tick_rate()
     }
 
     #[cfg(feature = "lua")]
