@@ -343,7 +343,7 @@ where
                 let clipping_indicator = |ui: &mut egui::Ui, port: &mut PortT| {
                     crate::gui_common::with_clipping_indicator_state(
                         ui,
-                        ui.id().with(port as *mut PortT),
+                        ui.scope_id().with(port as *mut PortT),
                         // port.port_inner_ref().get_interval().cast::<BaseNumT>().unwrap(),
                         port.port_get_interval().cast::<BaseNumT>().unwrap(),
                         |ui, ci| {
@@ -417,7 +417,7 @@ where
                     port.port_get_interval().egui(GuiInInterval::Display, ui);
                     //                    ui.separator();
 
-                    let window_id = ui.id().with(port.get_id());
+                    let window_id = ui.scope_id().with(port.get_id());
                     let mut window_opened = ui.data_mut(|d| d.get_temp_mut_or_default::<bool>(window_id).clone());
                     if window_opened {
                         egui::Window::new("...")

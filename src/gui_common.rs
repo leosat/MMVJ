@@ -350,9 +350,9 @@ pub(crate) fn draw_collapsing_ui<'a, T, SaltT: std::hash::Hash + std::fmt::Debug
     header_fn: impl FnOnce(&mut Ui) -> T,
 ) -> HeaderResponse<'a, ()> {
     let id = if let Some(salt) = id_salt {
-        ui.id().with(salt)
+        ui.scope_id().with(salt)
     } else {
-        ui.id().with(heading)
+        ui.scope_id().with(heading)
     };
     let mut clicked = false;
     ui.visuals_mut().resize_corner_size = 20.0;
@@ -387,8 +387,7 @@ pub(crate) fn with_clipping_indicator_state(
 fn get_or_create_clipping_indicators_cache<'a>(
     cache: &'a mut IdTypeMap,
 ) -> &'a mut HashMap<egui::Id, ClippingIndicator> {
-    let q = cache.get_temp_mut_or_insert_with(egui::Id::new("CLIPPING INDICATORS CACHE"), || Default::default());
-    q
+    cache.get_temp_mut_or_insert_with(egui::Id::unique("CLIPPING INDICATORS CACHE"), || Default::default())
 }
 
 pub(crate) fn clear_clipping_indicators_cache(ui: &mut egui::Ui) {
@@ -398,7 +397,7 @@ pub(crate) fn clear_clipping_indicators_cache(ui: &mut egui::Ui) {
 }
 
 fn get_or_create_dynamic_targets_cache(cache: &mut IdTypeMap) -> &mut HashMap<egui::Id, Vec<DynValueRefs>> {
-    cache.get_temp_mut_or_insert_with(egui::Id::new("DYNAMIC TARGETS CACHE"), || Default::default())
+    cache.get_temp_mut_or_insert_with(egui::Id::unique("DYNAMIC TARGETS CACHE"), || Default::default())
 }
 
 pub(crate) fn clear_dynamic_targets_cache(ui: &mut egui::Ui) {
@@ -410,7 +409,7 @@ pub(crate) fn clear_dynamic_targets_cache(ui: &mut egui::Ui) {
 pub(crate) fn collect_and_cache_dyn_srcs(ui: &mut egui::Ui, obj: &impl Traversable) -> Vec<DynValueRefs> {
     ui.data_mut(|d| {
         get_or_create_dynamic_targets_cache(d)
-            .entry(egui::Id::new(obj as *const _).with("dynamic srcs"))
+            .entry(egui::Id::unique(obj as *const _).with("dynamic srcs"))
             .or_insert(collect_dynamic_value_matchers(obj, |ctx| {
                 ctx.contains(DynValFilter::Src)
             }))
@@ -421,7 +420,7 @@ pub(crate) fn collect_and_cache_dyn_srcs(ui: &mut egui::Ui, obj: &impl Traversab
 pub(crate) fn collect_and_cache_dyn_dsts(ui: &mut egui::Ui, obj: &impl Traversable) -> Vec<DynValueRefs> {
     ui.data_mut(|d| {
         get_or_create_dynamic_targets_cache(d)
-            .entry(egui::Id::new(obj as *const _).with("dynamic dsts"))
+            .entry(egui::Id::unique(obj as *const _).with("dynamic dsts"))
             .or_insert(collect_dynamic_value_matchers(obj, |ctx| {
                 ctx.contains(DynValFilter::Dst)
             }))

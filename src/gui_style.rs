@@ -17,17 +17,46 @@ pub(crate) const GUI_STYLE_LIGHT: GuiStyle = GuiStyle {
         cc.egui_ctx.set_theme(egui::Theme::from_dark_mode(false));
         cc.egui_ctx.set_pixels_per_point(1.2);
 
-        let mut fonts = egui::FontDefinitions::default();
-
-        egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
-
-        if let Some(font_list) = fonts.families.get_mut(&egui::FontFamily::Monospace) {
-            font_list.push("phosphor".to_owned());
-        }
-
-        cc.egui_ctx.set_fonts(fonts);
+        cc.egui_ctx.set_fonts(font_definitions_with_phosphor_fonts());
     },
 };
+
+fn font_definitions_with_phosphor_fonts() -> egui::FontDefinitions {
+    let mut fonts = egui::FontDefinitions::default();
+    let name: &str = "phosphor";
+    {
+        let fonts = &mut fonts;
+        let variant = egui_phosphor::Variant::Regular;
+        {
+            let bytes = variant.font_bytes();
+            {
+                fonts
+                    .font_data
+                    .insert(name.into(), egui::FontData::from_static(bytes).into());
+
+                let mut keys = fonts
+                    .families
+                    .get(&egui::FontFamily::Proportional)
+                    .cloned()
+                    .unwrap_or_default();
+                keys.insert(keys.len().min(1), name.into());
+                fonts.families.insert(egui::FontFamily::Name(name.into()), keys);
+            };
+            if let Some(font_keys) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
+                // Second, so it does not shadow the text font -- but `Proportional` can
+                // be empty when egui is built without `default_fonts`.
+                let at = font_keys.len().min(1);
+                font_keys.insert(at, name.into());
+            }
+        };
+
+        if let Some(font_list) = fonts.families.get_mut(&egui::FontFamily::Monospace) {
+            font_list.push(name.to_owned());
+        }
+    }
+
+    fonts
+}
 
 // ----------------------------------------------------
 pub(crate) struct GuiStyle {

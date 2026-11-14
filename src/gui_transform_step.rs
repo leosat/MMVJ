@@ -132,7 +132,7 @@ fn draw_graph_docked_or_windowed(
         } else {
             let c = egui::collapsing_header::CollapsingState::load_with_default_open(
                 ui.ctx(),
-                ui.id().with("collapsing"),
+                ui.scope_id().with("collapsing"),
                 false,
             );
 
@@ -466,12 +466,12 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
 
         let gui_out = ui
             .scope_builder(
-                egui::UiBuilder::new().id(egui::Id::new(container_id).with(state_id)),
+                egui::UiBuilder::new().scope_id(egui::Id::unique(container_id).with(state_id)),
                 |ui| {
                     let collapsing = egui::collapsing_header::CollapsingState::load_with_default_open(
                         ui.ctx(),
-                        ui.id().with("collapsing"),
-                        // egui::Id::new(container_id).with(state_id),
+                        ui.scope_id().with("collapsing"),
+                        // egui::Id::unique(container_id).with(state_id),
                         false,
                     );
                     let header_response = collapsing
@@ -479,14 +479,14 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                             ui.horizontal(|ui| {
                                 if crate::config::MORE_DEBUG {
                                     ui.label(format!(
-                                        "ui.id() = {:?} + container_id: {} + tfm step state_id: {}",
-                                        ui.id(),
+                                        "ui.scope_id() = {:?} + container_id: {} + tfm step state_id: {}",
+                                        ui.scope_id(),
                                         container_id,
                                         state_id
                                     ));
                                 }
                                 let _dnd_src = ui.dnd_drag_source(
-                                    ui.id().with("DND Source"),
+                                    ui.scope_id().with("DND Source"),
                                     GuiDndJob::MoveTfmStep(GuiDndJobMoveTfmStep {
                                         src_container_id: container_id.into(),
                                         src_obj_runtime_id: state_id,
@@ -587,7 +587,7 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                         })
                         .body(|ui| {
                             if crate::config::MORE_DEBUG {
-                                ui.label(format!("{:?}", ui.id()));
+                                ui.label(format!("{:?}", ui.scope_id()));
                             }
                             if !is_enabled {
                                 // let mut style = ui.style().as_ref().clone();

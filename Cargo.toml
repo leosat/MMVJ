@@ -1,6 +1,6 @@
 [package]
 name = "mmvj"
-version = "2026.11.14-1"
+version = "2026.11.14-2"
 edition = "2024"
 #rust-version = "1.96.0"
 authors = ["Leonid Satanovskiy"]
@@ -25,18 +25,21 @@ path = "src/lib.rs"
 name = "mmvj"
 path = "src/bin/main.rs"
 
+# [patch.crates-io]
+# egui = { git = "https://github.com/emilk/egui", rev = "0.37.0" }
+
 [dependencies]
 winit = { version = "0.30.13", optional = true }
 with_doc_str = { path = "src/with_doc_str" }
 mmvj_derive = { path = "src/mmvj_derive" }
-eframe = { version = "0.36.2", optional = true, features = [
+eframe = { version = "0.37.0", optional = true, features = [
     "glow",
     "persistence",
 ] }
 egui-phosphor = { version = "0.14.0", optional = true,  features = ["bold", "fill"] }
-egui-file-dialog = { version = "0.15.0", optional = true }
-egui_logger = { version = "0.12.0", optional = true }
-egui = { version = "0.36.2", optional = true, features = ["persistence", "serde"] }
+egui-file-dialog = { version = "0.16.0", optional = true }
+egui_logger = { version = "0.13.1", optional = true }
+egui = { version = "0.37.0", optional = true, features = ["persistence", "serde"] }
 colored = "3.0.0"
 include-flate = "0.3.4"
 anyhow = "1.0"

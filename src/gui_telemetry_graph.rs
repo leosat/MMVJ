@@ -146,7 +146,7 @@ impl GuiGraphState {
         if self.data.is_empty() {
             painter.text(
                 rect.center(),
-                egui::Align2::CENTER_TOP.flip(),
+                egui::Align2::CENTER_TOP.flipped(),
                 "Waiting for data...",
                 egui::FontId::proportional(20.0),
                 Color32::MAGENTA,
