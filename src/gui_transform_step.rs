@@ -1067,6 +1067,7 @@ impl<'s> DrawEgui<'s> for ArithCfg {
         ui.label(format!("( {} ", self.common_state_ref().get_last_known_io().0));
 
         for (src_idx, src) in self.sources.iter_mut().enumerate() {
+            ui.separator();
             ui.push_id((step_id, src_idx), |ui| {
                 ui.horizontal(|ui| {
                     ui.label(
