@@ -71,11 +71,14 @@ fn draw_graph_docked_or_windowed(
     ui: &mut egui::Ui,
 ) -> bool {
     let mut changed = false;
-
     // ui.label(state.0.read().get_state_id().to_string());
-
     // ---------------------------------------
-    if tfm_step.common_state_ref().trace_channel.is_none() {
+    if tfm_step.common_state_ref().trace_channel.is_none()
+        || gui_graphs
+            .borrow_mut()
+            .get_mut(&tfm_step.get_graph_hash_key_string())
+            .is_none()
+    {
         let (trace_graph_handle, gui_graph_state) = make_trace_graph_2d(
             &tfm_step.get_graph_hash_key_string(),
             &tfm_step.get_graph_legend(),
@@ -100,7 +103,7 @@ fn draw_graph_docked_or_windowed(
             if let Some(gui_graph) = gui_graphs.borrow_mut().get_mut(&tfm_step.get_graph_hash_key_string()) {
                 if !tfm_step.common_state_ref().is_gui_tracing_enabled() {
                     tfm_step.common_state_ref().enable_gui_tracing();
-                    changed = true;
+                    //changed = true;
                 }
                 graph_displayed = true;
                 if gui_graph._in_interval != tfm_step.common_state_ref().get_in_interval() {
@@ -120,12 +123,7 @@ fn draw_graph_docked_or_windowed(
             |ui| display_graph(ui),
         );
 
-        if window_opened {
-            if !tfm_step.common_state_ref().is_gui_tracing_enabled() {
-                tfm_step.common_state_ref().enable_gui_tracing();
-                changed = true;
-            }
-        } else {
+        if !window_opened {
             let c = egui::collapsing_header::CollapsingState::load_with_default_open(
                 ui.ctx(),
                 ui.scope_id().with("collapsing"),
@@ -148,7 +146,7 @@ fn draw_graph_docked_or_windowed(
 
     if !graph_displayed && tfm_step.common_state_ref().is_gui_tracing_enabled() {
         tfm_step.common_state_ref().disable_gui_tracing();
-        changed = true;
+        //changed = true;
     }
 
     changed
@@ -502,7 +500,7 @@ impl<'s> DrawEgui<'s> for TfmStepCfg {
                                 ui.scope(|ui| {
                                     ui.set_max_width(EMBEDDED_GRAPH_MAX_WIDTH);
                                     if draw_graph_docked_or_windowed(self, gui_in.2.graph_states, ui) {
-                                        gui_out = Some(GuiCmd::ConfigChangeSimple);
+                                        gui_out = Some(GuiCmd::ConfigChangeMiscNoUndoCheckpoint);
                                     }
                                 });
 

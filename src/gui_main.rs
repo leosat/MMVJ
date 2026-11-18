@@ -19,6 +19,7 @@ use crate::gui_mapping::DndJobMoveTfmStep_Visitor;
 use crate::gui_style::GUI_STYLE_LIGHT;
 use crate::gui_style::GuiStyle;
 use crate::gui_telemetry_graph::GuiTelemetryGraphStates;
+use crate::gui_undo::GuiCfgUndo;
 use crate::hid_manager::{AvailableHIDDeviceInfo, HidManager};
 #[cfg(feature = "midi")]
 use crate::midi::{AvailableMidiDeviceInfo, MidiManager};
@@ -50,7 +51,7 @@ use winit::platform::x11::EventLoopBuilderExtX11;
 
 //====================================================================================
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn run(
+pub(super) fn run(
     monitors_only: bool,
     cmd_tx: UnboundedSender<DriverCmd>,
     cancellation_token: CancellationToken,
@@ -96,8 +97,8 @@ pub(crate) fn run(
                 (gui_style.setup_creation_context)(cc);
 
                 // -----------------------------------------------------
-
                 let mut app = GuiMain {
+                    cfg_undo: GuiCfgUndo::new_with_cfg(&cfg, cc.egui_ctx.time()),
                     exit_app: false,
                     // ---
                     pending_cmds: Default::default(),
@@ -135,6 +136,7 @@ pub(crate) fn run(
                     system_requirements_chk_status: check_system_requirements().err().map(|e| format!("{e}")),
                     gui_tab_mappings_windowed_mappings: Default::default(),
                 };
+
                 app.cfg_yaml = app.get_config_string();
                 if let Some(storage) = cc.storage {
                     log::info!("Persistent storage is available ... ");
@@ -148,7 +150,9 @@ pub(crate) fn run(
                 } else {
                     log::warn!("Persistent storage is not accessible, will not restore Gui state.");
                 }
+
                 app.show_monitors |= monitors_only;
+
                 Ok(Box::new(app))
             }),
         )
@@ -176,13 +180,13 @@ enum FilePickingAction {
     None,
 }
 
-struct GuiTransientStateItemEdit<T> {
+pub(super) struct GuiTransientStateItemEdit<T> {
     edited_key: String,
     edited_definition: T,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub(crate) struct GuiMainSavedState {
+pub(super) struct GuiMainSavedState {
     current_opened_tab: GuiMainTabs,
     gui_tab_mappings_current_opened_mapping_idx: usize,
     show_monitors: bool,
@@ -199,8 +203,8 @@ impl From<&mut GuiMain> for GuiMainSavedState {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct PendingCommand {
-    cmd: GuiCmd,
+pub(super) struct PendingCommand {
+    pub(super) cmd: GuiCmd,
     /* aux metadata for pending and postponed commands may go here */
 }
 
@@ -241,17 +245,19 @@ impl AvailDevInfoCache {
 }
 
 pub(crate) struct GuiMain {
+    pub(super) cfg_undo: GuiCfgUndo,
+    // ---
     system_requirements_chk_status: Option<String>, // TODO: common status notifications abstraction #121
     exit_app: bool,
     // ---
-    pub(crate) style: GuiStyle,
+    pub(super) style: GuiStyle,
     // ---
-    pending_cmds: Vec<PendingCommand>,
+    pub(super) pending_cmds: Vec<PendingCommand>,
     post_draw_cmds: Vec<PendingCommand>,
     // ---
-    transient_states_variable_edit: HashMap<String, GuiTransientStateItemEdit<VariableCfg>>,
-    transient_states_device_key_edit: HashMap<String, String>,
-    pub transient_states_script_aux_edit: UncheckedRefCell<HashMap<(ObjId, ScriptAuxKind), (String, String)>>,
+    pub(super) transient_states_variable_edit: HashMap<String, GuiTransientStateItemEdit<VariableCfg>>,
+    pub(super) transient_states_device_key_edit: HashMap<String, String>,
+    pub(super) transient_states_script_aux_edit: UncheckedRefCell<HashMap<(ObjId, ScriptAuxKind), (String, String)>>,
     // ---
     file_dialog: FileDialog,
     file_picking_action_in_progress: FilePickingAction,
@@ -260,15 +266,15 @@ pub(crate) struct GuiMain {
     // ---
     current_opened_tab: GuiMainTabs,
     // ---
-    pub(crate) gui_tab_mappings_windowed_mappings: FastHashSet<usize>,
-    pub(crate) gui_tab_mappings_current_opened_mapping_idx: usize,
+    pub(super) gui_tab_mappings_windowed_mappings: FastHashSet<usize>,
+    pub(super) gui_tab_mappings_current_opened_mapping_idx: usize,
     // -----------------------------------------
-    pub(crate) telemetry_graphs: UncheckedRefCell<GuiTelemetryGraphStates>,
+    pub(super) telemetry_graphs: UncheckedRefCell<GuiTelemetryGraphStates>,
     // -----------------------------------------
     monitors_only: bool,
     show_monitors: bool,
     // -----------------------------------------
-    pub(crate) cfg: Config,
+    pub(super) cfg: Config,
     // -----------------------------------------
     cfg_yaml: String,
     //----------------------------------------------
@@ -283,12 +289,19 @@ pub(crate) struct GuiMain {
 
 impl eframe::App for GuiMain {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        // ---------------------------------------------
+        // Calling undo/redo handler early so that shortcuts are consumed
+        // before e.g. a separate text edit undo-redo can see them.
+        self.handle_cfg_undo_redo_pressed(ui);
+
+        // ---------------------------------------------
         fn do_save(app: &mut GuiMain, frame: &mut eframe::Frame) {
             if let Some(storage) = frame.storage_mut() {
                 app.save_state(storage);
             }
         }
 
+        // ---------------------------------------------
         if ui.ctx().input(|i| i.viewport().close_requested()) || self.cancellation_token.is_cancelled() || self.exit_app
         {
             do_save(self, frame);
@@ -494,8 +507,14 @@ impl eframe::App for GuiMain {
                         }
                     });
                     ui.separator();
+                    ui.menu_button("Edit", |ui| {
+                        self.draw_undo_redo_edit_menu(ui);
+                    });
 
+                    ui.separator();
+                    self.draw_undo_redo_buttons(ui);
                     self.draw_and_handle_pending_changes_button(ui);
+
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
                         ui.separator();
                         ui.label(format!(
@@ -556,13 +575,14 @@ impl eframe::App for GuiMain {
                 });
                 ui.separator();
                 ui.label(format!(
-                    "Cfg title: {} | Cfg file: {}",
+                    "Cfg title: {} | Cfg file: {} | Cfg edit epoch: {}",
                     self.cfg.title,
                     self.cfg
                         .cfg_file
                         .as_ref()
                         .and_then(|f| Some(f.to_string_lossy().to_string()))
-                        .unwrap_or("no associated file".to_string())
+                        .unwrap_or("no associated file".to_string()),
+                    self.cfg.edit_epoch
                 ));
             });
 
@@ -701,7 +721,8 @@ impl eframe::App for GuiMain {
                 });
         });
 
-        self.process_post_draw_commands();
+        self.process_post_draw_commands(ui);
+        self.cfg_undo_checkpoint_try_finish(ui);
 
         let frame_time = start_time.elapsed();
         let target_ft = std::time::Duration::from_millis(16);
@@ -854,13 +875,21 @@ impl<'s> DrawEgui<'s> for MapperMode {
 // ================================================================================
 
 impl GuiMain {
-    pub(crate) fn fill_saved_state(&mut self, saved: &GuiMainSavedState) {
+    pub(super) fn reset_runtime_state(&mut self) {
+        self.telemetry_graphs.borrow_mut().clear();
+        self.transient_states_script_aux_edit.borrow_mut().clear();
+        self.transient_states_variable_edit.clear();
+        self.transient_states_device_key_edit.clear();
+        self.pending_cmds.clear();
+    }
+
+    pub(super) fn fill_saved_state(&mut self, saved: &GuiMainSavedState) {
         self.current_opened_tab = saved.current_opened_tab;
         self.gui_tab_mappings_current_opened_mapping_idx = saved.gui_tab_mappings_current_opened_mapping_idx;
         self.show_monitors = saved.show_monitors;
     }
 
-    pub(crate) fn save_state(&mut self, storage: &mut dyn eframe::Storage) {
+    pub(super) fn save_state(&mut self, storage: &mut dyn eframe::Storage) {
         let saved: GuiMainSavedState = self.into();
         // dbg!("SAVING STATE!");
         // dbg!(&saved);
@@ -868,11 +897,11 @@ impl GuiMain {
         storage.flush();
     }
 
-    pub(crate) fn get_config_string(&self) -> String {
+    pub(super) fn get_config_string(&self) -> String {
         self.cfg.get_yaml_str()
     }
 
-    pub(crate) fn update_cfg_yaml(&mut self) {
+    pub(super) fn update_cfg_yaml(&mut self) {
         self.cfg_yaml = self.get_config_string();
     }
 
@@ -888,7 +917,7 @@ impl GuiMain {
         res.expect("Failed to send command to driver");
     }
 
-    fn execute_gui_command(&mut self, mut gui_cmd: GuiCmd) -> Result<(), String> {
+    pub(super) fn execute_gui_command(&mut self, mut gui_cmd: GuiCmd, ui: &mut egui::Ui) -> Result<(), String> {
         const RX_TIMEOUT_MS: u64 = 5000;
 
         match &mut gui_cmd {
@@ -899,6 +928,7 @@ impl GuiMain {
                         cmd.new_key
                     ));
                 };
+
                 self.send_driver_cmd(DriverCmd::ChangeConfigSimple { cfg: self.cfg.clone() });
             }
             GuiCmd::DeviceMatcherRename(cmd) => {
@@ -927,12 +957,15 @@ impl GuiMain {
                     }
                 }
                 let _ = self.cfg.traverse_mut(cmd);
-                self.execute_gui_command(GuiCmd::ConfigChangeSimple)?;
+                self.execute_gui_command(GuiCmd::ConfigChangeSimple, ui)?;
                 if cmd.is_virtual {
-                    self.execute_gui_command(GuiCmd::ChangeVirtualHid(GuiCmdChangeVirtualHid {
-                        virtual_hid_key: cmd.old_key.clone(), /* TODO: do not restart, just reassociate they
-                                                              key to already opened device within the HID manager*/
-                    }))?;
+                    self.execute_gui_command(
+                        GuiCmd::ChangeVirtualHid(GuiCmdChangeVirtualHid {
+                            virtual_hid_key: cmd.old_key.clone(), /* TODO: do not restart, just reassociate they
+                                                                  key to already opened device within the HID manager*/
+                        }),
+                        ui,
+                    )?;
                 }
             }
             GuiCmd::DeviceMatcherRemove(cmd) => {
@@ -946,11 +979,14 @@ impl GuiMain {
                 #[cfg(feature = "midi")]
                 self.cfg.devices.midi.remove(&cmd.device_key);
                 self.cfg.sanitize_inplace(());
-                self.execute_gui_command(GuiCmd::ConfigChangeSimple)?;
+                self.execute_gui_command(GuiCmd::ConfigChangeSimple, ui)?;
                 if cmd.is_virtual {
-                    self.execute_gui_command(GuiCmd::ChangeVirtualHid(GuiCmdChangeVirtualHid {
-                        virtual_hid_key: cmd.device_key.clone(),
-                    }))?;
+                    self.execute_gui_command(
+                        GuiCmd::ChangeVirtualHid(GuiCmdChangeVirtualHid {
+                            virtual_hid_key: cmd.device_key.clone(),
+                        }),
+                        ui,
+                    )?;
                 }
             }
             GuiCmd::ControlMatcherChange(cmd) => {
@@ -1005,9 +1041,11 @@ impl GuiMain {
                 mappings: Some(self.cfg.mappings.clone()),
                 action: action.clone(),
             }),
-            GuiCmd::ConfigChangeSimple => self.send_driver_cmd(DriverCmd::ChangeConfigSimple { cfg: self.cfg.clone() }),
+            GuiCmd::ConfigChangeMiscNoUndoCheckpoint | GuiCmd::ConfigChangeSimple => {
+                self.send_driver_cmd(DriverCmd::ChangeConfigSimple { cfg: self.cfg.clone() })
+            }
             GuiCmd::ConfigChangeDriverRestart => {
-                self.execute_gui_command(GuiCmd::ConfigChangeSimple)?;
+                self.execute_gui_command(GuiCmd::ConfigChangeSimple, ui)?;
                 self.send_driver_cmd(DriverCmd::Reload);
             }
             GuiCmd::DragAndDrop(GuiDndJob::MoveTfmStep(dnd_job)) => {
@@ -1022,7 +1060,7 @@ impl GuiMain {
                         log::error!("Dnd job failed to complete in 2 traversals. Error in implementation. {dnd_job:?}");
                     }
                 }
-                self.execute_gui_command(GuiCmd::ConfigChangeSimple)?;
+                self.execute_gui_command(GuiCmd::ConfigChangeSimple, ui)?;
             }
             GuiCmd::DragAndDrop(..) | GuiCmd::LocalItemRemove(..) => {
                 log::error!(
@@ -1064,6 +1102,7 @@ impl GuiMain {
                         self.cfg = new_cfg;
                         self.update_cfg_yaml();
                         self.pending_cmds.clear();
+                        self.cfg_undo_reset(ui);
                     }
                     Ok(Err(e)) => {
                         return Err(format!("Failed to load config: {e:?}"));
@@ -1091,19 +1130,31 @@ impl GuiMain {
                             return res.unwrap();
                         }
                     } else {
-                        res = Some(self.execute_gui_command(cmd).inspect_err(|e| warn!("{e:?}")));
+                        res = Some(self.execute_gui_command(cmd, ui).inspect_err(|e| warn!("{e:?}")));
                     }
                 }
             }
             GuiCmd::BreakOnErr => {}
-            GuiCmd::_SubmitPending(gui_cmd) => self.submit_pending_cmd(*(*gui_cmd).clone()),
+            GuiCmd::_SubmitPending(gui_cmd) => self.submit_pending_cmd(*(*gui_cmd).clone(), ui),
         }
+
         Ok(())
     }
 
-    fn process_post_draw_commands(&mut self) {
+    fn process_post_draw_commands(&mut self, ui: &mut egui::Ui) {
         if self.post_draw_cmds.is_empty() {
             return;
+        }
+
+        if !self.post_draw_cmds.get(0).is_some_and(|cmd| {
+            matches!(
+                cmd,
+                PendingCommand {
+                    cmd: GuiCmd::ConfigChangeMiscNoUndoCheckpoint
+                }
+            )
+        }) {
+            self.cfg_undo_checkpoint_start(ui);
         }
 
         if MORE_DEBUG {
@@ -1113,13 +1164,14 @@ impl GuiMain {
         }
 
         let mut res = None;
-        for cmd in self.post_draw_cmds.clone().drain(..) {
+
+        for cmd in self.post_draw_cmds.clone() {
             if let GuiCmd::BreakOnErr = cmd.cmd {
                 if let Some(Err(_)) = res.as_ref() {
                     break;
                 }
             } else {
-                res = Some(self.execute_gui_command(cmd.cmd).inspect_err(|e| warn!("{e:?}")));
+                res = Some(self.execute_gui_command(cmd.cmd, ui).inspect_err(|e| warn!("{e:?}")));
             }
         }
 
@@ -1127,7 +1179,7 @@ impl GuiMain {
         self.update_cfg_yaml();
     }
 
-    fn process_pending_commands(&mut self) {
+    pub(super) fn process_pending_commands(&mut self, ui: &mut egui::Ui) {
         if self.pending_cmds.is_empty() {
             return;
         }
@@ -1140,14 +1192,16 @@ impl GuiMain {
 
         self.pending_cmds.dedup_by(|next, prev| *next == *prev);
 
+        self.store_applied_pending_commands_for_undo(ui);
+
         let mut res = None;
-        for cmd in self.pending_cmds.clone().drain(..) {
+        for cmd in &self.pending_cmds.clone() {
             if let GuiCmd::BreakOnErr = cmd.cmd {
                 if let Some(Err(_)) = res.as_ref() {
                     break;
                 }
             } else {
-                res = Some(self.execute_gui_command(cmd.cmd));
+                res = Some(self.execute_gui_command(cmd.cmd.clone(), ui));
             }
         }
 
@@ -1371,7 +1425,7 @@ impl GuiMain {
                             if submit_post_draw {
                                 self.submit_post_draw_cmd(cmd_seq);
                             } else {
-                                self.submit_pending_cmd(cmd_seq);
+                                self.submit_pending_cmd(cmd_seq, ui);
                             }
                         };
                     });
@@ -1437,7 +1491,6 @@ impl GuiMain {
     }
 
     fn draw_variables(&mut self, ui: &mut egui::Ui) {
-        let mut variable_value_changed = false;
         let mut variable_edit_to_submit = None;
         let mut variable_remove_to_submit = None;
         if ui
@@ -1490,7 +1543,13 @@ impl GuiMain {
                     ui.separator();
                     ui.label(egui::RichText::new(v.0).strong().monospace());
                     ui.separator();
-                    variable_value_changed |= v.1.egui(GuiInKinds::Display, ui);
+                    if v.1.egui(GuiInKinds::Display, ui) {
+                        variable_edit_to_submit = Some(GuiCmdVariableChange {
+                            old_key: v.0.into(),
+                            new_key: v.0.into(),
+                            new_definition: v.1.clone(),
+                        });
+                    }
                 }
                 ui.separator();
                 if ui
@@ -1511,8 +1570,6 @@ impl GuiMain {
                 .remove(&variable_edit_to_submit.old_key);
         } else if let Some(variable_remove_to_submit) = variable_remove_to_submit {
             self.submit_post_draw_cmd(GuiCmd::VariableRemove(variable_remove_to_submit));
-        } else if variable_value_changed {
-            self.submit_post_draw_cmd(GuiCmd::ConfigChangeSimple);
         }
     }
 
@@ -1520,13 +1577,15 @@ impl GuiMain {
         if self.pending_cmds.is_empty() {
             return;
         }
+
+        ui.separator();
         ui.horizontal(|ui| {
             if ui
                 .button(format!("{} apply pending", egui_phosphor::bold::CHECK_SQUARE))
                 .highlight()
                 .clicked()
             {
-                self.process_pending_commands();
+                self.process_pending_commands(ui);
             }
             // ui.separator();
             // if ui
@@ -1604,11 +1663,12 @@ impl GuiMain {
         });
     }
 
-    pub(crate) fn submit_pending_cmd(&mut self, cmd: GuiCmd) {
-        self.pending_cmds.push(PendingCommand { cmd })
+    pub(super) fn submit_pending_cmd(&mut self, cmd: GuiCmd, ui: &mut egui::Ui) {
+        self.pending_cmds.push(PendingCommand { cmd });
+        self.cfg_undo_checkpoint_start(ui);
     }
 
-    pub(crate) fn submit_post_draw_cmd(&mut self, cmd: GuiCmd) {
+    pub(super) fn submit_post_draw_cmd(&mut self, cmd: GuiCmd) {
         self.post_draw_cmds.push(PendingCommand { cmd })
     }
 }

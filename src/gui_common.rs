@@ -299,7 +299,11 @@ pub(crate) enum GuiCmd {
     // -----------------------------
     MappingChange(MappingEngineCmd),
     // -----------------------------
+    /// Checkpoint config for undor and propagate updated config to mapper, no other actions required.
     ConfigChangeSimple,
+    /// Propagate updated config to mapper, no other actions required, no undo checkpoint done.
+    ConfigChangeMiscNoUndoCheckpoint,
+    /// Propagate updated config to mapper, fully reload the driver.
     ConfigChangeDriverRestart,
     // -----------------------------
     BaseTickRateChange,

@@ -11,11 +11,11 @@ use std::{
     ops::{Deref, DerefMut},
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed},
+        atomic::{AtomicBool, Ordering::Relaxed},
     },
 };
 
-use crate::relativity::Relativity;
+use crate::{config::WithSelfSanitize, relativity::Relativity};
 use crate::{mapping::WithMappingTriggerPredicate, num_interval::ZERO_INTERVAL};
 use crate::{
     num_interval::UNIT_INTERVAL,
@@ -183,22 +183,8 @@ pub(crate) trait WithNumericValue {
     fn get_numeric_value(&self) -> Self::ValueT;
 }
 
-// #[allow(unused)]
-// pub(crate) trait WithNumericValueClamped: WithNumericValue /*+ WithNumInterval*/ {
-//     fn get_numeric_value_clamped(&self) -> <Self as WithNumericValue>::ValueT;
-// }
-
-// #[allow(unused)]
-// pub(crate) trait WithNumericValueClampedPredicated: WithNumericValue /*+ WithNumInterval*/ {
-//     type PredicationParamsT;
-//     fn get_numeric_value_clamped_predicated(
-//         &self,
-//         params: Self::PredicationParamsT,
-//     ) -> <Self as WithNumericValue>::ValueT;
-// }
-
 /// This trait sets a numeric value within configuration tree/transformation state cache.
-/// NB: It does not actually write to any devices!
+/// NB: its impl is not actually meant to write to any devices, separate API is used for that!
 pub(crate) trait WithNumericValueSettable: WithNumericValue {
     fn set_numeric_value(&self, value: Self::ValueT);
 }
@@ -246,7 +232,7 @@ pub(crate) mod variable_value_serde {
     }
 }
 
-#[derive(JsonSchema, Debug, Clone, Deserialize, Serialize, TraversableMut, Traversable, Default)]
+#[derive(Clone, JsonSchema, Debug, Deserialize, Serialize, TraversableMut, Traversable, Default)]
 pub(crate) struct VariableCfg {
     #[traverse(skip)]
     #[serde(alias = "range")]
@@ -264,11 +250,39 @@ pub(crate) struct VariableCfg {
     // #[traverse(skip)]
     // pub(crate) relativity: Relativity,
     #[serde(skip)]
+    #[schemars(skip)]
     #[traverse(skip)]
     pub(crate) id: ObjId,
+    #[cfg(feature = "gui")]
     #[serde(skip)]
+    #[schemars(skip)]
     #[traverse(skip)]
-    _dst_refs_count: Arc<CachePadded<AtomicUsize>>,
+    pub(crate) manual_value_restore_checkpoint: BaseNumT,
+}
+
+#[derive(Default, Clone, Copy)]
+pub(crate) enum CfgSanitizeCtx {
+    #[default]
+    General,
+    #[cfg(feature = "gui")]
+    PostRestore,
+}
+
+impl WithSelfSanitize for VariableCfg {
+    type SanInputT = CfgSanitizeCtx;
+
+    fn sanitize_inplace(&mut self, san_ctx: Self::SanInputT) {
+        let mut value = self.get_numeric_value();
+
+        #[cfg(feature = "gui")]
+        if let CfgSanitizeCtx::PostRestore = san_ctx {
+            value = self.manual_value_restore_checkpoint;
+        } else {
+            self.manual_value_restore_checkpoint = value;
+        }
+
+        self.set_numeric_value(self.interval.clamp(value));
+    }
 }
 
 impl WithMappingTriggerPredicate for VariableCfg {
@@ -288,10 +302,21 @@ impl WithNumIntervalMut for VariableCfg {
 impl PartialEq for VariableCfg {
     fn eq(&self, other: &Self) -> bool {
         self.interval == other.interval && self.id == other.id && {
-            if self.value.is_manual() {
-                self.value == other.value
-            } else {
+            if self.value.is_manual() && other.value.is_manual() {
+                let check;
+                #[cfg(feature = "gui")]
+                {
+                    check = self.manual_value_restore_checkpoint == other.manual_value_restore_checkpoint;
+                }
+                #[cfg(not(feature = "gui"))]
+                {
+                    check = self.get_numeric_value() == other.get_numeric_value();
+                }
+                check
+            } else if self.value.is_auto() && other.value.is_auto() {
                 true // non-serialized values are not accounted for in comparison
+            } else {
+                false
             }
         }
     }
@@ -301,11 +326,9 @@ impl VariableCfg {
     pub(crate) fn new(interval: NumInterval<BaseNumT> /*, relativity: Relativity */) -> Self {
         Self {
             interval,
-            value: Default::default(),
-            // relativity,
-            id: Default::default(),
-            _dst_refs_count: Default::default(),
+            ..Default::default()
         }
+        .to_sanitized(CfgSanitizeCtx::General)
     }
 }
 
@@ -1504,17 +1527,6 @@ impl TryFrom<ValueTargets> for DynValueRefs {
 
     fn try_from(value: ValueTargets) -> Result<Self, Self::Error> {
         value.try_into()
-    }
-}
-
-impl _WithDstRefCount for VariableCfg {
-    fn _get_dst_refs_count(&self) -> usize {
-        self._dst_refs_count.load(std::sync::atomic::Ordering::Relaxed)
-    }
-
-    fn _set_dst_refs_count(&mut self, refs_count: usize) {
-        self._dst_refs_count
-            .store(refs_count, std::sync::atomic::Ordering::Relaxed)
     }
 }
 

@@ -138,12 +138,16 @@ where
 //-----------------------------------------------------------------
 impl WithSelfSanitize for Config {
     fn sanitize_inplace(&mut self, _input: Self::SanInputT) {
-        for hid in &mut self.devices.hid {
-            hid.1.sanitize_inplace(());
-        }
-        for mapping in self.mappings.iter_mut() {
-            mapping.sanitize_inplace(());
-        }
+        self.devices
+            .hid
+            .values_mut()
+            .for_each(|hid| hid.sanitize_inplace(Default::default()));
+        self.variables
+            .values_mut()
+            .for_each(|var| var.sanitize_inplace(Default::default()));
+        self.mappings
+            .iter_mut()
+            .for_each(|map| map.sanitize_inplace(Default::default()));
     }
 
     type SanInputT = ();

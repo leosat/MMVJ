@@ -10,8 +10,8 @@ use crate::mapping::MappingEngineCmd;
 use crate::relativity::Relativity;
 
 use crate::schemas_common::WithRuntimeId;
-use crate::schemas_value::ValueIface;
 use crate::schemas_value::{AutoOrManual, ValueXrcs, WithNumIntervalSettable};
+use crate::schemas_value::{ValueIface, WithNumericValueSettable};
 
 use crate::schemas_value_port::{
     PortRemapPolicy, PortSanPolicy, SanPolicyNone, SanPolicyUseFromPortInner, TfmPolicyDefaultChoice, TfmPolicyIface,
@@ -488,7 +488,7 @@ where
                     .step_by(0.0001),
             );
 
-            if value_slider.changed() && !value_slider.dragged() &&  this.value_is_static() {
+            if value_slider.changed() && !value_slider.dragged() && this.value_is_static() {
                 changed = true;
                 this.set_numeric_value(value);
             }
@@ -592,7 +592,7 @@ impl<'s> DrawEgui<'s> for Relativity {
 
 impl<'s> DrawEgui<'s> for VariableCfg {
     type In = GuiInKinds;
-    type Out = bool;
+    type Out = bool; // Option<GuiCmd>;
 
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut changed = false;
@@ -619,8 +619,6 @@ impl<'s> DrawEgui<'s> for VariableCfg {
                         .monospace()
                         .strong(),
                 );
-                // ui.group(|ui| {
-                // });
             }
             GuiInKinds::Display => {
                 ui.horizontal(|ui| {
@@ -631,19 +629,19 @@ impl<'s> DrawEgui<'s> for VariableCfg {
                     let mut value = self.get_numeric_value();
                     match self.value {
                         AutoOrManual::Manual(_) => {
-                            changed |= ui
+                            let slider = ui
                                 .add(
                                     egui::Slider::new(&mut value, self.get_interval().make_range_inclusive())
-                                        .logarithmic(false) // TODO: make configurable
+                                        .logarithmic(false)
                                         .custom_formatter(|value, _| format!("{value:+011.4}",))
-                                        // .fixed_decimals(4)
                                         .step_by(0.0001),
-                                )
-                                .changed();
-                            if changed {
-                                self.value.store(value, std::sync::atomic::Ordering::Relaxed);
-                                // TODO: WithNumericValueSet
+                                );
+
+                            if slider.drag_stopped() || slider.clicked() {
+                                changed = true;
+                                self.set_numeric_value(value);
                             }
+
                             ui.separator();
                             if ui
                                 .button(egui_phosphor::bold::ROBOT.to_string())
@@ -675,6 +673,11 @@ impl<'s> DrawEgui<'s> for VariableCfg {
                 });
             }
         }
+
+        if changed {
+            self.sanitize_inplace(Default::default());
+        }
+
         changed
     }
 }
