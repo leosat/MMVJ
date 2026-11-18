@@ -151,6 +151,7 @@ impl From<ConfigVariants> for Config {
                 mappings: c.mappings,
                 ui: Default::default(),
                 title: c.title,
+                #[cfg(feature = "gui")]
                 edit_epoch: Default::default(),
             },
             ConfigVariants::ConfigNewFormat(c) => Self {
@@ -162,6 +163,7 @@ impl From<ConfigVariants> for Config {
                 mappings: c.mappings,
                 ui: c.ui,
                 title: c.title,
+                #[cfg(feature = "gui")]
                 edit_epoch: Default::default(),
             },
         }
@@ -178,6 +180,7 @@ macro_rules! config_struct_tpl {
     $( #[$m] )*
     #[serde(deny_unknown_fields)]
     pub(crate) struct $n {
+        #[cfg(feature = "gui")]
         #[traverse(skip)]
         #[serde(skip)]
         #[garde(skip)]
@@ -233,14 +236,19 @@ config_struct_tpl!(ConfigNew, , DevicesCfgNew);
 
 impl PartialEq for Config {
     fn eq(&self, other: &Self) -> bool {
-        self.cfg_file == other.cfg_file
+        let mut check = self.cfg_file == other.cfg_file
             && self.title == other.title
             && self.description == other.description
             && self.global == other.global
             && self.devices == other.devices
             && self.variables == other.variables
             && self.mappings == other.mappings
-            && self.ui == other.ui
+            && self.ui == other.ui;
+        #[cfg(feature = "gui")]
+        {
+            check &= self.edit_epoch == other.edit_epoch
+        }
+        check
     }
 }
 

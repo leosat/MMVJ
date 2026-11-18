@@ -216,6 +216,7 @@ impl crate::gui_main::GuiMain {
                         .on_hover_text("Create new mapping")
                         .clicked()
                     {
+                        self.submit_post_draw_cmd(GuiCmd::ConfigChangeSimple);
                         self.cfg.mappings.push(Mapping::default());
                         self.update_cfg_yaml();
                     };

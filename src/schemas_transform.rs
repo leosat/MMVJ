@@ -297,12 +297,6 @@ impl PartialEq for TfmStepCommonState {
     }
 }
 
-// enum ArithCfg {
-//     Sum(),
-//     Sum(),
-//     Sum(),
-// }
-
 #[derive(JsonSchema, PartialEq, Default, Debug, Clone, Serialize, Deserialize)]
 pub(crate) enum ArithOpType {
     #[default]
