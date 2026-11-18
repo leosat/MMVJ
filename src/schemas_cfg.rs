@@ -151,6 +151,7 @@ impl From<ConfigVariants> for Config {
                 mappings: c.mappings,
                 ui: Default::default(),
                 title: c.title,
+                edit_epoch: Default::default(),
             },
             ConfigVariants::ConfigNewFormat(c) => Self {
                 cfg_file: c.cfg_file,
@@ -161,23 +162,27 @@ impl From<ConfigVariants> for Config {
                 mappings: c.mappings,
                 ui: c.ui,
                 title: c.title,
+                edit_epoch: Default::default(),
             },
         }
     }
 }
 
-// WHYMACRO: To do it with generics and type aliases would need to have a tuple struct for final config struct
-// WHYMACRO: to specifically implement serde from only on it. Attribute can't be set on type alias.
-// WHYMACRO: Since I don't want to have a tuple struct for config, I go with macro.
+// TODO: remove macro: "old" top-level config structure is not actual at all.
 macro_rules! config_struct_tpl {
   ($n:ident,$( $devices_meta:meta )?, $devices:ident) => {
     config_struct_tpl!(, $( $devices_meta )?, $n, $devices);
   };
   ($( $m:meta )*, $( $devices_meta:meta )?, $n:ident, $devices:ident) => {
-    #[derive(Default, PartialEq, Debug, Clone, Serialize, Deserialize, TraversableMut, Traversable, JsonSchema, Validate)]
+    #[derive(Default, Debug, Clone, Serialize, Deserialize, TraversableMut, Traversable, JsonSchema, Validate)]
     $( #[$m] )*
     #[serde(deny_unknown_fields)]
     pub(crate) struct $n {
+        #[traverse(skip)]
+        #[serde(skip)]
+        #[garde(skip)]
+        #[allow(unused)]
+        pub(crate) edit_epoch: usize,
         #[traverse(skip)]
         #[serde(skip)]
         #[garde(skip)]
@@ -225,6 +230,19 @@ config_struct_tpl!(
 );
 config_struct_tpl!(ConfigOld, serde(flatten), DevicesCfgLegacy);
 config_struct_tpl!(ConfigNew, , DevicesCfgNew);
+
+impl PartialEq for Config {
+    fn eq(&self, other: &Self) -> bool {
+        self.cfg_file == other.cfg_file
+            && self.title == other.title
+            && self.description == other.description
+            && self.global == other.global
+            && self.devices == other.devices
+            && self.variables == other.variables
+            && self.mappings == other.mappings
+            && self.ui == other.ui
+    }
+}
 
 // --------------------------------------
 

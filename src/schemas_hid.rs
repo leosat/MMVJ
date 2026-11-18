@@ -525,7 +525,7 @@ pub(crate) fn default_ffb_axis_y() -> MappedCtls {
     MappedCtls::AbsY
 }
 
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct HIDDeviceForceFeedbackCfg {
     #[serde(skip)]
@@ -562,6 +562,19 @@ pub(crate) struct HIDDeviceForceFeedbackCfg {
     #[serde(skip_serializing_if = "is_false")]
     #[garde(skip)]
     pub(crate) fake_accepting_all_effects: bool,
+}
+
+impl PartialEq for HIDDeviceForceFeedbackCfg {
+    fn eq(&self, other: &Self) -> bool {
+        self.enabled == other.enabled
+            && self.effects == other.effects
+            && self.max_effects == other.max_effects
+            && self.cond_effects_axis_x == other.cond_effects_axis_x
+            && self.cond_effects_axis_y == other.cond_effects_axis_y
+            && self.gain == other.gain
+            && self.autocenter == other.autocenter
+            && self.fake_accepting_all_effects == other.fake_accepting_all_effects
+    }
 }
 
 impl WithSelfSanitize for HIDDeviceForceFeedbackCfg {

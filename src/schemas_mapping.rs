@@ -340,6 +340,18 @@ pub(crate) struct Mapping {
     pub(crate) autorun: AutoOrManual<bool>,
 }
 
+impl PartialEq for Mapping {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.name == other.name
+            && self.enabled == other.enabled
+            && self.src == other.src
+            && self.dst == other.dst
+            && self.transformation == other.transformation
+            && self.autorun == other.autorun
+    }
+}
+
 impl WithLastKnownIO for Mapping {
     type LastKnownIOValueT = (BaseNumT, BaseNumT);
     fn get_last_known_io(&self) -> Self::LastKnownIOValueT {
@@ -424,12 +436,6 @@ impl Mapping {
         .is_empty()
         .not()
             || self.src.port_inner_ref().is_static()
-    }
-}
-
-impl PartialEq for Mapping {
-    fn eq(&self, other: &Self) -> bool {
-        self.src == other.src && self.dst == other.dst
     }
 }
 

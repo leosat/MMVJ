@@ -1505,6 +1505,7 @@ impl TfmCfgDuplicateWithNewState for OneEuroFilterCfg {
 impl PartialEq for OneEuroFilterCfg {
     fn eq(&self, other: &Self) -> bool {
         self.desc == other.desc
+            && self.common_state == other.common_state
             && self.enabled == other.enabled
             && self.gating == other.gating
             && self.beta == other.beta
@@ -1875,6 +1876,7 @@ impl TfmCfgDuplicateWithNewState for IntegrateCfg {
 impl PartialEq for IntegrateCfg {
     fn eq(&self, other: &Self) -> bool {
         self.common_state == other.common_state
+            && self.accumulator == other.accumulator
             && self.desc == other.desc
             && self.enabled == other.enabled
             && self.out_interval == other.out_interval
@@ -2158,7 +2160,7 @@ impl From<TfmSeqCfg> for TfmSeqVariants {
 macro_rules! tfm_seq_tpl {
     (vis: $v:vis, name: $name:ident, meta: $( $m:meta ),* ) => {
         #[derive(
-            Debug, Clone, Traversable, TraversableMut, Deserialize, Serialize, JsonSchema, PartialEq, Default, Validate
+            Debug, Clone, Traversable, TraversableMut, Deserialize, Serialize, JsonSchema, Default, Validate
         )]
         $( #[$m] )*
         $v struct $name {
@@ -2174,6 +2176,7 @@ macro_rules! tfm_seq_tpl {
             #[traverse(skip)]
             #[serde(skip)]
             #[garde(skip)]
+            #[allow(unused)]
             last_io: (Arc<CachePadded<BaseAtomicT>>,Arc<CachePadded<BaseAtomicT>>),
             #[traverse(skip)]
             #[serde(skip)]
@@ -2182,6 +2185,7 @@ macro_rules! tfm_seq_tpl {
             #[traverse(skip)]
             #[serde(skip)]
             #[garde(skip)]
+            #[allow(unused)]
             status: StatusHayShared,
             #[traverse(skip)]
             // #[serde(default)]
@@ -2200,6 +2204,26 @@ tfm_seq_tpl!(
     name: TfmSeqCfg,
     meta: serde(from = "TfmSeqVariants", into = "TfmSeqVariants")
 );
+
+impl PartialEq for TfmSeqFull {
+    fn eq(&self, other: &Self) -> bool {
+        self.desc == other.desc
+            && self.id == other.id
+            && self.out_meta == other.out_meta
+            && self.in_meta == other.in_meta
+            && self.steps == other.steps
+    }
+}
+
+impl PartialEq for TfmSeqCfg {
+    fn eq(&self, other: &Self) -> bool {
+        self.desc == other.desc
+            && self.id == other.id
+            && self.out_meta == other.out_meta
+            && self.in_meta == other.in_meta
+            && self.steps == other.steps
+    }
+}
 
 implement_status_for!(TfmSeqCfg, .status);
 //implement_status_for!(TfmSeqCfg, crate::status::GLOBAL_STATUS_HAY.0.lock().unwrap());

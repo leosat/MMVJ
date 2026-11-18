@@ -287,7 +287,13 @@ impl WithNumIntervalMut for VariableCfg {
 
 impl PartialEq for VariableCfg {
     fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
+        self.interval == other.interval && self.id == other.id && {
+            if self.value.is_manual() {
+                self.value == other.value
+            } else {
+                true // non-serialized values are not accounted for in comparison
+            }
+        }
     }
 }
 
@@ -339,7 +345,7 @@ impl WithNumInterval for VariableCfg {
     }
 }
 
-#[derive(JsonSchema, Debug, Clone, Deserialize, Serialize, PartialEq, TraversableMut, Traversable)]
+#[derive(JsonSchema, Debug, Clone, Deserialize, Serialize, TraversableMut, Traversable)]
 pub(crate) struct VariableRef {
     #[traverse(skip)]
     #[serde(alias = "var")]
@@ -348,6 +354,12 @@ pub(crate) struct VariableRef {
     #[serde(skip)]
     #[serde(default = "dummy_variable")]
     pub(crate) variable: VariableCfg,
+}
+
+impl PartialEq for VariableRef {
+    fn eq(&self, other: &Self) -> bool {
+        self.variable_key == other.variable_key
+    }
 }
 
 impl WithMappingTriggerPredicate for VariableRef {
@@ -426,7 +438,7 @@ impl WithDeviceControlMatcherRef for ValueDsts {
 
 // -----------------------------------------
 
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq, TraversableMut, Traversable)]
+#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, TraversableMut, Traversable)]
 pub(crate) struct DeviceControlMatcherRef {
     #[serde(rename = "dev")]
     #[serde(alias = "device")]
@@ -441,6 +453,12 @@ pub(crate) struct DeviceControlMatcherRef {
     #[serde(skip)]
     #[serde(default = "dummy_control_matcher")]
     pub(crate) control_matcher: ControlMatchers,
+}
+
+impl PartialEq for DeviceControlMatcherRef {
+    fn eq(&self, other: &Self) -> bool {
+        self.device_matcher_key == other.device_matcher_key && self.control_matcher_key == other.control_matcher_key
+    }
 }
 
 impl WithMappingTriggerPredicate for DeviceControlMatcherRef {
@@ -1134,8 +1152,10 @@ impl PartialOrd for XrcSink {
 }
 
 impl PartialEq for XrcSink {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+    fn eq(&self, _other: &Self) -> bool {
+        true // Xrc sink is a local dynamically updated variable used in the context of value port.
+        // Comparison is used in diff/undo-redo and for this purpose we treat any such entity as
+        // equal to any other entity of this type, ignoring current value.
     }
 }
 
