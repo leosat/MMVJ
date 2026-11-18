@@ -402,7 +402,7 @@ impl TfmPolicyDefaultChoice for ValueXrcs {
 }
 
 // -------------------------------------------
-#[derive(JsonSchema, Debug, Clone, PartialEq, Deserialize, Serialize, Traversable, TraversableMut)]
+#[derive(JsonSchema, Debug, Clone, Deserialize, Serialize, Traversable, TraversableMut)]
 #[serde(from = "ValuePortSerdeHelper<InnerT>", into = "ValuePortSerdeHelper<InnerT>")]
 #[serde(bound(serialize = "
     TfmT: TfmPolicyIface,
@@ -452,6 +452,26 @@ pub(crate) struct ValuePort<
     #[serde(skip)]
     #[traverse(skip)]
     _port_identity_string: String,
+}
+
+impl<InnerT, SanT, RemapT, TfmT> PartialEq for ValuePort<InnerT, SanT, RemapT, TfmT>
+where
+    InnerT: ValueIface,
+    SanT: PortSanPolicy<InnerT>,
+    RemapT: PortRemapPolicy<InnerT::ValueT>,
+    TfmT: TfmPolicyIface,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.inner == other.inner
+            && self.san_policy == other.san_policy
+            && self.remap_policy == other.remap_policy
+            && self.tfm_policy == other.tfm_policy
+            && self.triggers_mapping == other.triggers_mapping
+            && self._port_effective_interval == other._port_effective_interval
+            && self._port_effective_relativity == other._port_effective_relativity
+            && self._port_identity_string == other._port_identity_string
+    }
 }
 
 impl<InnerT, SanT, RemapT, TfmT> PartialOrd for ValuePort<InnerT, SanT, RemapT, TfmT>

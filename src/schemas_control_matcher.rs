@@ -98,7 +98,7 @@ impl WithRuntimeId for ControlMatchers {
 }
 
 impl ControlMatchers {
-    #[allow(dead_code)]
+    // TODO: mappings shadowing.
     pub(crate) fn get_base_tick_enabled_flag(&self) -> &AtomicBool {
         match self {
             #[cfg(feature = "midi")]

@@ -227,7 +227,7 @@ pub(crate) type StatusHay = Vec<crate::status::Status>;
 
 impl PartialEq for StatusHayShared {
     fn eq(&self, _other: &Self) -> bool {
-        false
+        true
     }
 }
 
