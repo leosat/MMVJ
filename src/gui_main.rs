@@ -605,112 +605,97 @@ impl eframe::App for GuiMain {
                 .scroll_source(ScrollSource::ALL)
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
+                    ui.separator();
                     match self.current_opened_tab {
                         GuiMainTabs::Mappings => {
-                            ui.separator();
                             self.draw_mappings_editor_gui(ui);
                         }
                         GuiMainTabs::Devices => {
+                            draw_collapsing_ui(
+                                ui,
+                                None::<()>,
+                                Some(&format!(
+                                    "{} HID: {}/{}/{}/{}/...",
+                                    egui_phosphor::bold::DOTS_SIX_VERTICAL,
+                                    egui_phosphor::bold::JOYSTICK,
+                                    egui_phosphor::bold::GAME_CONTROLLER,
+                                    egui_phosphor::bold::MOUSE,
+                                    egui_phosphor::bold::KEYBOARD,
+                                )),
+                                |_| {},
+                            )
+                            .body(|ui| {
+                                self.draw_device_and_matchers_hid(ui);
+                            });
                             ui.separator();
-                            ui.group(|ui| {
-                                draw_collapsing_ui(
-                                    ui,
-                                    None::<()>,
-                                    Some(&format!(
-                                        "{} HID: {}/{}/{}/{}/...",
-                                        egui_phosphor::bold::DOTS_SIX_VERTICAL,
-                                        egui_phosphor::bold::JOYSTICK,
-                                        egui_phosphor::bold::GAME_CONTROLLER,
-                                        egui_phosphor::bold::MOUSE,
-                                        egui_phosphor::bold::KEYBOARD,
-                                    )),
-                                    |_| {},
-                                )
-                                .body(|ui| {
-                                    self.draw_device_and_matchers_hid(ui);
-                                });
-                                ui.separator();
-                                #[cfg(feature = "midi")]
-                                draw_collapsing_ui(
-                                    ui,
-                                    None::<()>,
-                                    Some(&format!(
-                                        "{} MIDI: {}/{}/...",
-                                        egui_phosphor::regular::DOTS_SIX_VERTICAL,
-                                        egui_phosphor::regular::PIANO_KEYS,
-                                        egui_phosphor::regular::FADERS,
-                                    )),
-                                    |_| {},
-                                )
-                                .body(|ui| {
-                                    self.draw_device_and_matchers_midi(ui);
-                                });
+                            #[cfg(feature = "midi")]
+                            draw_collapsing_ui(
+                                ui,
+                                None::<()>,
+                                Some(&format!(
+                                    "{} MIDI: {}/{}/...",
+                                    egui_phosphor::regular::DOTS_SIX_VERTICAL,
+                                    egui_phosphor::regular::PIANO_KEYS,
+                                    egui_phosphor::regular::FADERS,
+                                )),
+                                |_| {},
+                            )
+                            .body(|ui| {
+                                self.draw_device_and_matchers_midi(ui);
                             });
                         }
                         GuiMainTabs::ConfigYaml => {
+                            ui.label("Configuration YAML (select text and use Ctrl+C to copy):");
                             ui.separator();
-                            ui.group(|ui| {
-                                ui.label("Configuration YAML (select text and use Ctrl+C to copy):");
-                                ui.separator();
-                                egui::ScrollArea::vertical()
-                                    .auto_shrink([false, false])
-                                    .scroll_source(ScrollSource::ALL)
-                                    .show(ui, |ui| {
-                                        ui.label(egui::RichText::from(&self.cfg_yaml).monospace());
-                                    });
-                            });
+                            egui::ScrollArea::vertical()
+                                .auto_shrink([false, false])
+                                .scroll_source(ScrollSource::ALL)
+                                .show(ui, |ui| {
+                                    ui.label(egui::RichText::from(&self.cfg_yaml).monospace());
+                                });
                         }
                         GuiMainTabs::ConfigDescription => {
-                            ui.separator();
-                            ui.group(|ui| {
-                                egui::ScrollArea::vertical()
-                                    .auto_shrink([false, false])
-                                    .scroll_source(ScrollSource::ALL)
-                                    .show(ui, |ui| {
-                                        if ui
-                                            .add(
-                                                egui::TextEdit::singleline(&mut self.cfg.title)
-                                                    .font(egui::TextStyle::Monospace)
-                                                    .interactive(true)
-                                                    .desired_width(f32::INFINITY)
-                                                    .hint_text("Set the config title here"),
-                                            )
-                                            .changed()
-                                        {
-                                            self.submit_post_draw_cmd(GuiCmd::ConfigChangeSimple);
-                                        }
-                                        ui.separator();
-                                        if ui
-                                            .add(
-                                                egui::TextEdit::multiline(&mut self.cfg.description.0)
-                                                    .font(egui::TextStyle::Monospace)
-                                                    .interactive(true)
-                                                    .desired_width(f32::INFINITY)
-                                                    .hint_text(
-                                                        "Please describe the details about this configuration here.",
-                                                    ),
-                                            )
-                                            .changed()
-                                        {
-                                            self.submit_post_draw_cmd(GuiCmd::ConfigChangeSimple);
-                                        }
-                                    })
-                            });
+                            egui::ScrollArea::vertical()
+                                .auto_shrink([false, false])
+                                .scroll_source(ScrollSource::ALL)
+                                .show(ui, |ui| {
+                                    if ui
+                                        .add(
+                                            egui::TextEdit::singleline(&mut self.cfg.title)
+                                                .font(egui::TextStyle::Monospace)
+                                                .interactive(true)
+                                                .desired_width(f32::INFINITY)
+                                                .hint_text("Set the config title here"),
+                                        )
+                                        .changed()
+                                    {
+                                        self.submit_post_draw_cmd(GuiCmd::ConfigChangeSimple);
+                                    }
+                                    ui.separator();
+                                    if ui
+                                        .add(
+                                            egui::TextEdit::multiline(&mut self.cfg.description.0)
+                                                .font(egui::TextStyle::Monospace)
+                                                .interactive(true)
+                                                .desired_width(f32::INFINITY)
+                                                .hint_text(
+                                                    "Please describe the details about this configuration here.",
+                                                ),
+                                        )
+                                        .changed()
+                                    {
+                                        self.submit_post_draw_cmd(GuiCmd::ConfigChangeSimple);
+                                    }
+                                });
                         }
                         GuiMainTabs::RuntimeConfigState => {
-                            ui.separator();
-                            ui.group(|ui| {
-                                self.draw_runtime_state_debug(ui);
-                            });
+                            self.draw_runtime_state_debug(ui);
                         }
                         GuiMainTabs::Log => {
                             egui_logger::logger_ui().show(ui);
                         }
                         GuiMainTabs::Variables => {
-                            ui.separator();
-                            ui.group(|ui| {
-                                self.draw_variables(ui);
-                            });
+                            self.draw_variables(ui);
                         }
                     };
                 });
@@ -1226,14 +1211,12 @@ impl GuiMain {
     fn draw_device_and_matchers_midi(&mut self, ui: &mut egui::Ui) {
         ui.separator();
         draw_collapsing_ui(ui, None::<()>, Some("Available"), |_| {}).body(|ui| {
-            ui.group(|ui| {
-                for (ad_idx, ad) in self.avail_dev_info_cache.midi(&self.midi_mgr).iter().enumerate() {
-                    ui.separator();
-                    ui.collapsing(format!("({}) {}", ad_idx, ad.name), |ui| {
-                        ad.egui_immutable((), ui);
-                    });
-                }
-            });
+            for (ad_idx, ad) in self.avail_dev_info_cache.midi(&self.midi_mgr).iter().enumerate() {
+                ui.separator();
+                ui.collapsing(format!("({}) {}", ad_idx, ad.name), |ui| {
+                    ad.egui_immutable((), ui);
+                });
+            }
         });
         ui.separator();
         draw_collapsing_ui(ui, None::<()>, Some("Matchers"), |ui| {
@@ -1252,40 +1235,38 @@ impl GuiMain {
         })
         .body(|ui| {
             if !self.cfg.devices.midi.is_empty() {
-                ui.group(|ui| {
-                    let keys = self.cfg.devices.midi.keys().cloned().collect::<Vec<_>>();
-                    for dmk in keys {
+                let keys = self.cfg.devices.midi.keys().cloned().collect::<Vec<_>>();
+                for dmk in keys {
+                    ui.separator();
+                    draw_collapsing_ui(ui, None::<()>, Some(&dmk), |ui| {
                         ui.separator();
-                        draw_collapsing_ui(ui, None::<()>, Some(&dmk), |ui| {
-                            ui.separator();
-                            self.draw_key_edit_gui(ui, &dmk, false);
-                            ui.separator();
-                            self.draw_device_remove_button(ui, &dmk, false);
-                        })
-                        .body(|ui| {
-                            ui.separator();
-                            let available_midi = self.avail_dev_info_cache.midi(&self.midi_mgr);
-                            Self::draw_matching_available_devices(
-                                available_midi,
-                                self.cfg.devices.midi.get(&dmk).unwrap(),
-                                ui,
-                            );
-                            ui.separator();
+                        self.draw_key_edit_gui(ui, &dmk, false);
+                        ui.separator();
+                        self.draw_device_remove_button(ui, &dmk, false);
+                    })
+                    .body(|ui| {
+                        ui.separator();
+                        let available_midi = self.avail_dev_info_cache.midi(&self.midi_mgr);
+                        Self::draw_matching_available_devices(
+                            available_midi,
+                            self.cfg.devices.midi.get(&dmk).unwrap(),
+                            ui,
+                        );
+                        ui.separator();
 
-                            if let Some(cmd) = self
-                                .cfg
-                                .devices
-                                .midi
-                                .get_mut(&dmk)
-                                .unwrap()
-                                .egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui)
-                            {
-                                // dbg!(&cmd);
-                                self.submit_post_draw_cmd(cmd);
-                            }
-                        });
-                    }
-                });
+                        if let Some(cmd) = self
+                            .cfg
+                            .devices
+                            .midi
+                            .get_mut(&dmk)
+                            .unwrap()
+                            .egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui)
+                        {
+                            // dbg!(&cmd);
+                            self.submit_post_draw_cmd(cmd);
+                        }
+                    });
+                }
             }
         });
     }
@@ -1347,55 +1328,54 @@ impl GuiMain {
         })
         .body(|ui| {
             if !self.cfg.devices.hid.is_empty() {
-                ui.group(|ui| {
-                    let keys: Vec<String> = self
-                        .cfg
-                        .devices
-                        .hid
-                        .iter()
-                        .filter(|d| d.1.is_a_virtual())
-                        .map(|(k, _)| k.clone())
-                        .collect();
-                    for dmk in keys {
+
+                let keys: Vec<String> = self
+                    .cfg
+                    .devices
+                    .hid
+                    .iter()
+                    .filter(|d| d.1.is_a_virtual())
+                    .map(|(k, _)| k.clone())
+                    .collect();
+                for dmk in keys {
+                    ui.separator();
+                    draw_collapsing_ui(ui, None::<()>, Some(&dmk), |ui| {
                         ui.separator();
-                        draw_collapsing_ui(ui, None::<()>, Some(&dmk), |ui| {
-                            ui.separator();
-                            self.draw_key_edit_gui(ui, &dmk, true);
-                            ui.separator();
-                            self.draw_device_remove_button(ui, &dmk, true);
-                        })
-                        .body(|ui| {
-                            if let Some(out) = self
-                                .cfg
-                                .devices
-                                .hid
-                                .get_mut(&dmk)
-                                .unwrap()
-                                .egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui)
-                            {
-                                let submit_post_draw = matches!(
-                                    out,
-                                    GuiCmd::DeviceMatcherRename(..) /* TODO: control matcher renaming, when added, goes here to */
-                                );
+                        self.draw_key_edit_gui(ui, &dmk, true);
+                        ui.separator();
+                        self.draw_device_remove_button(ui, &dmk, true);
+                    })
+                    .body(|ui| {
+                        if let Some(out) = self
+                            .cfg
+                            .devices
+                            .hid
+                            .get_mut(&dmk)
+                            .unwrap()
+                            .egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui)
+                        {
+                            let submit_post_draw = matches!(
+                                out,
+                                GuiCmd::DeviceMatcherRename(..) /* TODO: control matcher renaming, when added, goes here to */
+                            );
 
-                                let cmd_seq = GuiCmd::CmdSeqence(vec![
-                                    out,
-                                    GuiCmd::BreakOnErr,
-                                    GuiCmd::ChangeVirtualHid(GuiCmdChangeVirtualHid {
-                                        virtual_hid_key: dmk.clone(),
-                                    })
-                                    .into(),
-                                ]);
+                            let cmd_seq = GuiCmd::CmdSeqence(vec![
+                                out,
+                                GuiCmd::BreakOnErr,
+                                GuiCmd::ChangeVirtualHid(GuiCmdChangeVirtualHid {
+                                    virtual_hid_key: dmk.clone(),
+                                })
+                                .into(),
+                            ]);
 
-                                if submit_post_draw {
-                                    self.submit_post_draw_cmd(cmd_seq);
-                                } else {
-                                    self.submit_pending_cmd(cmd_seq);
-                                }
-                            };
-                        });
-                    }
-                });
+                            if submit_post_draw {
+                                self.submit_post_draw_cmd(cmd_seq);
+                            } else {
+                                self.submit_pending_cmd(cmd_seq);
+                            }
+                        };
+                    });
+                };
             }
         });
         ui.separator();
@@ -1416,41 +1396,39 @@ impl GuiMain {
         .body(|ui| {
             let mut hid_matcher_update_cmd = None;
             if !self.cfg.devices.hid.is_empty() {
-                ui.group(|ui| {
-                    let keys: Vec<String> = self
-                        .cfg
-                        .devices
-                        .hid
-                        .iter()
-                        .filter(|d| !d.1.is_a_virtual())
-                        .map(|(k, _)| k.clone())
-                        .collect();
-                    for dmk in keys {
+                let keys: Vec<String> = self
+                    .cfg
+                    .devices
+                    .hid
+                    .iter()
+                    .filter(|d| !d.1.is_a_virtual())
+                    .map(|(k, _)| k.clone())
+                    .collect();
+                for dmk in keys {
+                    ui.separator();
+                    draw_collapsing_ui(ui, None::<()>, Some(&dmk), |ui| {
                         ui.separator();
-                        draw_collapsing_ui(ui, None::<()>, Some(&dmk), |ui| {
-                            ui.separator();
-                            self.draw_key_edit_gui(ui, &dmk, false);
-                            ui.separator();
-                            self.draw_device_remove_button(ui, &dmk, false);
-                        })
-                        .body(|ui| {
-                            ui.separator();
-                            Self::draw_matching_available_devices(
-                                self.avail_dev_info_cache.hid(&self.hid_mgr),
-                                self.cfg.devices.hid.get_mut(&dmk).unwrap(),
-                                ui,
-                            );
-                            ui.separator();
+                        self.draw_key_edit_gui(ui, &dmk, false);
+                        ui.separator();
+                        self.draw_device_remove_button(ui, &dmk, false);
+                    })
+                    .body(|ui| {
+                        ui.separator();
+                        Self::draw_matching_available_devices(
+                            self.avail_dev_info_cache.hid(&self.hid_mgr),
+                            self.cfg.devices.hid.get_mut(&dmk).unwrap(),
+                            ui,
+                        );
+                        ui.separator();
 
-                            let dm = self.cfg.devices.hid.get_mut(&dmk).unwrap();
-                            ui.label(format!("Matcher classification: {}", dm.get_classification()));
-                            if let Some(cmd) = dm.egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui) {
-                                dm.update_classification();
-                                hid_matcher_update_cmd = Some(cmd);
-                            }
-                        });
-                    }
-                });
+                        let dm = self.cfg.devices.hid.get_mut(&dmk).unwrap();
+                        ui.label(format!("Matcher classification: {}", dm.get_classification()));
+                        if let Some(cmd) = dm.egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui) {
+                            dm.update_classification();
+                            hid_matcher_update_cmd = Some(cmd);
+                        }
+                    });
+                }
             }
             if let Some(command) = &hid_matcher_update_cmd {
                 self.submit_post_draw_cmd(command.clone());
@@ -1477,56 +1455,54 @@ impl GuiMain {
         ui.separator();
         for v in &mut self.cfg.variables {
             ui.separator();
-            ui.group(|ui| {
-                ui.horizontal(|ui| {
-                    if self.transient_states_variable_edit.contains_key(v.0) {
-                        let data = self.transient_states_variable_edit.get_mut(v.0).unwrap();
-                        if ui
-                            .button(egui_phosphor::bold::CHECK_FAT.to_string())
-                            .on_hover_text("Submit")
-                            .clicked()
-                        {
-                            variable_edit_to_submit = Some(GuiCmdVariableChange {
-                                old_key: v.0.into(),
-                                new_key: data.edited_key.clone(),
-                                new_definition: data.edited_definition.clone(),
-                            });
-                        }
 
-                        ui.text_edit_singleline(&mut data.edited_key);
-                        data.edited_definition.egui(GuiInKinds::Edit, ui);
-                    } else {
-                        if ui
-                            .button(egui_phosphor::bold::PENCIL.to_string())
-                            .on_hover_text("Edit")
-                            .clicked()
-                        {
-                            let _ = self.transient_states_variable_edit.insert(
-                                v.0.to_string(),
-                                GuiTransientStateItemEdit {
-                                    edited_key: v.0.clone(),
-                                    edited_definition: v.1.clone(),
-                                },
-                            );
-                        }
-                        ui.separator();
-                        ui.label(egui::RichText::new(v.0).strong().monospace());
-                        ui.separator();
-                        variable_value_changed |= v.1.egui(GuiInKinds::Display, ui);
-                    }
-                    ui.separator();
+            ui.horizontal(|ui| {
+                if self.transient_states_variable_edit.contains_key(v.0) {
+                    let data = self.transient_states_variable_edit.get_mut(v.0).unwrap();
                     if ui
-                        .button(egui_phosphor::bold::TRASH.to_string())
-                        .on_hover_text("Remove (will not apply if referenced in mappings)")
+                        .button(egui_phosphor::bold::CHECK_FAT.to_string())
+                        .on_hover_text("Submit")
                         .clicked()
                     {
-                        variable_remove_to_submit = Some(GuiCmdVariableRemove {
-                            variable_key: v.0.clone(),
+                        variable_edit_to_submit = Some(GuiCmdVariableChange {
+                            old_key: v.0.into(),
+                            new_key: data.edited_key.clone(),
+                            new_definition: data.edited_definition.clone(),
                         });
                     }
-                });
+
+                    ui.text_edit_singleline(&mut data.edited_key);
+                    data.edited_definition.egui(GuiInKinds::Edit, ui);
+                } else {
+                    if ui
+                        .button(egui_phosphor::bold::PENCIL.to_string())
+                        .on_hover_text("Edit")
+                        .clicked()
+                    {
+                        let _ = self.transient_states_variable_edit.insert(
+                            v.0.to_string(),
+                            GuiTransientStateItemEdit {
+                                edited_key: v.0.clone(),
+                                edited_definition: v.1.clone(),
+                            },
+                        );
+                    }
+                    ui.separator();
+                    ui.label(egui::RichText::new(v.0).strong().monospace());
+                    ui.separator();
+                    variable_value_changed |= v.1.egui(GuiInKinds::Display, ui);
+                }
+                ui.separator();
+                if ui
+                    .button(egui_phosphor::bold::TRASH.to_string())
+                    .on_hover_text("Remove (will not apply if referenced in mappings)")
+                    .clicked()
+                {
+                    variable_remove_to_submit = Some(GuiCmdVariableRemove {
+                        variable_key: v.0.clone(),
+                    });
+                }
             });
-            ui.separator();
         }
 
         if let Some(variable_edit_to_submit) = variable_edit_to_submit {
