@@ -473,13 +473,11 @@ impl<'s> DrawEgui<'s> for AvailableHIDDeviceInfo {
     }
 
     fn egui_immutable(&self, _gui_in: Self::In, ui: &mut egui::Ui) {
-        ui.group(|ui| {
-            ui.separator();
-            ui.label(format!("Device name: {}", self.name));
-            ui.separator();
-            ui.label(format!("Classification: {}", self.classification));
-            ui.separator();
-            ui.label(format!("Path: {}", self.path.to_string_lossy()));
-        });
+        ui.separator();
+        ui.label(format!("Device name: {}", self.name));
+        ui.separator();
+        ui.label(format!("Classification: {}", self.classification));
+        ui.separator();
+        ui.label(format!("Path: {}", self.path.to_string_lossy()));
     }
 }

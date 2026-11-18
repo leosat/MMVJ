@@ -291,8 +291,6 @@ impl<'s> DrawEgui<'s> for AvailableMidiDeviceInfo {
     type In = ();
     type Out = ();
     fn egui(&mut self, _: Self::In, ui: &mut egui::Ui) -> Self::Out {
-        ui.group(|ui| {
-            ui.label(format!("Device name: {}, Port index: {}", self.name, self.port_index));
-        });
+        ui.label(format!("Device name: {}, Port index: {}", self.name, self.port_index));
     }
 }
