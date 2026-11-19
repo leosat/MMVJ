@@ -392,8 +392,6 @@ where
                             .value_identity_decorate(egui::RichText::new(port.port_get_identity_str())),
                     );
 
-                    ui.label("Value:");
-
                     ui.add(
                         egui::Slider::new(
                             &mut port.port_get_numeric_value(None::<&()>),
@@ -481,7 +479,6 @@ where
                 return None;
             }
 
-            ui.label("Value:");
             let mut value = this.get_numeric_value();
 
             let value_slider = ui.add(
