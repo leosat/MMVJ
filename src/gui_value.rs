@@ -488,13 +488,9 @@ where
                     .step_by(0.0001),
             );
 
-            if value_slider.changed() && !value_slider.dragged() {
-                if !this.get_device_control_matcher_ref().is_some() {
-                    this.set_numeric_value(value);
-                }
-                if this.value_is_static() {
-                    changed = true;
-                }
+            if value_slider.changed() && !value_slider.dragged() &&  this.value_is_static() {
+                changed = true;
+                this.set_numeric_value(value);
             }
 
             // --
