@@ -1305,8 +1305,8 @@ impl GuiMain {
             ui.label("No available devices are matched by this matcher.");
         } else {
             ui.collapsing(format!("Matching available devices"), |ui| {
-                mads.iter_mut().for_each(|ad| {
-                    ui.collapsing(ad.get_name().to_owned(), |ui| {
+                mads.iter_mut().enumerate().for_each(|(ad_idx, ad)| {
+                    ui.collapsing(format!("({}) {}", ad_idx, ad.get_name().to_owned()), |ui| {
                         ad.egui_immutable((), ui);
                     });
                 });
