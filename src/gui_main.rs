@@ -16,6 +16,7 @@ use crate::gui_common::{
 use crate::gui_common::{GuiCmdDeviceKeyRename, GuiCmdDeviceMatcherRemove};
 use crate::gui_device::GuiInDeviceCfg;
 use crate::gui_mapping::DndJobMoveTfmStep_Visitor;
+use crate::gui_style::GUI_STYLE_DARK;
 use crate::gui_style::GUI_STYLE_LIGHT;
 use crate::gui_style::GuiStyle;
 use crate::gui_telemetry_graph::GuiTelemetryGraphStates;
@@ -59,7 +60,6 @@ pub(super) fn run(
 ) -> anyhow::Result<()> {
     let eframe_result = {
         let mapping_engine_cmd = cmd_tx.clone();
-        let gui_style = &GUI_STYLE_LIGHT;
 
         eframe::run_native(
             crate::config::APP_LONG_NAME,
@@ -91,11 +91,6 @@ pub(super) fn run(
                 ..Default::default()
             },
             Box::new(move |cc| {
-                // let ctx = cc.egui_ctx;
-                // ctx.options_mut(|o| o.input_options.)
-                // -----------------------------------------------------
-                (gui_style.setup_creation_context)(cc);
-
                 // -----------------------------------------------------
                 let mut app = GuiMain {
                     cfg_undo: GuiCfgUndo::new_with_cfg(&cfg, cc.egui_ctx.time()),
@@ -132,26 +127,27 @@ pub(super) fn run(
                     hid_mgr: HidManager::new(DebugLevel::Off, false).expect("Can't create joysticks manager"),
                     _running_virtual_hid: None,
                     avail_dev_info_cache: Default::default(),
-                    style: GUI_STYLE_LIGHT,
+                    style: GUI_STYLE_LIGHT.clone(),
                     system_requirements_chk_status: check_system_requirements().err().map(|e| format!("{e}")),
                     gui_tab_mappings_windowed_mappings: Default::default(),
                 };
 
-                app.cfg_yaml = app.get_config_string();
                 if let Some(storage) = cc.storage {
                     log::info!("Persistent storage is available ... ");
                     let saved: Option<GuiMainSavedState> = eframe::get_value(storage, eframe::APP_KEY);
                     if let Some(saved) = saved {
                         // dbg!(&saved);
                         log::info!("Restoring Gui state ... ");
-                        app.fill_saved_state(&saved);
+                        app.fill_from_saved_state(&saved);
                         log::info!("Done restoring Gui state ... ");
                     }
                 } else {
                     log::warn!("Persistent storage is not accessible, will not restore Gui state.");
                 }
 
+                app.style.setup_egui_ctx(&cc.egui_ctx);
                 app.show_monitors |= monitors_only;
+                app.update_cfg_yaml();
 
                 Ok(Box::new(app))
             }),
@@ -187,6 +183,7 @@ pub(super) struct GuiTransientStateItemEdit<T> {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub(super) struct GuiMainSavedState {
+    style: GuiStyle,
     current_opened_tab: GuiMainTabs,
     gui_tab_mappings_current_opened_mapping_idx: usize,
     show_monitors: bool,
@@ -198,6 +195,7 @@ impl From<&mut GuiMain> for GuiMainSavedState {
             current_opened_tab: app.current_opened_tab,
             gui_tab_mappings_current_opened_mapping_idx: app.gui_tab_mappings_current_opened_mapping_idx,
             show_monitors: app.show_monitors,
+            style: app.style.clone(),
         }
     }
 }
@@ -501,6 +499,16 @@ impl eframe::App for GuiMain {
                     });
                     ui.separator();
                     ui.menu_button("View", |ui| {
+                        ui.separator();
+                        if ui.button("Use light theme").clicked() {
+                            self.style = GUI_STYLE_LIGHT;
+                            self.style.setup_egui_ctx(ui.ctx());
+                        }
+                        ui.separator();
+                        if ui.button("Use dark theme").clicked() {
+                            self.style = GUI_STYLE_DARK;
+                            self.style.setup_egui_ctx(ui.ctx());
+                        }
                         ui.separator();
                         if ui.button("Reset UI cache").clicked() {
                             ui.data_mut(|d| d.clear());
@@ -883,7 +891,8 @@ impl GuiMain {
         self.pending_cmds.clear();
     }
 
-    pub(super) fn fill_saved_state(&mut self, saved: &GuiMainSavedState) {
+    pub(super) fn fill_from_saved_state(&mut self, saved: &GuiMainSavedState) {
+        self.style = saved.style.clone();
         self.current_opened_tab = saved.current_opened_tab;
         self.gui_tab_mappings_current_opened_mapping_idx = saved.gui_tab_mappings_current_opened_mapping_idx;
         self.show_monitors = saved.show_monitors;

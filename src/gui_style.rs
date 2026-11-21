@@ -1,8 +1,29 @@
-use eframe::CreationContext;
 use egui::Color32;
+use serde::{Deserialize, Serialize};
+
+// ----------------------------------------------------
+pub(crate) const GUI_STYLE_DARK: GuiStyle = GuiStyle {
+    kind: GuiStyleKind::Dark,
+    //---
+    value_identity_text_color: egui::Color32::CYAN,
+    value_identity_bg_color: egui::Color32::DARK_GRAY,
+    //---
+    tfm_io_info_bg_color_enabled: egui::Color32::from_black_alpha(0),
+    tfm_io_info_color_enabled: egui::Color32::from_rgb(0, 240, 240),
+    tfm_title_bg_color_enabled: egui::Color32::LIGHT_GRAY,
+    tfm_title_color_enabled: egui::Color32::BLACK,
+    tfm_title_font_size: 16.0,
+    tfm_title_bg_color_disabled: egui::Color32::LIGHT_GRAY,
+    tfm_title_color_disabled: egui::Color32::DARK_GRAY,
+};
 
 // ----------------------------------------------------
 pub(crate) const GUI_STYLE_LIGHT: GuiStyle = GuiStyle {
+    kind: GuiStyleKind::Light,
+    //---
+    value_identity_text_color: egui::Color32::BLUE,
+    value_identity_bg_color: egui::Color32::from_rgba_unmultiplied_const(0, 200, 0, 30),
+    //---
     tfm_io_info_bg_color_enabled: egui::Color32::from_black_alpha(0),
     tfm_io_info_color_enabled: egui::Color32::from_rgb(0, 140, 140),
     tfm_title_bg_color_enabled: egui::Color32::DARK_GRAY,
@@ -10,25 +31,34 @@ pub(crate) const GUI_STYLE_LIGHT: GuiStyle = GuiStyle {
     tfm_title_font_size: 16.0,
     tfm_title_bg_color_disabled: egui::Color32::LIGHT_GRAY,
     tfm_title_color_disabled: egui::Color32::DARK_GRAY,
-    setup_creation_context: &|cc: &'_ CreationContext| {
-        // cc.egui_ctx..all_styles_mut(|s| s.visuals = get_visuals_high_contrast_light1());
-        // cc.egui_ctx.all_styles_mut(|s| s.visuals = get_visuals_w95_1());
-
-        cc.egui_ctx.set_theme(egui::Theme::from_dark_mode(false));
-        cc.egui_ctx.set_pixels_per_point(1.2);
-        {
-            let drag_value_style_name = "drag_value";
-            cc.egui_ctx.all_styles_mut(|s| {
-                s.text_styles.insert(
-                    egui::TextStyle::Name(drag_value_style_name.into()),
-                    egui::FontId::new(10.0, egui::FontFamily::Monospace),
-                );
-                s.drag_value_text_style = egui::TextStyle::Name(drag_value_style_name.into());
-            });
-        }
-        cc.egui_ctx.set_fonts(font_definitions_with_phosphor_fonts());
-    },
 };
+
+fn setup_egui_ctx_light(ctx: &egui::Context) {
+    // cc.egui_ctx..all_styles_mut(|s| s.visuals = get_visuals_high_contrast_light1());
+    // cc.egui_ctx.all_styles_mut(|s| s.visuals = get_visuals_w95_1());
+    ctx.set_theme(egui::Theme::from_dark_mode(false));
+    setup_egui_cc_common(ctx);
+}
+
+fn setup_egui_ctx_dark(ctx: &egui::Context) {
+    ctx.set_theme(egui::Theme::from_dark_mode(true));
+    setup_egui_cc_common(ctx);
+}
+
+fn setup_egui_cc_common(ctx: &egui::Context) {
+    ctx.set_pixels_per_point(1.2);
+    {
+        let drag_value_style_name = "drag_value";
+        ctx.all_styles_mut(|s| {
+            s.text_styles.insert(
+                egui::TextStyle::Name(drag_value_style_name.into()),
+                egui::FontId::new(10.0, egui::FontFamily::Monospace),
+            );
+            s.drag_value_text_style = egui::TextStyle::Name(drag_value_style_name.into());
+        });
+    }
+    ctx.set_fonts(font_definitions_with_phosphor_fonts());
+}
 
 fn font_definitions_with_phosphor_fonts() -> egui::FontDefinitions {
     let mut fonts = egui::FontDefinitions::default();
@@ -67,9 +97,20 @@ fn font_definitions_with_phosphor_fonts() -> egui::FontDefinitions {
     fonts
 }
 
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+pub(crate) enum GuiStyleKind {
+    #[default]
+    Light,
+    Dark,
+}
+
 // ----------------------------------------------------
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct GuiStyle {
-    pub(crate) setup_creation_context: &'static dyn Fn(&'_ CreationContext),
+    pub(crate) kind: GuiStyleKind,
+    // ----
+    pub(crate) value_identity_text_color: egui::Color32,
+    pub(crate) value_identity_bg_color: egui::Color32,
     // ----
     pub(crate) tfm_io_info_bg_color_enabled: egui::Color32,
     pub(crate) tfm_io_info_color_enabled: egui::Color32,
@@ -84,9 +125,15 @@ pub(crate) struct GuiStyle {
 }
 
 impl GuiStyle {
+    pub(crate) fn setup_egui_ctx(&self, ctx: &egui::Context) {
+        match self.kind {
+            GuiStyleKind::Light => setup_egui_ctx_light(ctx),
+            GuiStyleKind::Dark => setup_egui_ctx_dark(ctx),
+        }
+    }
     pub(crate) fn value_identity_decorate(&self, vi: egui::RichText) -> egui::RichText {
-        vi.color(egui::Color32::BLUE)
-            .background_color(egui::Color32::GREEN.gamma_multiply(0.1))
+        vi.color(self.value_identity_text_color)
+            .background_color(self.value_identity_bg_color)
             .strong()
     }
 
