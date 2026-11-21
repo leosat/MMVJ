@@ -567,6 +567,8 @@ pub(crate) async fn owned_hid_device_thread(
                     DeviceThreadCmd::SetControlValue(control_type, control_value) => {
                         set_hid_control_virtual_owned_device(platform_device_stream.device_mut(), control_type, control_value);
                     }
+                    DeviceThreadCmd::Grab |
+                    DeviceThreadCmd::UnGrab => log::error!("Grabbing owned virtual device is not supported."),
                 }
             },
             Some(Ok(event)) =  platform_device_stream.next_event().with_cancellation_token(&stop_token) => {

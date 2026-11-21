@@ -9,7 +9,7 @@ use crate::device_and_device_manager::{
 };
 use crate::hid_device::{HidDevice, HidDeviceEvent, HidVirtualDeviceCreationSpec};
 use crate::schemas_common::ObjId;
-use crate::schemas_hid::{HidDeviceCfg, HidDeviceClassificationCfg, HidVirtualOrMatcherParamsCfg};
+use crate::schemas_hid::{HidDeviceCfg, HidDeviceClassificationCfg, HidGrabbing, HidVirtualOrMatcherParamsCfg};
 use anyhow::{Result, bail};
 use enumflags2::BitFlags;
 use evdev::{BusType, EventType};
@@ -389,6 +389,21 @@ impl DeviceManagerCommon for HidManager {
             out
         };
 
+        let handle_grabbing = |device: &HidDevice| {
+            if let Some(grab) = &device_cfg.matcher_grab_ref() {
+                if let Some(grab) = grab {
+                    if matches!(grab, HidGrabbing::All) {
+                        device.grab();
+                    } else {
+                        log::warn!("Unsupported grabbing mode {:?}", grab);
+                        device.ungrab();
+                    }
+                } else {
+                    device.ungrab();
+                }
+            }
+        };
+
         if let Some(opened_device) = opened_device {
             log::info!(
                 "Device {} (matched config key {device_matcher_key}) already opened.",
@@ -406,15 +421,18 @@ impl DeviceManagerCommon for HidManager {
                     .push((Rc::clone(&opened_device), device_cfg.clone()));
             }
 
+            handle_grabbing(&*opened_device.borrow());
+
             Ok(OpenedDeviceInfo {
                 opened_device_id: opened_device.borrow().get_id(),
                 available_device_info: device_info.clone(),
             })
-        } else if let Ok(mut d) = HidDevice::open_from_path(
+        } else if let Ok(mut device) = HidDevice::open_from_path(
             device_info.path.to_str().unwrap(),
             None,
             None,
             device_matcher_key.to_owned(),
+            &device_cfg,
             self.debug,
         ) {
             log::info!(
@@ -422,13 +440,17 @@ impl DeviceManagerCommon for HidManager {
                 device_info.name,
                 device_matcher_key
             );
-            let id = d.get_id();
-            d.attach_events_listener(Some(self.per_device_event_notification_tx.clone()));
-            debug_assert_eq!(device_matcher_key.to_string(), d.get_cfg_key().to_string());
+
+            handle_grabbing(&device);
+
+            let id = device.get_id();
+            device.attach_events_listener(Some(self.per_device_event_notification_tx.clone()));
+            debug_assert_eq!(device_matcher_key.to_string(), device.get_cfg_key().to_string());
             devices
-                .entry(d.get_cfg_key().to_string())
+                .entry(device.get_cfg_key().to_string())
                 .or_default()
-                .push((Rc::new(UncheckedRefCell::new(d)), device_cfg.clone()));
+                .push((Rc::new(UncheckedRefCell::new(device)), device_cfg.clone()));
+
             Ok(OpenedDeviceInfo {
                 opened_device_id: id,
                 available_device_info: device_info.clone(),

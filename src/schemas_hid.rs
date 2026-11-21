@@ -1,7 +1,7 @@
 use crate::{
     base_num::{BaseAtomicT, BaseNumT},
     config::WithSelfSanitize,
-    device_and_device_manager::{DeviceClassification, WithDeviceClassification},
+    device_and_device_manager::{AvailableDeviceInfoIface, DeviceClassification, WithDeviceClassification},
     hid_device::{HID_AXIS_MAX_INTERVAL, sanitize_hid_name},
     mapped_controls::MappedCtls,
     mapping::WithMappingTriggerPredicate,
@@ -63,22 +63,43 @@ pub(crate) fn deserialize_jk_device_controls<'de, D: Deserializer<'de>>(
     deserialize_device_controls::<'de, D, HidControlMatcherCfg>(deserializer)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TraversableMut, Traversable, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct HidMatcherParamsCfg {
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub(crate) struct HidMatchingFilter {
     #[serde(with = "serde_regex")]
     #[schemars(with = "Option<String>")]
-    #[traverse(skip)]
     pub(crate) match_name_regex: regex::Regex,
 }
 
-impl PartialEq for HidMatcherParamsCfg {
+impl HidMatchingFilter {
+    pub(crate) fn matches_available_device(&self, available_device_info: &impl AvailableDeviceInfoIface) -> bool {
+        self.match_name_regex.is_match(available_device_info.get_name())
+    }
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, PartialEq, EnumIter, EnumString, Display)]
+pub(crate) enum HidGrabbing {
+    #[default]
+    All,
+    Subset(HidMatchingFilter),
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, TraversableMut, Traversable, JsonSchema, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct HidMatcherParamsCfg {
+    #[serde(flatten)]
+    #[traverse(skip)]
+    filter: HidMatchingFilter,
+    #[traverse(skip)]
+    grab: Option<HidGrabbing>,
+}
+
+impl PartialEq for HidMatchingFilter {
     fn eq(&self, other: &Self) -> bool {
         self.match_name_regex.as_str() == other.match_name_regex.as_str()
     }
 }
 
-impl Default for HidMatcherParamsCfg {
+impl Default for HidMatchingFilter {
     fn default() -> Self {
         Self {
             match_name_regex: regex::Regex::new(".*").unwrap(),
@@ -226,19 +247,47 @@ impl HidDeviceCfg {
         }
     }
 
-    pub(crate) fn matcher_name_regex_mut(&mut self) -> Option<&mut regex::Regex> {
+    // pub(crate) fn matcher_name_regex_mut(&mut self) -> Option<&mut regex::Regex> {
+    //     match self.params__ {
+    //         HidVirtualOrMatcherParamsCfg::VirtualDevice(_) => None,
+    //         HidVirtualOrMatcherParamsCfg::DeviceMatcher(ref mut p) => Some(&mut p.filter.match_name_regex),
+    //     }
+    // }
+
+    pub(crate) fn matcher_filter_ref(&self) -> Option<&HidMatchingFilter> {
         match self.params__ {
             HidVirtualOrMatcherParamsCfg::VirtualDevice(_) => None,
-            HidVirtualOrMatcherParamsCfg::DeviceMatcher(ref mut p) => Some(&mut p.match_name_regex),
+            HidVirtualOrMatcherParamsCfg::DeviceMatcher(ref p) => Some(&p.filter),
         }
     }
 
-    pub(crate) fn matcher_name_regex_ref(&self) -> Option<&regex::Regex> {
+    pub(crate) fn matcher_filter_mut(&mut self) -> Option<&mut HidMatchingFilter> {
         match self.params__ {
             HidVirtualOrMatcherParamsCfg::VirtualDevice(_) => None,
-            HidVirtualOrMatcherParamsCfg::DeviceMatcher(ref p) => Some(&p.match_name_regex),
+            HidVirtualOrMatcherParamsCfg::DeviceMatcher(ref mut p) => Some(&mut p.filter),
         }
     }
+
+    pub(crate) fn matcher_grab_mut(&mut self) -> Option<&mut Option<HidGrabbing>> {
+        match self.params__ {
+            HidVirtualOrMatcherParamsCfg::VirtualDevice(_) => None,
+            HidVirtualOrMatcherParamsCfg::DeviceMatcher(ref mut p) => Some(&mut p.grab),
+        }
+    }
+
+    pub(crate) fn matcher_grab_ref(&self) -> Option<&Option<HidGrabbing>> {
+        match self.params__ {
+            HidVirtualOrMatcherParamsCfg::VirtualDevice(_) => None,
+            HidVirtualOrMatcherParamsCfg::DeviceMatcher(ref p) => Some(&p.grab),
+        }
+    }
+
+    // pub(crate) fn matcher_name_regex_ref(&self) -> Option<&regex::Regex> {
+    //     match self.params__ {
+    //         HidVirtualOrMatcherParamsCfg::VirtualDevice(_) => None,
+    //         HidVirtualOrMatcherParamsCfg::DeviceMatcher(ref p) => Some(&p.filter.match_name_regex),
+    //     }
+    // }
 
     pub(crate) fn virtual_device_bus_info_ref(&self) -> Option<&HidDeviceBusSpecCfg> {
         match self.params__ {

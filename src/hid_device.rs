@@ -60,6 +60,8 @@ pub(crate) type HidDeviceEvent = DeviceEvent<HidEvent>;
 pub(crate) enum DeviceThreadCmd {
     SetExternalNotification(tokio::sync::mpsc::Sender<HidDeviceEvent>),
     SetControlValue(MappedCtls, BaseNumT),
+    Grab,
+    UnGrab,
 }
 
 //----------------------------------------------------------
@@ -242,8 +244,8 @@ pub(crate) struct HidDevice {
 
 impl CommonDeviceCfgIface for HidDeviceCfg {
     fn matches_available_device(&self, available_device_info: &impl AvailableDeviceInfoIface) -> bool {
-        self.matcher_name_regex_ref()
-            .map(|r| r.is_match(available_device_info.get_name()))
+        self.matcher_filter_ref()
+            .map(|f| f.matches_available_device(available_device_info))
             .or(self
                 .virtual_device_name_ref()
                 .map(|n| crate::hid_device::sanitize_hid_name(n) == available_device_info.get_name()))
@@ -255,6 +257,22 @@ impl CommonDeviceCfgIface for HidDeviceCfg {
 }
 
 impl HidDevice {
+    pub(crate) fn grab(&self) {
+        let _ = self
+            .client_side_thread_rx_tx
+            .1
+            .try_send(DeviceThreadCmd::Grab)
+            .inspect_err(|e| log::error!("{e}"));
+    }
+
+    pub(crate) fn ungrab(&self) {
+        let _ = self
+            .client_side_thread_rx_tx
+            .1
+            .try_send(DeviceThreadCmd::UnGrab)
+            .inspect_err(|e| log::error!("{e}"));
+    }
+
     pub(crate) fn create_virtual_device(
         cfg_key: &str,
         creation_spec: HidVirtualDeviceCreationSpec,
@@ -499,6 +517,7 @@ impl HidDevice {
             ctl_states,
             Some(virtual_device_id),
             cfg_key.to_owned(),
+            &creation_spec.cfg_spec,
             creation_spec.debug,
         )?;
 
@@ -535,6 +554,7 @@ impl HidDevice {
         ctl_states: Option<Arc<DeviceControlStates>>,
         device_id: Option<ObjId>,
         cfg_key: String,
+        _cfg: &HidDeviceCfg,
         debug: DebugLevel,
     ) -> anyhow::Result<HidDevice>
     where
@@ -544,9 +564,6 @@ impl HidDevice {
         let device_path: PathBuf = PathBuf::from_str(path)?;
 
         let device_name = platform_device.name().unwrap_or("Unknown device name").to_string();
-
-        // device.grab();
-        // device.ungrab();
 
         let ctl_states = if let Some(ctl_states) = ctl_states {
             ctl_states
@@ -712,6 +729,19 @@ impl HidDevice {
                         DeviceThreadCmd::SetControlValue(control_type, control_value) => {
                             set_hid_control_unowned_device(platform_device_stream.device_mut(), control_type, control_value);
                         }
+                        DeviceThreadCmd::Grab => {
+                            log::info!("Grabbing device {}", device_name);
+                            let _ = platform_device_stream.device_mut().grab().inspect_err(|e| log::error!("{e}"));
+                        },
+                        DeviceThreadCmd::UnGrab => {
+                            let device = platform_device_stream.device_mut();
+                            if device.is_grabbed () {
+                                log::info!("Ungrabbing device {}", device_name);
+                                let _ = device.ungrab().inspect_err(|e| log::error!("{e}"));
+                            } else {
+                                log::warn!("Device {} is not grabbed, will not ungrab", device_name);
+                            }
+                        },
                     }
                 },
                 Some(Ok(evdev_event)) = platform_device_stream.next_event().with_cancellation_token(&cancellation_token) => {

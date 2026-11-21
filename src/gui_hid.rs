@@ -9,7 +9,9 @@ use crate::hid_manager::AvailableHIDDeviceInfo;
 use crate::hid_owned_and_ffb::{X_AXIS_IDX, Y_AXIS_IDX};
 use crate::mapped_controls::MappedCtls;
 use crate::schemas_control_matcher::ControlMatchers;
-use crate::schemas_hid::{HIDDeviceForceFeedbackCfg, HidControlMatcherCfg, HidDeviceCfg};
+use crate::schemas_hid::{
+    HIDDeviceForceFeedbackCfg, HidControlMatcherCfg, HidDeviceCfg, HidGrabbing, HidMatchingFilter,
+};
 use crate::schemas_value::WithLastKnownIO;
 use regex::Regex;
 use strum::IntoEnumIterator;
@@ -165,6 +167,8 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                 let is_virtual = self.get_classification().is_a_virtual();
                 ui.separator();
                 changed |= ui.checkbox(&mut self.enabled, "Enabled").changed();
+                let mut gui_out = None;
+                // let gui_out_mut = &mut gui_out;
                 if is_virtual {
                     ui.separator();
                     changed |= ui
@@ -300,25 +304,14 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                         }
                     }
                 } else {
-                    if let Some(regex_mut) = self.matcher_name_regex_mut() {
-                        ui.separator();
-                        ui.horizontal(|ui| {
-                            ui.label("Device name matching regex: ");
-                            let mut regex_string = regex_mut.to_string();
-                            if ui.text_edit_singleline(&mut regex_string).changed() {
-                                if let Ok(regex) = Regex::new(&regex_string) {
-                                    changed = true;
-                                    *regex_mut = regex;
-                                    log::info!("Compiled regex from string {regex_string}");
-                                } else {
-                                    log::error!("Failed to compile regex from string {regex_string}");
-                                }
-                            }
-                        });
-                    }
+                    changed |= self.matcher_filter_mut().is_some_and(|filter| filter.egui((), ui));
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        ui.label("Grabbing: ");
+                        changed |= self.matcher_grab_mut().is_some_and(|mut v| v.egui((), ui));
+                    });
                 }
 
-                let mut gui_out = None;
                 ui.separator();
                 ui.collapsing("Controls", |ui| {
                     let mut update_classification = false;
@@ -411,6 +404,136 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                 gui_out
             }
         }
+    }
+}
+
+impl<'s> DrawEgui<'s> for HidGrabbing {
+    type In = ();
+    type Out = bool;
+
+    fn egui(&mut self, _gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+        let mut changed = false;
+        ui.horizontal(|ui| {
+            for grab_mode in HidGrabbing::iter() {
+                ui.scope(|ui| {
+                    if ui
+                        .add_enabled(
+                            matches!(grab_mode, HidGrabbing::All),
+                            egui::Button::selectable(
+                                std::mem::discriminant(self) == std::mem::discriminant(&grab_mode),
+                                format!("{}", grab_mode),
+                            ),
+                        )
+                        .clicked()
+                    {
+                        *self = grab_mode.clone();
+                        changed = true;
+                    }
+                });
+                if matches!(self, HidGrabbing::Subset(..)) {
+                    ui.label("Grabbing a subset of matching devices is not yet implemented.");
+                }
+            }
+        });
+
+        changed
+    }
+}
+
+impl<'s> DrawEgui<'s> for &mut Option<HidGrabbing> {
+    type In = ();
+    type Out = bool;
+
+    fn egui(&mut self, _gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+        let mut changed = false;
+        let mut canceled = false;
+        if let Some(grab) = self {
+            changed |= grab.egui((), ui);
+            ui.separator();
+            if ui
+                .button(egui_phosphor::regular::TRASH)
+                .on_hover_text("Disable matching devices grabbing")
+                .clicked()
+            {
+                **self = None;
+                changed = true;
+            }
+        } else {
+            let enabling_in_progess_id = ui.scope_id().with("grabbing enabling in progress");
+            let enabling_in_progress = ui.data(|d| d.get_temp::<bool>(enabling_in_progess_id).unwrap_or_default());
+            if !enabling_in_progress
+                && ui
+                    .button(egui_phosphor::regular::HAND_GRABBING)
+                    .on_hover_text("Enable matching devices grabbing")
+                    .clicked()
+            {
+                ui.data_mut(|d| d.insert_temp(enabling_in_progess_id, true));
+            } else if enabling_in_progress {
+                egui::Modal::new(enabling_in_progess_id.with("modal")).show(ui.ctx(), |ui| {
+                    ui.set_width(400.0);
+                    ui.label("Choose grabbing mode:");
+                    ui.separator();
+                    let grab_setup_id = enabling_in_progess_id.with("setup");
+                    let mut setup = ui.data_mut(|d| {
+                        d.get_temp_mut_or_insert_with(grab_setup_id, HidGrabbing::default)
+                            .clone()
+                    });
+                    if setup.egui((), ui) {
+                        ui.data_mut(|d| d.insert_temp(grab_setup_id, setup.clone()));
+                    }
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        if ui.button("Don't grab, cancel").clicked() {
+                            **self = None;
+                            canceled = true;
+                        }
+                        ui.separator();
+                        if ui
+                            .button("Grab em all!")
+                            .on_hover_text(
+                                "Warning! This can make all the corresponding devices inaccessible \
+                                    while app is running!",
+                            )
+                            .clicked()
+                        {
+                            **self = Some(setup);
+                            changed = true;
+                        }
+                    });
+                    if changed || canceled {
+                        ui.data_mut(|d| d.remove_temp::<bool>(grab_setup_id));
+                    }
+                });
+                if changed || canceled {
+                    ui.data_mut(|d| d.remove_temp::<bool>(enabling_in_progess_id));
+                }
+            }
+        }
+        changed
+    }
+}
+
+impl<'s> DrawEgui<'s> for HidMatchingFilter {
+    type In = ();
+    type Out = bool;
+
+    fn egui(&mut self, _gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+        let mut changed = false;
+        ui.separator();
+        ui.horizontal(|ui| {
+            ui.label("Device name matching regex: ");
+            let mut regex_string = self.match_name_regex.to_string();
+            if ui.text_edit_singleline(&mut regex_string).changed() {
+                if let Ok(regex) = Regex::new(&regex_string) {
+                    changed = true;
+                    self.match_name_regex = regex;
+                    log::info!("Compiled regex from string {regex_string}");
+                } else {
+                    log::error!("Failed to compile regex from string {regex_string}");
+                }
+            }
+        });
+        changed
     }
 }
 
