@@ -1055,7 +1055,11 @@ impl GuiMain {
             }
             GuiCmd::ConfigChangeDriverRestart => {
                 self.execute_gui_command(GuiCmd::ConfigChangeSimple, ui)?;
-                self.send_driver_cmd(DriverCmd::Reload);
+                let (tx, rx) = std::sync::mpsc::channel::<()>();
+                self.send_driver_cmd(DriverCmd::Reload { sync_tx: Some(tx) });
+                let _ = rx
+                    .recv()
+                    .inspect_err(|e| log::error!("Failed to wait for sync from driver after driver reload: {e}"));
             }
             GuiCmd::DragAndDrop(GuiDndJob::MoveTfmStep(dnd_job)) => {
                 let mut dnd_visitor = DndJobMoveTfmStep_Visitor {
@@ -1086,7 +1090,7 @@ impl GuiMain {
                 self.send_driver_cmd(DriverCmd::ChangeVirtualHid {
                     cfg: self.cfg.clone(),
                     virtual_hid_key: virtual_hid_key.clone(),
-                    report_done_tx: tx,
+                    sync_tx: tx,
                 });
                 let _ = rx
                     .recv_timeout(Duration::from_millis(RX_TIMEOUT_MS))
@@ -1103,7 +1107,7 @@ impl GuiMain {
                         GuiCmd::LoadCfgBlank() => crate::driver::LoadCfgSource::Blank(),
                         _ => unreachable!(),
                     },
-                    resp_tx,
+                    cfg_tx: resp_tx,
                 });
 
                 match resp_rx.recv_timeout(Duration::from_millis(RX_TIMEOUT_MS)) {

@@ -35,6 +35,13 @@ pub(crate) enum LoadCfgSource {
     Blank(),
 }
 
+pub(crate) type DriverResponseOneShotSync = std::sync::mpsc::Sender<()>;
+pub(crate) type DriverResponseOneShotCfg = std::sync::mpsc::Sender<Result<Config, String>>;
+enum DriverResponseOneShotChannels {
+    Sync(DriverResponseOneShotSync),
+    Cfg(DriverResponseOneShotCfg),
+}
+
 #[derive(Debug, Clone)]
 pub(crate) enum DriverCmd {
     ChangeConfigSimple {
@@ -43,7 +50,7 @@ pub(crate) enum DriverCmd {
     ChangeVirtualHid {
         cfg: Config,
         virtual_hid_key: String,
-        report_done_tx: std::sync::mpsc::Sender<()>,
+        sync_tx: DriverResponseOneShotSync,
     },
     ChangeMappings {
         mappings: Option<Vec<Mapping>>,
@@ -61,9 +68,11 @@ pub(crate) enum DriverCmd {
     },
     LoadCfg {
         cfg_source: LoadCfgSource,
-        resp_tx: std::sync::mpsc::Sender<Result<Config, String>>,
+        cfg_tx: DriverResponseOneShotCfg,
     },
-    Reload,
+    Reload {
+        sync_tx: Option<DriverResponseOneShotSync>,
+    },
     #[allow(unused)]
     ReloadWithInitialCfg,
     #[allow(unused)]
@@ -74,11 +83,6 @@ impl PartialEq for DriverCmd {
     fn eq(&self, other: &Self) -> bool {
         core::mem::discriminant(self) == core::mem::discriminant(other)
     }
-}
-
-enum DriverResponseOneShotChannels {
-    Empty(std::sync::mpsc::Sender<()>),
-    Config(std::sync::mpsc::Sender<Result<Config, String>>),
 }
 
 #[derive(Subcommand, Clone)]
@@ -354,10 +358,10 @@ pub async fn run(
 
         if let Some(tx) = post_restart_response_channel {
             match tx {
-                DriverResponseOneShotChannels::Empty(tx) => {
+                DriverResponseOneShotChannels::Sync(tx) => {
                     let _ = tx.send(()).inspect_err(|e| log::error!("{e}"));
                 }
-                DriverResponseOneShotChannels::Config(tx) => {
+                DriverResponseOneShotChannels::Cfg(tx) => {
                     let _ = tx
                         .send(Ok(cfg_mgr.cfg_ref().clone()))
                         .inspect_err(|e| log::error!("{e}"));
@@ -572,7 +576,10 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                     }
                     // command_channel_rx.close(); // NB: the channel would be closed anyways after last sender is out, but...
                 }
-                DriverCmd::LoadCfg { cfg_source, resp_tx } => {
+                DriverCmd::LoadCfg {
+                    cfg_source,
+                    cfg_tx: resp_tx,
+                } => {
                     let hid_mgr_full_stop = || {
                         let _ = hid_mgr
                             .stop(DeviceManagerStopMode::StopAll)
@@ -618,7 +625,7 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
 
                     let _ = mapping_engine.stop().inspect_err(|e| log::error!("{e}"));
                     log::info!("Sending new config to Gui");
-                    post_reload_report_back_tx = Some(DriverResponseOneShotChannels::Config(resp_tx));
+                    post_reload_report_back_tx = Some(DriverResponseOneShotChannels::Cfg(resp_tx));
                     main_loop_action = DriverMainLoopAction::GoToStartWithCurrentCfg;
                 }
                 DriverCmd::SaveCfg {
@@ -639,7 +646,7 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                 DriverCmd::ChangeVirtualHid {
                     cfg,
                     virtual_hid_key,
-                    report_done_tx,
+                    sync_tx: report_done_tx,
                 } => {
                     log::info!("Updating virtual joysticks definitions.");
                     let _ = mapping_engine.stop().inspect_err(|e| log::error!("{e}"));
@@ -647,7 +654,7 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                     mapping_engine.set_cfg(cfg);
                     log::warn!("Will destroy virtual device for cfg key {virtual_hid_key} if it exists");
                     hid_mgr.destroy_virtual_device_if_exists(&virtual_hid_key);
-                    post_reload_report_back_tx = Some(DriverResponseOneShotChannels::Empty(report_done_tx));
+                    post_reload_report_back_tx = Some(DriverResponseOneShotChannels::Sync(report_done_tx));
                     main_loop_action = DriverMainLoopAction::GoToStartWithCurrentCfg;
                 }
                 DriverCmd::ChangeConfigSimple { cfg } => {
@@ -655,8 +662,9 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                     mapping_engine.set_cfg(cfg);
                 }
                 DriverCmd::ReloadWithInitialCfg => main_loop_action = DriverMainLoopAction::GoToStartWithInitialCfg,
-                DriverCmd::Reload => {
+                DriverCmd::Reload { sync_tx } => {
                     main_loop_action = DriverMainLoopAction::GoToStartWithCurrentCfg;
+                    post_reload_report_back_tx = sync_tx.map(|sync_tx| DriverResponseOneShotChannels::Sync(sync_tx));
                 }
                 DriverCmd::Halt => {
                     log::info!("Terminating due to halt command received, see ya!");

@@ -543,7 +543,9 @@ impl DeviceManagerCommon for HidManager {
             }
 
             let device = evdev::Device::open(&path)
-                .inspect_err(|e| log::error!("Can't get available device info from {}: {e}", path.to_string_lossy()))
+                .inspect_err(|e| {
+                    log::error!("Can't get available device info from {}: {e}", path.to_string_lossy());
+                })
                 .ok()?;
 
             let device_kind = device.get_classification();
