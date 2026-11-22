@@ -4,8 +4,8 @@ mod default_config_tests {
     use crate::config::{ConfigManager, MAX_DEVICE_EVENT_QUEUE_DEPTH};
     use crate::debug::DebugLevel;
     use crate::device_and_device_manager::{
-        AvailableDeviceInfoIface, DeviceEvent, DeviceKind, DeviceManagerCommon, DeviceManagerWithFfb,
-        OpenedDeviceInfoIface,
+        AvailableDeviceInfoIface, DeviceEvent, DeviceKind, DeviceManagerCommon, DeviceManagerStopMode,
+        DeviceManagerWithFfb, OpenedDeviceInfoIface,
     };
     use crate::hid_device::{HidDeviceEvent, HidEvent};
     use crate::interner::intern_str;
@@ -172,7 +172,7 @@ mod default_config_tests {
             unimplemented!()
         }
 
-        fn stop(&self, _full_shutdown: bool) -> anyhow::Result<()> {
+        fn stop(&self, _stop_mode: DeviceManagerStopMode) -> anyhow::Result<()> {
             Ok(())
         }
 
@@ -248,7 +248,7 @@ mod default_config_tests {
             vec![]
         }
         fn set_control_matcher_and_broadcast(&self, _dev_key: &str, _ctl_key: &str, _value: BaseNumT, _silent: bool) {}
-        fn stop(&self, _full_shutdown: bool) -> anyhow::Result<()> {
+        fn stop(&self, _stop_mode: DeviceManagerStopMode) -> anyhow::Result<()> {
             Ok(())
         }
 

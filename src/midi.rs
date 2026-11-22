@@ -2,8 +2,8 @@ use crate::base_num::BaseNumT;
 use crate::config::MAX_DEVICE_EVENT_QUEUE_DEPTH;
 use crate::debug::DebugLevel;
 use crate::device_and_device_manager::{
-    AvailableDeviceInfoIface, CommonDeviceCfgIface, DeviceEvent, DeviceKind, DeviceManagerCommon, OpenedDeviceInfo,
-    OpenedDeviceInfoIface,
+    AvailableDeviceInfoIface, CommonDeviceCfgIface, DeviceEvent, DeviceKind, DeviceManagerCommon,
+    DeviceManagerStopMode, OpenedDeviceInfo, OpenedDeviceInfoIface,
 };
 use crate::interner::intern_str;
 use crate::mapped_controls::MappedCtlsMidi;
@@ -263,7 +263,7 @@ pub(crate) struct MidiManager {
 impl Drop for MidiManager {
     fn drop(&mut self) {
         let _ = self
-            .stop(true)
+            .stop(DeviceManagerStopMode::StopAll)
             .inspect_err(|e| log::error!("Error on MIDI manager shutdown: {e}"));
     }
 }
@@ -571,8 +571,16 @@ impl DeviceManagerCommon for MidiManager {
         unimplemented!("No owned virtual MIDI devices support");
     }
 
-    fn stop(&self, _full_shutdown: bool) -> anyhow::Result<()> {
-        self.connections.borrow_mut().clear();
+    fn stop(&self, stop_mode: DeviceManagerStopMode) -> anyhow::Result<()> {
+        match stop_mode {
+            DeviceManagerStopMode::StopAll => self.connections.borrow_mut().clear(),
+            DeviceManagerStopMode::StopAllNonPersistent => {
+                log::error!(
+                    "Asking MIDI manager to stop non-persistent devices, but virtual MIDI devices are not yet supported."
+                );
+                self.connections.borrow_mut().clear();
+            }
+        };
         Ok(())
     }
 

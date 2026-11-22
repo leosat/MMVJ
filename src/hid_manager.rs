@@ -5,7 +5,7 @@ use crate::interner::get_interned_str;
 use crate::debug::DebugLevel;
 use crate::device_and_device_manager::{
     AvailableDeviceInfoIface, Device, DeviceClassification, DeviceEvent, DeviceKind, DeviceManagerCommon,
-    DeviceManagerWithFfb, OpenedDeviceInfo, OpenedDeviceInfoIface, WithDeviceClassification,
+    DeviceManagerStopMode, DeviceManagerWithFfb, OpenedDeviceInfo, OpenedDeviceInfoIface, WithDeviceClassification,
 };
 use crate::hid_device::{HidDevice, HidDeviceEvent, HidVirtualDeviceCreationSpec};
 use crate::schemas_common::ObjId;
@@ -42,7 +42,7 @@ pub(crate) struct HidManager {
 impl Drop for HidManager {
     fn drop(&mut self) {
         let _ = self
-            .stop(true)
+            .stop(DeviceManagerStopMode::StopAll)
             .inspect_err(|e| log::error!("Error on HID manager shutdown: {e}"));
     }
 }
@@ -563,26 +563,37 @@ impl DeviceManagerCommon for HidManager {
         self.set_control_matcher_and_broadcast(device_key, ctl_key, value, silent);
     }
 
-    fn stop(&self, full_shutdown: bool) -> Result<()> {
+    fn stop(&self, stop_mode: DeviceManagerStopMode) -> Result<()> {
         for (device_key, devices) in &mut *self.device_key_to_devices.borrow_mut() {
             devices.retain(|d| {
-                if !full_shutdown && d.0.borrow().is_persistent() {
+                if let DeviceManagerStopMode::StopAllNonPersistent = stop_mode
+                    && d.0.borrow().is_persistent()
+                {
                     log::info!("Keeping persistent virtual HID device: {}", device_key);
                     return true;
                 }
+
+                let device_identity_string = format!(
+                    "{} {} (cfg key {})",
+                    d.0.borrow().get_name(),
+                    d.0.borrow().get_filesystem_path().to_string_lossy(),
+                    device_key
+                );
+
+                log::info!("Stopping HID manager, closing HID {device_identity_string}");
+
                 if let Err(e) = d.0.borrow().close() {
-                    log::error!(
-                        "Error while closing HID device {}, cfg key: {}: {e}",
-                        device_key,
-                        d.0.borrow().get_name()
-                    );
+                    log::error!("Error while closing HID {device_identity_string}: {e}",);
                 }
+
                 false
             });
         }
-        if full_shutdown {
+
+        if let DeviceManagerStopMode::StopAll = stop_mode {
             log::info!("All HID devices closed.");
         }
+
         Ok(())
     }
 

@@ -2,6 +2,7 @@ use crate::config::ConfigManager;
 use crate::config::MORE_DEBUG;
 use crate::debug::DebugLevel;
 use crate::device_and_device_manager::DeviceManagerCommon;
+use crate::device_and_device_manager::DeviceManagerStopMode;
 use crate::device_and_device_manager::WithDeviceClassification;
 use crate::hid_manager::HidManager;
 use crate::mapping::MappedHidManager;
@@ -276,7 +277,23 @@ pub async fn run(
         None
     };
 
+    let mut is_first_run = true;
+
     'restart_mapping_engine: loop {
+        if !is_first_run {
+            log::info!("---------------------- ... ---------------------");
+            log::info!("-------------------           ------------------");
+            log::info!("---------------------- ... ---------------------");
+
+            let _ = hid_mgr
+                .stop(DeviceManagerStopMode::StopAllNonPersistent)
+                .inspect_err(|e| {
+                    log::error!("{e}");
+                });
+        }
+
+        is_first_run = false;
+
         for (key, resolved_joystick) in cfg_mgr
             .cfg_ref()
             .devices
@@ -556,9 +573,9 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                     // command_channel_rx.close(); // NB: the channel would be closed anyways after last sender is out, but...
                 }
                 DriverCmd::LoadCfg { cfg_source, resp_tx } => {
-                    let stop_hid = || {
+                    let hid_mgr_full_stop = || {
                         let _ = hid_mgr
-                            .stop(true)
+                            .stop(DeviceManagerStopMode::StopAll)
                             .inspect_err(|e| log::error!("Stopping joysticks failed: {e}."));
                     };
                     match cfg_source {
@@ -571,7 +588,7 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                                         log::warn!(
                                             "Loading new configuration file will make persistent joysticks stopped."
                                         );
-                                        stop_hid();
+                                        hid_mgr_full_stop();
                                     }
                                 }
                                 Err(e) => {
@@ -591,11 +608,11 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                                         .expect("Failed to get requested demo config"),
                                 )
                                 .inspect_err(|e| log::error!("{e}"));
-                            stop_hid();
+                            hid_mgr_full_stop();
                         }
                         LoadCfgSource::Blank() => {
                             let _ = cfg_mgr.load(Default::default()).inspect_err(|e| log::error!("{e}"));
-                            stop_hid();
+                            hid_mgr_full_stop();
                         }
                     };
 

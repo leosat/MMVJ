@@ -102,6 +102,13 @@ pub(crate) trait OpenedDeviceInfoIface {
     fn get_available_device_info(&self) -> &impl AvailableDeviceInfoIface;
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum DeviceManagerStopMode {
+    StopAll,
+    // StopVirtual,
+    StopAllNonPersistent,
+}
+
 pub(crate) trait DeviceManagerCommon {
     type AvailableDeviceInfoT: AvailableDeviceInfoIface;
     type DeviceCfgT;
@@ -126,7 +133,7 @@ pub(crate) trait DeviceManagerCommon {
     fn enumerate_available_devices(&self, filter: Option<Self::DeviceKindFilterT>) -> Vec<Self::AvailableDeviceInfoT>;
     fn set_control_matcher_and_broadcast(&self, dev_key: &str, ctl_key: &str, value: BaseNumT, silent: bool);
     fn destroy_virtual_device_if_exists(&self, device_key: &str);
-    fn stop(&self, full_shutdown: bool) -> anyhow::Result<()>;
+    fn stop(&self, mode: DeviceManagerStopMode) -> anyhow::Result<()>;
 }
 
 pub(crate) trait DeviceManagerWithFfb {
