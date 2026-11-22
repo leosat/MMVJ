@@ -20,6 +20,9 @@ use std::rc::Rc;
 use unchecked_refcell::UncheckedRefCell;
 
 // ---------------------------
+const AVAILABLE_DEVICES_FS_PATH: &str = "/dev/input";
+
+// ---------------------------
 
 #[derive(Debug, Clone)]
 pub(crate) struct AvailableHIDDeviceInfo {
@@ -524,7 +527,9 @@ impl DeviceManagerCommon for HidManager {
     }
 
     fn enumerate_available_devices(&self, filter: Option<Self::DeviceKindFilterT>) -> Vec<Self::AvailableDeviceInfoT> {
-        let Ok(rd) = std::fs::read_dir("/dev/input").inspect_err(|e| log::error!("{e}")) else {
+        let Ok(rd) = std::fs::read_dir(AVAILABLE_DEVICES_FS_PATH)
+            .inspect_err(|e| log::error!("Can't enumerate available devices at {AVAILABLE_DEVICES_FS_PATH}: {e}"))
+        else {
             return Vec::new();
         };
 
@@ -536,7 +541,9 @@ impl DeviceManagerCommon for HidManager {
                 return None;
             }
 
-            let device = evdev::Device::open(&path).inspect_err(|e| log::error!("{e}")).ok()?;
+            let device = evdev::Device::open(&path)
+                .inspect_err(|e| log::error!("Can't get available device info from {}: {e}", path.to_string_lossy()))
+                .ok()?;
 
             let device_kind = device.get_classification();
 

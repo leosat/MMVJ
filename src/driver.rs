@@ -288,7 +288,7 @@ pub async fn run(
             let _ = hid_mgr
                 .stop(DeviceManagerStopMode::StopAllNonPersistent)
                 .inspect_err(|e| {
-                    log::error!("{e}");
+                    log::error!("Error while stopping HID manager: {e}");
                 });
         }
 
