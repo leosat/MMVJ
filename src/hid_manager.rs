@@ -4,8 +4,9 @@ use crate::interner::get_interned_str;
 
 use crate::debug::DebugLevel;
 use crate::device_and_device_manager::{
-    AvailableDeviceInfoIface, Device, DeviceClassification, DeviceEvent, DeviceKind, DeviceManagerCommon,
-    DeviceManagerStopMode, DeviceManagerWithFfb, OpenedDeviceInfo, OpenedDeviceInfoIface, WithDeviceClassification,
+    AvailableDeviceInfoIface, CommonDeviceCfgIface, Device, DeviceClassification, DeviceEvent, DeviceKind,
+    DeviceManagerCommon, DeviceManagerStopMode, DeviceManagerWithFfb, OpenedDeviceInfo, OpenedDeviceInfoIface,
+    WithDeviceClassification,
 };
 use crate::hid_device::{HidDevice, HidDeviceEvent, HidVirtualDeviceCreationSpec};
 use crate::schemas_common::ObjId;
@@ -375,22 +376,20 @@ impl DeviceManagerCommon for HidManager {
         device_matcher_key: &str,
         device_cfg: &HidDeviceCfg,
     ) -> Result<OpenedDeviceInfo<Self::AvailableDeviceInfoT>> {
+        debug_assert!(device_cfg.matches_available_device(device_info));
+
         let mut devices = self.device_key_to_devices.borrow_mut();
 
-        let opened_device: Option<Rc<UncheckedRefCell<HidDevice>>> = {
-            let mut out = None;
-            for v in &*devices {
-                for v in v.1 {
-                    if v.0.borrow().get_name() == device_info.name
-                        && v.0.borrow().get_filesystem_path() == device_info.path
-                    {
-                        out = Some(Rc::clone(&v.0));
-                        break;
-                    }
-                }
-            }
-            out
-        };
+        let opened_device = devices
+            .values()
+            .find_map(|devices_and_cfg_vec| {
+                devices_and_cfg_vec.iter().find(|(device_rc_ref, _)| {
+                    device_rc_ref.borrow().get_name() == device_info.name
+                        && device_rc_ref.borrow().get_filesystem_path() == device_info.path
+                })
+            })
+            .map(|(device_rc_ref, _)| device_rc_ref)
+            .cloned();
 
         let handle_grabbing = |device: &HidDevice| {
             if let Some(grab) = &device_cfg.matcher_grab_ref() {
@@ -422,10 +421,12 @@ impl DeviceManagerCommon for HidManager {
                 device_info.name
             );
 
-            if opened_device
-                .borrow()
-                .get_classification()
-                .intersects(device_cfg.get_classification())
+            if devices
+                .entry(device_matcher_key.to_string())
+                .or_default()
+                .iter()
+                .find(|d| d.0.borrow().get_id() == opened_device.borrow().get_id())
+                .is_none()
             {
                 devices
                     .entry(device_matcher_key.to_string())
