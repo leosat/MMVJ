@@ -1485,7 +1485,6 @@ impl GuiMain {
                         ui.separator();
 
                         let dm = self.cfg.devices.hid.get_mut(&dmk).unwrap();
-                        ui.label(format!("Matcher classification: {}", dm.get_classification()));
                         if let Some(cmd) = dm.egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui) {
                             dm.update_classification();
                             hid_matcher_update_cmd = Some(cmd);

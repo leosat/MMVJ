@@ -164,12 +164,20 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
         match gui_in {
             GuiInDeviceCfg::Edit { device_key } => {
                 let mut changed = false;
-                let is_virtual = self.get_classification().is_a_virtual();
-                ui.separator();
-                changed |= ui.checkbox(&mut self.enabled, "Enabled").changed();
                 let mut gui_out = None;
-                // let gui_out_mut = &mut gui_out;
-                if is_virtual {
+
+                changed |= ui.checkbox(&mut self.enabled, "Enabled").changed();
+
+                ui.separator();
+
+                ui.label(format!("Classification: {}", self.get_classification()))
+                    .on_hover_text(
+                        "Classification depends on set of controls configured for the device or device matcher.
+                        Notice that the operating system may or may not recognize device similarly, but we aim \
+                        to match the general case.",
+                    );
+
+                if self.get_classification().is_a_virtual() {
                     ui.separator();
                     changed |= ui
                         .checkbox(self.virtual_device_persistent_mut().unwrap(), "Persistent")
@@ -307,7 +315,11 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                     changed |= self.matcher_filter_mut().is_some_and(|filter| filter.egui((), ui));
                     ui.separator();
                     ui.horizontal(|ui| {
-                        ui.label("Grabbing: ");
+                        ui.label("Grabbing: ").on_hover_text(
+                            "Grabbing will take matched devices and make them unavailable to other applications. \
+                            Beware that changing this setting may disable your interaction with desktop until the program is terminated\
+                            or the setting restored to previous state, where you had control.",
+                        );
                         changed |= self.matcher_grab_mut().is_some_and(|mut v| v.egui((), ui));
                     });
                 }
@@ -415,26 +427,28 @@ impl<'s> DrawEgui<'s> for HidGrabbing {
         let mut changed = false;
         ui.horizontal(|ui| {
             for grab_mode in HidGrabbing::iter() {
-                ui.scope(|ui| {
-                    if ui
-                        .add_enabled(
-                            matches!(grab_mode, HidGrabbing::All),
-                            egui::Button::selectable(
-                                std::mem::discriminant(self) == std::mem::discriminant(&grab_mode),
-                                format!("{}", grab_mode),
-                            ),
-                        )
-                        .clicked()
-                    {
-                        *self = grab_mode.clone();
-                        changed = true;
-                    }
-                });
-                if matches!(self, HidGrabbing::Subset(..)) {
-                    ui.label("Grabbing a subset of matching devices is not yet implemented.");
+                if ui
+                    .add_enabled(
+                        true, //matches!(grab_mode, HidGrabbing::All),
+                        egui::Button::selectable(
+                            std::mem::discriminant(self) == std::mem::discriminant(&grab_mode),
+                            format!("{}", grab_mode),
+                        ),
+                    )
+                    .clicked()
+                {
+                    *self = grab_mode.clone();
+                    changed = true;
                 }
             }
         });
+
+        match self {
+            HidGrabbing::All => {}
+            HidGrabbing::Subset(hid_matching_filter) => {
+                changed |= hid_matching_filter.egui((), ui);
+            }
+        }
 
         changed
     }
@@ -522,15 +536,29 @@ impl<'s> DrawEgui<'s> for HidMatchingFilter {
         ui.separator();
         ui.horizontal(|ui| {
             ui.label("Device name matching regex: ");
-            let mut regex_string = self.match_name_regex.to_string();
+            let edited_regex_string_id = ui.scope_id().with("edited regex string");
+            let mut regex_compilation_failed = false;
+            let mut regex_string =
+                if let Some(edited_regex_string) = ui.data(|d| d.get_temp::<String>(edited_regex_string_id)) {
+                    regex_compilation_failed = true;
+                    edited_regex_string
+                } else {
+                    self.match_name_regex.to_string()
+                };
             if ui.text_edit_singleline(&mut regex_string).changed() {
                 if let Ok(regex) = Regex::new(&regex_string) {
                     changed = true;
                     self.match_name_regex = regex;
                     log::info!("Compiled regex from string {regex_string}");
+                    ui.data_mut(|d| d.remove_temp::<String>(edited_regex_string_id));
                 } else {
                     log::error!("Failed to compile regex from string {regex_string}");
+                    ui.data_mut(|d| d.insert_temp(edited_regex_string_id, regex_string));
                 }
+            }
+            if regex_compilation_failed {
+                ui.label(egui::RichText::new("regex compilation failure").color(egui::Color32::RED))
+                    .on_hover_text("Regex string is not saved!");
             }
         });
         changed

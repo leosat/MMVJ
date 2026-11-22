@@ -392,11 +392,20 @@ impl DeviceManagerCommon for HidManager {
         let handle_grabbing = |device: &HidDevice| {
             if let Some(grab) = &device_cfg.matcher_grab_ref() {
                 if let Some(grab) = grab {
-                    if matches!(grab, HidGrabbing::All) {
-                        device.grab();
-                    } else {
-                        log::warn!("Unsupported grabbing mode {:?}", grab);
-                        device.ungrab();
+                    match grab {
+                        HidGrabbing::All => device.grab(),
+                        HidGrabbing::Subset(hid_matching_filter)
+                            if hid_matching_filter.matches_available_device(device_info) =>
+                        {
+                            device.grab()
+                        }
+                        HidGrabbing::Subset(..) => {
+                            log::info!(
+                                "Will not grab {} ({}) not matching the grabbing filter.",
+                                device_info.name,
+                                device_info.path.to_string_lossy()
+                            );
+                        }
                     }
                 } else {
                     device.ungrab();
@@ -434,7 +443,13 @@ impl DeviceManagerCommon for HidManager {
             device_matcher_key.to_owned(),
             &device_cfg,
             self.debug,
-        ) {
+        )
+        .inspect_err(|e| {
+            log::error!(
+                "Got {e} while trying to open device from path {}",
+                device_info.path.to_string_lossy()
+            );
+        }) {
             log::info!(
                 "Opened device {} (matched config key {})",
                 device_info.name,

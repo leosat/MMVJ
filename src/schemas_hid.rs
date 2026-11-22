@@ -77,6 +77,8 @@ impl HidMatchingFilter {
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, PartialEq, EnumIter, EnumString, Display)]
+#[serde(rename_all = "PascalCase")]
+#[strum(serialize_all = "PascalCase")]
 pub(crate) enum HidGrabbing {
     #[default]
     All,
