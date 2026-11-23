@@ -4,8 +4,8 @@ use crate::interner::get_interned_str;
 
 use crate::debug::DebugLevel;
 use crate::device_and_device_manager::{
-    AvailableDeviceInfoIface, CommonDeviceCfgIface, Device, DeviceClassification, DeviceEvent, DeviceKind,
-    DeviceManagerCommon, DeviceManagerStopMode, DeviceManagerWithFfb, OpenedDeviceInfo, OpenedDeviceInfoIface,
+    AvailableDeviceInfoIface, Device, DeviceClassification, DeviceEvent, DeviceKind, DeviceManagerCommon,
+    DeviceManagerStopMode, DeviceManagerWithFfb, MatchesAvailableDeviceIface, OpenedDeviceInfo, OpenedDeviceInfoIface,
     WithDeviceClassification,
 };
 use crate::hid_device::{HidDevice, HidDeviceEvent, HidVirtualDeviceCreationSpec};
@@ -16,7 +16,7 @@ use enumflags2::BitFlags;
 use evdev::{BusType, EventType};
 use std::collections::HashMap;
 use std::future::poll_fn;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use unchecked_refcell::UncheckedRefCell;
 
@@ -352,6 +352,10 @@ impl AvailableDeviceInfoIface for AvailableHIDDeviceInfo {
     fn get_classification(&self) -> DeviceClassification {
         self.classification
     }
+
+    fn get_path(&self) -> Option<&Path> {
+        Some(self.path.as_path())
+    }
 }
 
 impl OpenedDeviceInfoIface for OpenedDeviceInfo<AvailableHIDDeviceInfo> {
@@ -396,17 +400,16 @@ impl DeviceManagerCommon for HidManager {
                 if let Some(grab) = grab {
                     match grab {
                         HidGrabbing::All => device.grab(),
-                        HidGrabbing::Subset(hid_matching_filter)
-                            if hid_matching_filter.matches_available_device(device_info) =>
-                        {
-                            device.grab()
-                        }
-                        HidGrabbing::Subset(..) => {
-                            log::info!(
-                                "Will not grab {} ({}) not matching the grabbing filter.",
-                                device_info.name,
-                                device_info.path.to_string_lossy()
-                            );
+                        HidGrabbing::Subset(hid_matching_filter) => {
+                            if hid_matching_filter.matches_available_device(device_info) {
+                                device.grab();
+                            } else {
+                                log::info!(
+                                    "Will not grab {} ({}) not matching the grabbing filter.",
+                                    device_info.name,
+                                    device_info.path.to_string_lossy()
+                                );
+                            }
                         }
                     }
                 } else {

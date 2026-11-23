@@ -3,7 +3,7 @@ use crate::base_num::BaseNumT;
 use crate::hid_device::HidDeviceEvent;
 
 use crate::debug::DebugLevel;
-use crate::device_and_device_manager::CommonDeviceCfgIface;
+use crate::device_and_device_manager::MatchesAvailableDeviceIface;
 use crate::device_and_device_manager::{DeviceKind, OpenedDeviceInfoIface};
 use crate::device_and_device_manager::{DeviceManagerCommon, DeviceManagerWithFfb};
 use crate::mapped_controls::MappedCtls;

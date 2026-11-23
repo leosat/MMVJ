@@ -3,10 +3,10 @@ use crate::base_num::BaseNumT;
 use crate::config::MAX_DEVICE_EVENT_QUEUE_DEPTH;
 use crate::debug::DebugLevel;
 use crate::device_and_device_manager::AvailableDeviceInfoIface;
-use crate::device_and_device_manager::CommonDeviceCfgIface;
 use crate::device_and_device_manager::Device;
 use crate::device_and_device_manager::DeviceEvent;
 use crate::device_and_device_manager::DeviceKind;
+use crate::device_and_device_manager::MatchesAvailableDeviceIface;
 use crate::device_and_device_manager::WithDeviceClassification;
 use crate::hid_owned_and_ffb::X_AXIS_IDX;
 use crate::hid_owned_and_ffb::Y_AXIS_IDX;
@@ -242,7 +242,7 @@ pub(crate) struct HidDevice {
     ff_is_a_condition_effect_enabled: bool,
 }
 
-impl CommonDeviceCfgIface for HidDeviceCfg {
+impl MatchesAvailableDeviceIface for HidDeviceCfg {
     fn matches_available_device(&self, available_device_info: &impl AvailableDeviceInfoIface) -> bool {
         self.matcher_filter_ref()
             .map(|f| f.matches_available_device(available_device_info))
@@ -730,7 +730,7 @@ impl HidDevice {
                             set_hid_control_unowned_device(platform_device_stream.device_mut(), control_type, control_value);
                         }
                         DeviceThreadCmd::Grab => {
-                            log::info!("Grabbing device {}", device_name);
+                            log::warn!("Grabbing device {}", device_name);
                             let _ = platform_device_stream.device_mut().grab().inspect_err(|e| log::error!("{e}"));
                         },
                         DeviceThreadCmd::UnGrab => {
@@ -738,8 +738,8 @@ impl HidDevice {
                             if device.is_grabbed () {
                                 log::info!("Ungrabbing device {}", device_name);
                                 let _ = device.ungrab().inspect_err(|e| log::error!("{e}"));
-                            } else {
-                                log::warn!("Device {} is not grabbed, will not ungrab", device_name);
+                            } else if debug.is_on() {
+                                log::debug!("Device {} is not grabbed, will not ungrab", device_name);
                             }
                         },
                     }

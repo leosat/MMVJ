@@ -21,6 +21,7 @@ mod default_config_tests {
     use clap::Parser;
     use std::collections::HashMap;
     use std::env;
+    use std::path::Path;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
@@ -58,6 +59,10 @@ mod default_config_tests {
         }
         fn get_classification(&self) -> enumflags2::BitFlags<DeviceKind> {
             self.classification
+        }
+
+        fn get_path(&self) -> Option<&Path> {
+            None
         }
     }
 

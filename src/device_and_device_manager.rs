@@ -93,6 +93,7 @@ pub(crate) struct OpenedDeviceInfo<AvailableDeviceInfoT> {
 
 pub(crate) trait AvailableDeviceInfoIface {
     fn get_name(&self) -> &str;
+    fn get_path(&self) -> Option<&Path>;
     fn get_classification(&self) -> DeviceClassification;
 }
 
@@ -158,6 +159,6 @@ pub(crate) trait Device {
     fn get_filesystem_path(&self) -> &Path;
 }
 
-pub(crate) trait CommonDeviceCfgIface {
+pub(crate) trait MatchesAvailableDeviceIface {
     fn matches_available_device(&self, available_device_info: &impl AvailableDeviceInfoIface) -> bool;
 }

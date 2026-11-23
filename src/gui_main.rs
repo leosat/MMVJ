@@ -2,9 +2,9 @@ use crate::config::MORE_DEBUG;
 use crate::config::WithSelfSanitize;
 use crate::debug::DebugLevel;
 use crate::device_and_device_manager::AvailableDeviceInfoIface;
-use crate::device_and_device_manager::CommonDeviceCfgIface;
 use crate::device_and_device_manager::DeviceKind;
 use crate::device_and_device_manager::DeviceManagerCommon;
+use crate::device_and_device_manager::MatchesAvailableDeviceIface;
 use crate::device_and_device_manager::WithDeviceClassification;
 use crate::driver::DriverCmd;
 use crate::driver::check_system_requirements;
@@ -1339,9 +1339,9 @@ impl GuiMain {
         });
     }
 
-    fn draw_matching_available_devices<AvailDevInfoT>(
+    pub(crate) fn draw_matching_available_devices<AvailDevInfoT>(
         ads: &[AvailDevInfoT],
-        dm: &impl CommonDeviceCfgIface,
+        dm: &impl MatchesAvailableDeviceIface,
         ui: &mut egui::Ui,
     ) where
         AvailDevInfoT: AvailableDeviceInfoIface + for<'a> DrawEgui<'a, In = ()>,
@@ -1409,6 +1409,15 @@ impl GuiMain {
                     ui.separator();
                     draw_collapsing_ui(ui, None::<()>, Some(&dmk), |ui| {
                         ui.separator();
+                          if ui.checkbox(&mut self
+                              .cfg
+                              .devices
+                              .hid
+                              .get_mut(&dmk)
+                              .unwrap().enabled, "Enabled").changed() {
+                                  self.submit_post_draw_cmd(GuiCmd::ConfigChangeDriverRestart);
+                              };
+                       ui.separator();
                         self.draw_key_edit_gui(ui, &dmk, true);
                         ui.separator();
                         self.draw_device_remove_button(ui, &dmk, true);
@@ -1420,7 +1429,7 @@ impl GuiMain {
                             .hid
                             .get_mut(&dmk)
                             .unwrap()
-                            .egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui)
+                            .egui((None, GuiInDeviceCfg::Edit { device_key: &dmk }), ui)
                         {
                             let submit_post_draw = matches!(
                                 out,
@@ -1449,6 +1458,7 @@ impl GuiMain {
         ui.separator();
         draw_collapsing_ui(ui, None::<()>, Some("Matchers"), |ui| {
             ui.separator();
+
             if ui
                 .button(egui_phosphor::bold::LIST_PLUS.to_string())
                 .on_hover_text("add device matcher")
@@ -1476,21 +1486,27 @@ impl GuiMain {
                     ui.separator();
                     draw_collapsing_ui(ui, None::<()>, Some(&dmk), |ui| {
                         ui.separator();
+                        if ui
+                            .checkbox(&mut self.cfg.devices.hid.get_mut(&dmk).unwrap().enabled, "Enabled")
+                            .changed()
+                        {
+                            self.submit_post_draw_cmd(GuiCmd::ConfigChangeDriverRestart);
+                        };
+                        ui.separator();
                         self.draw_key_edit_gui(ui, &dmk, false);
                         ui.separator();
                         self.draw_device_remove_button(ui, &dmk, false);
                     })
                     .body(|ui| {
                         ui.separator();
-                        Self::draw_matching_available_devices(
-                            self.avail_dev_info_cache.hid(&self.hid_mgr),
-                            self.cfg.devices.hid.get_mut(&dmk).unwrap(),
-                            ui,
-                        );
-                        ui.separator();
-
                         let dm = self.cfg.devices.hid.get_mut(&dmk).unwrap();
-                        if let Some(cmd) = dm.egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui) {
+                        if let Some(cmd) = dm.egui(
+                            (
+                                Some(self.avail_dev_info_cache.hid(&self.hid_mgr)),
+                                GuiInDeviceCfg::Edit { device_key: &dmk },
+                            ),
+                            ui,
+                        ) {
                             dm.update_classification();
                             hid_matcher_update_cmd = Some(cmd);
                         }

@@ -1,7 +1,9 @@
 use crate::{
     base_num::{BaseAtomicT, BaseNumT},
     config::WithSelfSanitize,
-    device_and_device_manager::{AvailableDeviceInfoIface, DeviceClassification, WithDeviceClassification},
+    device_and_device_manager::{
+        AvailableDeviceInfoIface, DeviceClassification, MatchesAvailableDeviceIface, WithDeviceClassification,
+    },
     hid_device::{HID_AXIS_MAX_INTERVAL, sanitize_hid_name},
     mapped_controls::MappedCtls,
     mapping::WithMappingTriggerPredicate,
@@ -64,47 +66,151 @@ pub(crate) fn deserialize_jk_device_controls<'de, D: Deserializer<'de>>(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub(crate) struct HidMatchingFilter {
-    #[serde(with = "serde_regex")]
+pub(crate) enum HidMatchingFilterEntryKinds {
+    #[serde(with = "serde_regex", rename = "name_regex", alias = "match_name_regex")]
     #[schemars(with = "Option<String>")]
-    pub(crate) match_name_regex: regex::Regex,
+    NameRegex(regex::Regex),
+    #[serde(with = "serde_regex", rename = "path_regex", alias = "match_path_regex")]
+    #[schemars(with = "Option<String>")]
+    PathRegex(regex::Regex),
+    #[serde(rename = "bus")]
+    BusSpec(HidDeviceBusSpecCfg),
 }
 
-impl HidMatchingFilter {
-    pub(crate) fn matches_available_device(&self, available_device_info: &impl AvailableDeviceInfoIface) -> bool {
-        self.match_name_regex.is_match(available_device_info.get_name())
+impl PartialEq for HidMatchingFilterEntryKinds {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::NameRegex(l0), Self::NameRegex(r0)) => l0.as_str() == r0.as_str(),
+            (Self::PathRegex(l0), Self::PathRegex(r0)) => l0.as_str() == r0.as_str(),
+            (Self::BusSpec(l0), Self::BusSpec(r0)) => l0 == r0,
+            _ => false,
+        }
+    }
+}
+
+impl Default for HidMatchingFilterEntryKinds {
+    fn default() -> Self {
+        Self::NameRegex(regex::Regex::new(".*").unwrap())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub(crate) struct HidMatchingFilterEntry {
+    // #[serde(
+    //     default,
+    //     alias = "match_virtual",
+    //     alias = "match_owned",
+    //     skip_serializing_if = "is_false"
+    // )]
+    // TODO??? pub(crate) match_owned_virtual: bool,
+    #[serde(flatten)]
+    pub(crate) inner: HidMatchingFilterEntryKinds,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default, PartialEq)]
+#[serde(from = "HidMatchingFilterSerdeHelper", into = "HidMatchingFilterSerdeHelper")]
+pub(crate) struct HidMatchingFilter {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) include: Vec<HidMatchingFilterEntry>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) exclude: Vec<HidMatchingFilterEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[serde(untagged)]
+pub(crate) enum HidMatchingFilterSerdeHelper {
+    Short(HidMatchingFilterEntry),
+    Full {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        include: Vec<HidMatchingFilterEntry>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        exclude: Vec<HidMatchingFilterEntry>,
+    },
+}
+
+impl From<HidMatchingFilterSerdeHelper> for HidMatchingFilter {
+    fn from(value: HidMatchingFilterSerdeHelper) -> Self {
+        match value {
+            HidMatchingFilterSerdeHelper::Full { include, exclude } => Self { include, exclude },
+            HidMatchingFilterSerdeHelper::Short(hid_matching_filter_entry) => {
+                let mut tmp: Self = Default::default();
+                tmp.include.push(hid_matching_filter_entry);
+                tmp
+            }
+        }
+    }
+}
+
+impl From<HidMatchingFilter> for HidMatchingFilterSerdeHelper {
+    fn from(value: HidMatchingFilter) -> Self {
+        if value.exclude.is_empty() && value.include.len() == 1 {
+            Self::Short(value.include[0].clone())
+        } else {
+            Self::Full {
+                include: value.include.clone(),
+                exclude: value.exclude.clone(),
+            }
+        }
+    }
+}
+
+impl MatchesAvailableDeviceIface for HidMatchingFilterEntry {
+    fn matches_available_device(&self, available_device_info: &impl AvailableDeviceInfoIface) -> bool {
+        match &self.inner {
+            HidMatchingFilterEntryKinds::NameRegex(regex) => {
+                (!regex.as_str().is_empty()) && regex.is_match(available_device_info.get_name())
+            }
+            HidMatchingFilterEntryKinds::PathRegex(regex) => available_device_info
+                .get_path()
+                .is_some_and(|path| (!regex.as_str().is_empty()) && regex.is_match(&path.to_string_lossy())),
+            HidMatchingFilterEntryKinds::BusSpec(_hid_device_bus_spec_cfg) => {
+                todo!("Bus parameters matching is not yet implemented.")
+            }
+        }
+    }
+}
+
+impl MatchesAvailableDeviceIface for HidMatchingFilter {
+    fn matches_available_device(&self, available_device_info: &impl AvailableDeviceInfoIface) -> bool {
+        ((self.include.is_empty() && !self.exclude.is_empty())
+            || self
+                .include
+                .iter()
+                .any(|f| f.matches_available_device(available_device_info)))
+            && self
+                .exclude
+                .iter()
+                .all(|f| !f.matches_available_device(available_device_info))
     }
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, PartialEq, EnumIter, EnumString, Display)]
-#[serde(rename_all = "PascalCase")]
-#[strum(serialize_all = "PascalCase")]
+// #[serde(rename_all = "snake_case")]
+// #[strum(serialize_all = "snake_case")]
 pub(crate) enum HidGrabbing {
     #[default]
+    #[serde(rename = "all", alias = "All")]
     All,
+    #[serde(rename = "subset", alias = "Subset")]
     Subset(HidMatchingFilter),
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, TraversableMut, Traversable, JsonSchema, PartialEq)]
-#[serde(deny_unknown_fields)]
+//#[serde(deny_unknown_fields)]
 pub(crate) struct HidMatcherParamsCfg {
     #[serde(flatten)]
     #[traverse(skip)]
     filter: HidMatchingFilter,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[traverse(skip)]
     grab: Option<HidGrabbing>,
 }
 
-impl PartialEq for HidMatchingFilter {
-    fn eq(&self, other: &Self) -> bool {
-        self.match_name_regex.as_str() == other.match_name_regex.as_str()
-    }
-}
-
-impl Default for HidMatchingFilter {
+impl Default for HidMatchingFilterEntry {
     fn default() -> Self {
         Self {
-            match_name_regex: regex::Regex::new(".*").unwrap(),
+            // TODO? match_owned_virtual: Default::default(),
+            inner: Default::default(),
         }
     }
 }
@@ -139,8 +245,8 @@ pub(crate) struct HidVirtualParamsCfg {
 )]
 #[serde(untagged)]
 pub(crate) enum HidVirtualOrMatcherParamsCfg {
-    DeviceMatcher(HidMatcherParamsCfg),
     VirtualDevice(HidVirtualParamsCfg),
+    DeviceMatcher(HidMatcherParamsCfg),
 }
 
 impl Default for HidVirtualOrMatcherParamsCfg {

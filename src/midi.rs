@@ -2,8 +2,8 @@ use crate::base_num::BaseNumT;
 use crate::config::MAX_DEVICE_EVENT_QUEUE_DEPTH;
 use crate::debug::DebugLevel;
 use crate::device_and_device_manager::{
-    AvailableDeviceInfoIface, CommonDeviceCfgIface, DeviceEvent, DeviceKind, DeviceManagerCommon,
-    DeviceManagerStopMode, OpenedDeviceInfo, OpenedDeviceInfoIface,
+    AvailableDeviceInfoIface, DeviceEvent, DeviceKind, DeviceManagerCommon, DeviceManagerStopMode,
+    MatchesAvailableDeviceIface, OpenedDeviceInfo, OpenedDeviceInfoIface,
 };
 use crate::interner::intern_str;
 use crate::mapped_controls::MappedCtlsMidi;
@@ -48,7 +48,7 @@ impl Default for MidiMessagePayload {
     }
 }
 
-impl CommonDeviceCfgIface for MidiMatcherCfg {
+impl MatchesAvailableDeviceIface for MidiMatcherCfg {
     fn matches_available_device(&self, available_device_info: &impl AvailableDeviceInfoIface) -> bool {
         self.match_name_regex.is_match(available_device_info.get_name())
     }
@@ -451,6 +451,10 @@ impl AvailableDeviceInfoIface for AvailableMidiDeviceInfo {
 
     fn get_classification(&self) -> crate::device_and_device_manager::DeviceClassification {
         crate::device_and_device_manager::DeviceClassification::empty()
+    }
+
+    fn get_path(&self) -> Option<&std::path::Path> {
+        None
     }
 }
 
