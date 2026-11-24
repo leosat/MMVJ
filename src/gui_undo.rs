@@ -70,7 +70,7 @@ impl GuiCmd {
             )
             .into(),
             GuiCmd::BreakOnErr
-            | GuiCmd::_SubmitPending(..)
+            | GuiCmd::SubmitPending(..)
             | GuiCmd::LoadCfgFile(..)
             | GuiCmd::LoadCfgDemo(..)
             | GuiCmd::LoadCfgBlank(..)

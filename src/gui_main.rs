@@ -25,6 +25,7 @@ use crate::hid_manager::{AvailableHIDDeviceInfo, HidManager};
 #[cfg(feature = "midi")]
 use crate::midi::{AvailableMidiDeviceInfo, MidiManager};
 use crate::schemas_cfg::Config;
+use crate::schemas_common::DeviceCfgCommonIface;
 use crate::schemas_common::ObjId;
 use crate::schemas_hid::HidDeviceCfg;
 use crate::schemas_mapping::MapperMode;
@@ -42,6 +43,7 @@ use log::warn;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ops::ControlFlow;
+use std::ops::Deref;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::CancellationToken;
@@ -1149,7 +1151,7 @@ impl GuiMain {
                 }
             }
             GuiCmd::BreakOnErr => {}
-            GuiCmd::_SubmitPending(gui_cmd) => self.submit_pending_cmd(*(*gui_cmd).clone(), ui),
+            GuiCmd::SubmitPending(gui_cmd) => self.submit_pending_cmd(*(*gui_cmd).clone(), ui),
         }
 
         Ok(())
@@ -1223,19 +1225,26 @@ impl GuiMain {
         self.update_cfg_yaml();
     }
 
-    fn draw_key_edit_gui(&mut self, ui: &mut egui::Ui, dmk: &String, is_virtual: bool) {
-        let is_editing = self.transient_states_device_key_edit.contains_key(dmk);
+    #[must_use]
+    fn draw_key_edit_gui(
+        transient_states_device_key_edit: &mut HashMap<String, String>,
+        dmk: &String,
+        is_virtual: bool,
+        ui: &mut egui::Ui,
+    ) -> Option<GuiCmd> {
+        let mut gui_out = None;
+        let is_editing = transient_states_device_key_edit.contains_key(dmk);
         if !is_editing {
             if ui
                 .button(egui_phosphor::fill::IDENTIFICATION_BADGE.to_string())
                 .on_hover_text("Edit config key name")
                 .clicked()
             {
-                self.transient_states_device_key_edit.insert(dmk.clone(), dmk.clone());
+                transient_states_device_key_edit.insert(dmk.clone(), dmk.clone());
             }
         } else {
             let mut pending_change_to_submit = None;
-            let new_key = self.transient_states_device_key_edit.get_mut(dmk).unwrap();
+            let new_key = transient_states_device_key_edit.get_mut(dmk).unwrap();
 
             ui.horizontal(|ui| {
                 if ui.button(egui_phosphor::bold::CHECK_FAT.to_string()).clicked() {
@@ -1250,29 +1259,29 @@ impl GuiMain {
             });
 
             if let Some(pending_change_to_submit) = pending_change_to_submit {
-                self.submit_post_draw_cmd(GuiCmd::DeviceMatcherRename(pending_change_to_submit.clone()));
-                self.transient_states_device_key_edit
-                    .remove(&pending_change_to_submit.old_key);
+                gui_out = Some(GuiCmd::DeviceMatcherRename(pending_change_to_submit.clone()));
+                transient_states_device_key_edit.remove(&pending_change_to_submit.old_key);
             }
         }
+        gui_out
     }
 
-    fn draw_device_remove_button(&mut self, ui: &mut egui::Ui, dmk: &str, is_virtual: bool) {
+    #[must_use]
+    fn draw_device_remove_button(dmk: &str, is_virtual: bool, ui: &mut egui::Ui) -> Option<GuiCmd> {
         if ui
             .small_button(egui_phosphor::fill::TRASH.to_string())
             .on_hover_text("Try to remove (will be removed if not referenced)")
             .clicked()
         {
-            self.submit_post_draw_cmd(GuiCmd::DeviceMatcherRemove(GuiCmdDeviceMatcherRemove {
+            Some(GuiCmd::DeviceMatcherRemove(GuiCmdDeviceMatcherRemove {
                 device_key: dmk.to_owned(),
                 is_virtual,
-            }));
+            }))
+        } else {
+            None
         }
     }
 
-    // ================================================================================
-    // ================================================================================
-    // ================================================================================
     // ================================================================================
 
     #[cfg(feature = "midi")]
@@ -1286,74 +1295,42 @@ impl GuiMain {
                 });
             }
         });
-        ui.separator();
-        draw_collapsing_ui(ui, None::<()>, Some("Matchers"), |ui| {
-            ui.separator();
-            if ui
-                .button(egui_phosphor::bold::LIST_PLUS.to_string())
-                .on_hover_text("add midi matcher")
-                .clicked()
-            {
-                self.cfg.devices.midi.insert(
-                    get_item_name_with_random_suffix("MIDI matcher", self.cfg.devices.midi.len() + 1),
-                    MidiMatcherCfg::default(),
-                );
-                self.submit_post_draw_cmd(GuiCmd::ConfigChangeSimple);
-            }
-        })
-        .body(|ui| {
-            if !self.cfg.devices.midi.is_empty() {
-                let keys = self.cfg.devices.midi.keys().cloned().collect::<Vec<_>>();
-                for dmk in keys {
-                    ui.separator();
-                    draw_collapsing_ui(ui, None::<()>, Some(&dmk), |ui| {
-                        ui.separator();
-                        self.draw_key_edit_gui(ui, &dmk, false);
-                        ui.separator();
-                        self.draw_device_remove_button(ui, &dmk, false);
-                    })
-                    .body(|ui| {
-                        ui.separator();
-                        let available_midi = self.avail_dev_info_cache.midi(&self.midi_mgr);
-                        Self::draw_matching_available_devices(
-                            available_midi,
-                            self.cfg.devices.midi.get(&dmk).unwrap(),
-                            ui,
-                        );
-                        ui.separator();
 
-                        if let Some(cmd) = self
-                            .cfg
-                            .devices
-                            .midi
-                            .get_mut(&dmk)
-                            .unwrap()
-                            .egui(GuiInDeviceCfg::Edit { device_key: &dmk }, ui)
-                        {
-                            // dbg!(&cmd);
-                            self.submit_post_draw_cmd(cmd);
-                        }
-                    });
-                }
-            }
-        });
+        ui.separator();
+
+        Self::draw_devices_editor(
+            &mut self.cfg.devices.midi,
+            self.avail_dev_info_cache.midi(&self.midi_mgr),
+            &mut self.transient_states_device_key_edit,
+            false,
+            "Matchers",
+            "Add MIDI device matcher",
+            "MIDI device matcher",
+            |_: &str| -> MidiMatcherCfg { MidiMatcherCfg::default() } as fn(&str) -> MidiMatcherCfg,
+            |_: &MidiMatcherCfg| -> bool { true } as fn(&MidiMatcherCfg) -> bool,
+            ui,
+        )
+        .map(|out| self.submit_post_draw_cmd(out));
     }
 
-    pub(crate) fn draw_matching_available_devices<AvailDevInfoT>(
-        ads: &[AvailDevInfoT],
-        dm: &impl MatchesAvailableDeviceIface,
+    pub(crate) fn draw_available_devices<AvailDevIterT, AvailDevIterItemT, AvailDevIterItemDerefTargetT>(
+        label_matched: &str,
+        label_matched_none: &str,
+        available_devices: AvailDevIterT,
+        filterer: &impl MatchesAvailableDeviceIface,
         ui: &mut egui::Ui,
     ) where
-        AvailDevInfoT: AvailableDeviceInfoIface + for<'a> DrawEgui<'a, In = ()>,
+        AvailDevIterT: Iterator<Item = AvailDevIterItemT>,
+        AvailDevIterItemT: Deref<Target = AvailDevIterItemDerefTargetT>,
+        AvailDevIterItemDerefTargetT: for<'a> DrawEgui<'a, In = ()> + AvailableDeviceInfoIface,
     {
-        let mut mads = ads
-            .iter()
-            .filter(|ad| dm.matches_available_device(*ad))
+        let mut mads = available_devices
+            .filter(|ad| filterer.matches_available_device(&**ad))
             .collect::<Vec<_>>();
         if mads.is_empty() {
-            ui.label("No available devices are matched by this matcher.");
+            ui.label(label_matched_none);
         } else {
-            ui.collapsing(format!("Matching available devices"), |ui| {
+            ui.collapsing(label_matched, |ui| {
                 mads.iter_mut().enumerate().for_each(|(ad_idx, ad)| {
                     ui.collapsing(format!("({}) {}", ad_idx, ad.get_name().to_owned()), |ui| {
                         ad.egui_immutable((), ui);
@@ -1378,145 +1355,148 @@ impl GuiMain {
                 });
             }
         });
+
         ui.separator();
-        draw_collapsing_ui(ui, None::<()>, Some("Virtual"), |ui| {
-            ui.separator();
-            if ui
-                .button(egui_phosphor::bold::LIST_PLUS.to_string())
-                .on_hover_text("add virtual device")
-                .clicked()
-            {
-                let dk = get_item_name_with_random_suffix("Virtual HID", self.cfg.devices.hid.len() + 1);
-                self.cfg
-                    .devices
-                    .hid
-                    .insert(dk.clone(), HidDeviceCfg::new_virtual(dk.as_str()));
-                self.submit_post_draw_cmd(GuiCmd::ConfigChangeSimple);
-            }
-        })
-        .body(|ui| {
-            if !self.cfg.devices.hid.is_empty() {
 
-                let keys: Vec<String> = self
-                    .cfg
-                    .devices
-                    .hid
-                    .iter()
-                    .filter(|d| d.1.is_a_virtual())
-                    .map(|(k, _)| k.clone())
-                    .collect();
-                for dmk in keys {
-                    ui.separator();
-                    draw_collapsing_ui(ui, None::<()>, Some(&dmk), |ui| {
-                        ui.separator();
-                          if ui.checkbox(&mut self
-                              .cfg
-                              .devices
-                              .hid
-                              .get_mut(&dmk)
-                              .unwrap().enabled, "Enabled").changed() {
-                                  self.submit_post_draw_cmd(GuiCmd::ConfigChangeDriverRestart);
-                              };
-                       ui.separator();
-                        self.draw_key_edit_gui(ui, &dmk, true);
-                        ui.separator();
-                        self.draw_device_remove_button(ui, &dmk, true);
-                    })
-                    .body(|ui| {
-                        if let Some(out) = self
-                            .cfg
-                            .devices
-                            .hid
-                            .get_mut(&dmk)
-                            .unwrap()
-                            .egui((None, GuiInDeviceCfg::Edit { device_key: &dmk }), ui)
-                        {
-                            let submit_post_draw = matches!(
-                                out,
-                                GuiCmd::DeviceMatcherRename(..) /* TODO: control matcher renaming, when added, goes here to */
-                            );
+        // __________________________________________________
+        Self::draw_devices_editor(
+            &mut self.cfg.devices.hid,
+            self.avail_dev_info_cache.hid(&self.hid_mgr),
+            &mut self.transient_states_device_key_edit,
+            true,
+            "Virtual",
+            "add virtual device",
+            "Virtual HID",
+            HidDeviceCfg::new_virtual as fn(&str) -> HidDeviceCfg,
+            |d: &HidDeviceCfg| -> bool { d.is_a_virtual() } as fn(&HidDeviceCfg) -> bool,
+            ui,
+        )
+        .map(|out| self.submit_post_draw_cmd(out));
 
-                            let cmd_seq = GuiCmd::CmdSeqence(vec![
-                                out,
-                                GuiCmd::BreakOnErr,
-                                GuiCmd::ChangeVirtualHid(GuiCmdChangeVirtualHid {
-                                    virtual_hid_key: dmk.clone(),
-                                })
-                                .into(),
-                            ]);
-
-                            if submit_post_draw {
-                                self.submit_post_draw_cmd(cmd_seq);
-                            } else {
-                                self.submit_pending_cmd(cmd_seq, ui);
-                            }
-                        };
-                    });
-                };
-            }
-        });
         ui.separator();
-        draw_collapsing_ui(ui, None::<()>, Some("Matchers"), |ui| {
+
+        Self::draw_devices_editor(
+            &mut self.cfg.devices.hid,
+            self.avail_dev_info_cache.hid(&self.hid_mgr),
+            &mut self.transient_states_device_key_edit,
+            false,
+            "Matchers",
+            "Add HID matcher",
+            "HID matcher",
+            |_: &str| -> HidDeviceCfg { HidDeviceCfg::new_matcher() } as fn(&str) -> HidDeviceCfg,
+            |d: &HidDeviceCfg| -> bool { !d.is_a_virtual() } as fn(&HidDeviceCfg) -> bool,
+            ui,
+        )
+        .map(|out| self.submit_post_draw_cmd(out));
+    }
+
+    #[must_use]
+    fn draw_devices_editor<'s, DeviceCfgT, AvailDeviceInfoT>(
+        devices: &mut std::collections::BTreeMap<String, DeviceCfgT>,
+        available_devices: &[AvailDeviceInfoT],
+        transient_states_device_key_edit: &mut HashMap<String, String>,
+        drawing_virtual: bool,
+        title: &str,
+        on_hover_text: &str,
+        new_name_prefix: &str,
+        new_device_fn: fn(&str) -> DeviceCfgT,
+        device_filter: fn(&DeviceCfgT) -> bool,
+        ui: &mut egui::Ui,
+    ) -> Option<GuiCmd>
+    where
+        AvailDeviceInfoT: 's + AvailableDeviceInfoIface,
+        for<'a> DeviceCfgT: DeviceCfgCommonIface
+            + DrawEgui<'a, In = (&'a [AvailDeviceInfoT], GuiInDeviceCfg<'a>), Out = Option<GuiCmd>>,
+    {
+        let mut gui_out = None;
+        let mut changed_virtual_device_cfg_key = None;
+        let gui_out_mut = &mut gui_out;
+
+        draw_collapsing_ui(ui, None::<()>, Some(title), |ui| {
             ui.separator();
 
             if ui
                 .button(egui_phosphor::bold::LIST_PLUS.to_string())
-                .on_hover_text("add device matcher")
+                .on_hover_text(on_hover_text)
                 .clicked()
             {
-                self.cfg.devices.hid.insert(
-                    get_item_name_with_random_suffix("HID matcher", self.cfg.devices.hid.len() + 1),
-                    HidDeviceCfg::new_matcher(),
-                );
-                self.submit_post_draw_cmd(GuiCmd::ConfigChangeSimple);
+                let dk = get_item_name_with_random_suffix(new_name_prefix, devices.len() + 1);
+                devices.insert(dk.clone(), new_device_fn(dk.as_str()));
+                *gui_out_mut = Some(GuiCmd::ConfigChangeSimple);
             }
         })
         .body(|ui| {
-            let mut hid_matcher_update_cmd = None;
-            if !self.cfg.devices.hid.is_empty() {
-                let keys: Vec<String> = self
-                    .cfg
-                    .devices
-                    .hid
+            if !devices.is_empty() {
+                let keys: Vec<String> = devices
                     .iter()
-                    .filter(|d| !d.1.is_a_virtual())
-                    .map(|(k, _)| k.clone())
+                    .filter(|(_, device_cfg)| device_filter(device_cfg))
+                    .map(|(device_cfg_key, _)| device_cfg_key.clone())
                     .collect();
-                for dmk in keys {
+
+                for cfg_key in keys.into_iter() {
                     ui.separator();
-                    draw_collapsing_ui(ui, None::<()>, Some(&dmk), |ui| {
+                    draw_collapsing_ui(ui, None::<()>, Some(&cfg_key), |ui| {
+                        let device = &mut *devices.get_mut(&cfg_key).unwrap();
                         ui.separator();
-                        if ui
-                            .checkbox(&mut self.cfg.devices.hid.get_mut(&dmk).unwrap().enabled, "Enabled")
-                            .changed()
-                        {
-                            self.submit_post_draw_cmd(GuiCmd::ConfigChangeDriverRestart);
+                        Self::draw_key_edit_gui(transient_states_device_key_edit, &cfg_key, true, ui)
+                            .and_then(|out| gui_out_mut.replace(out));
+                        ui.separator();
+                        ui.label(format!("classification: {}", device.get_classification()))
+                            .on_hover_text("Based on controls configured");
+                        ui.separator();
+                        if ui.checkbox(device.is_enabled_mut(), "Enabled").changed() {
+                            *gui_out_mut = Some(GuiCmd::ConfigChangeDriverRestart);
                         };
-                        ui.separator();
-                        self.draw_key_edit_gui(ui, &dmk, false);
-                        ui.separator();
-                        self.draw_device_remove_button(ui, &dmk, false);
-                    })
-                    .body(|ui| {
-                        ui.separator();
-                        let dm = self.cfg.devices.hid.get_mut(&dmk).unwrap();
-                        if let Some(cmd) = dm.egui(
-                            (
-                                Some(self.avail_dev_info_cache.hid(&self.hid_mgr)),
-                                GuiInDeviceCfg::Edit { device_key: &dmk },
-                            ),
-                            ui,
-                        ) {
-                            dm.update_classification();
-                            hid_matcher_update_cmd = Some(cmd);
+
+                        if let Some(persistent) = device.is_persistent_mut() {
+                            ui.separator();
+                            if ui.checkbox(persistent, "Persistent").changed() {
+                                *gui_out_mut = Some(GuiCmd::ConfigChangeSimple);
+                            };
                         }
+
+                        ui.separator();
+                        Self::draw_device_remove_button(&cfg_key, true, ui).and_then(|out| gui_out_mut.replace(out));
+                    })
+                    .body(|ui| {
+                        let device = devices.get_mut(&cfg_key).unwrap();
+                        device
+                            .egui((available_devices, GuiInDeviceCfg::Edit { device_key: &cfg_key }), ui)
+                            .map(|out| {
+                                device.update_classification(); // TODO?: move to sanitize?
+                                gui_out_mut.replace(out);
+                            });
                     });
+
+                    if drawing_virtual && gui_out_mut.is_some() && changed_virtual_device_cfg_key.is_none() {
+                        changed_virtual_device_cfg_key = Some(cfg_key.clone());
+                    }
                 }
             }
-            if let Some(command) = &hid_matcher_update_cmd {
-                self.submit_post_draw_cmd(command.clone());
-            }
         });
+
+        if let Some(out) = gui_out_mut
+            && let Some(changed_virtual_device_cfg_key) = changed_virtual_device_cfg_key
+        {
+            let tmp = Some(GuiCmd::CmdSeqence(vec![
+                out.clone(),
+                GuiCmd::BreakOnErr,
+                GuiCmd::ChangeVirtualHid(GuiCmdChangeVirtualHid {
+                    virtual_hid_key: changed_virtual_device_cfg_key.clone(),
+                })
+                .into(),
+            ]));
+            if !matches!(
+                *out,
+                GuiCmd::DeviceMatcherRename(..) /* TODO: control matcher renaming, when added, goes here to */
+            ) {
+                *gui_out_mut = tmp.map(|out| GuiCmd::SubmitPending(Box::new(out)));
+            } else {
+                *gui_out_mut = tmp;
+            }
+        }
+
+        gui_out
     }
 
     fn draw_variables(&mut self, ui: &mut egui::Ui) {

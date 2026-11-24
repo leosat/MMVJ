@@ -23,6 +23,7 @@ use egui::{
     collapsing_header::{CollapsingState, HeaderResponse},
 };
 use enumflags2::BitFlags;
+use regex::Regex;
 use std::collections::HashMap;
 use std::{any::Any, path::PathBuf};
 use traversable::Traversable;
@@ -277,7 +278,7 @@ pub(crate) enum GuiCmd {
     CmdSeqence(Vec<GuiCmd>),
     BreakOnErr,
     // -----------------------------
-    _SubmitPending(Box<GuiCmd>),
+    SubmitPending(Box<GuiCmd>),
     // -----------------------------
     LoadCfgFile(PathBuf),
     LoadCfgDemo(String),
@@ -450,6 +451,40 @@ pub(crate) fn draw_dyn_value_refs_list(ui: &mut egui::Ui, refs: &mut [DynValueRe
             });
         });
     }
+}
+
+// -----------------
+#[must_use]
+pub(crate) fn draw_regex_editor(in_regex: &mut regex::Regex, ui: &mut egui::Ui) -> bool {
+    let mut changed = false;
+    let edited_regex_string_id = ui
+        .scope_id()
+        .with("edited regex string")
+        .with(in_regex as *mut regex::Regex);
+    let mut regex_compilation_failed = false;
+    let mut regex_string = if let Some(edited_regex_string) = ui.data(|d| d.get_temp::<String>(edited_regex_string_id))
+    {
+        regex_compilation_failed = true;
+        edited_regex_string
+    } else {
+        in_regex.to_string()
+    };
+    if ui.text_edit_singleline(&mut regex_string).changed() {
+        if let Ok(regex) = Regex::new(&regex_string) {
+            changed = true;
+            *in_regex = regex;
+            log::info!("Compiled regex from string {regex_string}");
+            ui.data_mut(|d| d.remove_temp::<String>(edited_regex_string_id));
+        } else {
+            log::error!("Failed to compile regex from string {regex_string}");
+            ui.data_mut(|d| d.insert_temp(edited_regex_string_id, regex_string));
+        }
+    }
+    if regex_compilation_failed {
+        ui.label(egui::RichText::new("regex compilation failure").color(egui::Color32::RED))
+            .on_hover_text("Regex string is not saved!");
+    }
+    changed
 }
 
 // -----------------

@@ -10,8 +10,9 @@ use crate::{
     num_interval::NumInterval,
     schemas_cfg::DescriptionCfg,
     schemas_common::{
-        BaseTickEnabledFlag, ControlCfgCommonIface, EnabledFlagCfg, MarkedAsFromPredefinedControl, ObjId,
-        WithRuntimeId, deserialize_device_controls, is_false, is_none_or_default, is_zero,
+        BaseTickEnabledFlag, ControlCfgCommonIface, DeviceCfgCommonIface, EnabledFlagCfg,
+        MarkedAsFromPredefinedControl, ObjId, WithRuntimeId, deserialize_device_controls, is_false, is_none_or_default,
+        is_zero,
     },
     schemas_predefined::HidControlPredefined,
     schemas_value::{
@@ -195,6 +196,17 @@ pub(crate) enum HidGrabbing {
     Subset(HidMatchingFilter),
 }
 
+impl MatchesAvailableDeviceIface for HidGrabbing {
+    fn matches_available_device(&self, available_device_info: &impl AvailableDeviceInfoIface) -> bool {
+        match self {
+            HidGrabbing::All => true,
+            HidGrabbing::Subset(hid_matching_filter) => {
+                hid_matching_filter.matches_available_device(available_device_info)
+            }
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Serialize, Deserialize, TraversableMut, Traversable, JsonSchema, PartialEq)]
 //#[serde(deny_unknown_fields)]
 pub(crate) struct HidMatcherParamsCfg {
@@ -283,6 +295,20 @@ pub(crate) struct HidDeviceCfg {
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_jk_device_controls")]
     pub(crate) controls: BTreeMap<String, HidControlMatcherCfg>,
+}
+
+impl DeviceCfgCommonIface for HidDeviceCfg {
+    fn is_enabled_mut(&mut self) -> &mut bool {
+        &mut *self.enabled
+    }
+
+    fn _is_virtual(&self) -> bool {
+        self.get_classification().is_a_virtual()
+    }
+
+    fn is_persistent_mut(&mut self) -> Option<&mut bool> {
+        self.virtual_device_persistent_mut()
+    }
 }
 
 impl WithSelfSanitize for HidDeviceCfg {

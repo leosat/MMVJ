@@ -12,7 +12,7 @@ use num_traits::Zero;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::{base_num::BaseNumT, mapped_controls::MappedCtls};
+use crate::{base_num::BaseNumT, device_and_device_manager::WithDeviceClassification, mapped_controls::MappedCtls};
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct ObjId(usize);
@@ -199,4 +199,12 @@ impl Default for EnabledFlagCfg {
 
 const fn default_enabled_flag_inner() -> bool {
     true
+}
+
+// -----------------------------------------
+
+pub(crate) trait DeviceCfgCommonIface: WithDeviceClassification {
+    fn is_enabled_mut(&mut self) -> &mut bool;
+    fn is_persistent_mut(&mut self) -> Option<&mut bool>;
+    fn _is_virtual(&self) -> bool;
 }

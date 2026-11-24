@@ -1,7 +1,7 @@
 use crate::config::WithSelfSanitize;
-use crate::device_and_device_manager::WithDeviceClassification;
-use crate::gui_common::GuiDeviceClassifications;
+use crate::device_and_device_manager::{MatchesAvailableDeviceIface, WithDeviceClassification};
 use crate::gui_common::{DrawEgui, GuiCmd, GuiCmdControlMatcherChange, GuiCmdControlMatcherRemove, draw_collapsing_ui};
+use crate::gui_common::{GuiDeviceClassifications, draw_regex_editor};
 use crate::gui_device::{GuiInDeviceCfg, draw_create_control_matcher_gui};
 use crate::gui_value::GuiInInterval;
 use crate::hid_device::HID_AXIS_MAX_RANGE;
@@ -14,7 +14,6 @@ use crate::schemas_hid::{
     HidMatchingFilterEntry, HidMatchingFilterEntryKinds,
 };
 use crate::schemas_value::WithLastKnownIO;
-use regex::Regex;
 use strum::IntoEnumIterator;
 
 impl<'s> DrawEgui<'s> for HIDDeviceForceFeedbackCfg {
@@ -25,6 +24,23 @@ impl<'s> DrawEgui<'s> for HIDDeviceForceFeedbackCfg {
 
         ui.separator();
         changed |= ui.checkbox(&mut self.enabled, "Enabled").changed();
+        ui.separator();
+
+        ui.horizontal(|ui| {
+            for (label, idx) in [("Cur. X force sum: ", X_AXIS_IDX), ("Cur. Y force sum: ", Y_AXIS_IDX)] {
+                ui.label(label);
+                ui.label(
+                    egui::RichText::from(format!(
+                        "{:+09.4}",
+                        self.ffb_sum_xy[idx].load(std::sync::atomic::Ordering::Relaxed)
+                    ))
+                    // .color(egui::Color32::CYAN.gamma_multiply(0.7))
+                    .monospace(),
+                );
+                ui.separator();
+            }
+            ui.separator();
+        });
 
         let select_new_cond_effects_axis = |text: &str, target: &mut MappedCtls, ui: &mut egui::Ui| -> bool {
             ui.push_id(text, |ui| {
@@ -159,9 +175,10 @@ impl<'s> DrawEgui<'s> for HIDDeviceForceFeedbackCfg {
 }
 
 impl<'s> DrawEgui<'s> for HidDeviceCfg {
-    type In = (Option<&'s [AvailableHIDDeviceInfo]>, GuiInDeviceCfg<'s>);
+    type In = (&'s [AvailableHIDDeviceInfo], GuiInDeviceCfg<'s>);
     type Out = Option<GuiCmd>;
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
+        let available_devices = gui_in.0;
         match gui_in.1 {
             GuiInDeviceCfg::Edit { device_key } => {
                 let mut changed = false;
@@ -170,14 +187,8 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                 ui.separator();
 
                 if self.get_classification().is_a_virtual() {
-                    ui.separator();
-                    changed |= ui
-                        .checkbox(self.virtual_device_persistent_mut().unwrap(), "Persistent")
-                        .changed();
-
-                    ui.separator();
                     ui.horizontal(|ui| {
-                        ui.label("Name:")
+                        ui.label("System device name:")
                             .on_hover_text("This name is assigned in the operating system for informal purposes");
                         if ui
                             .text_edit_singleline(
@@ -258,36 +269,11 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                         .map(|ctl| ctl.1.r#type)
                         .filter(|t| t.is_absolute())
                         .collect::<Vec<_>>();
+
                     if let Some(ff) = self.virtual_device_force_feedback_info_mut() {
                         ui.separator();
                         ui.collapsing("Force feedback", |ui| {
-                            ui.separator();
-                            ui.horizontal(|ui| {
-                                ui.label("Cur. X force sum: ");
-                                ui.label(
-                                    egui::RichText::from(format!(
-                                        "{:+09.4}",
-                                        ff.ffb_sum_xy[X_AXIS_IDX].load(std::sync::atomic::Ordering::Relaxed)
-                                    ))
-                                    // .color(Color32::CYAN)
-                                    .monospace(),
-                                );
-                                ui.separator();
-                                ui.label("Cur. Y force sum: ");
-                                ui.label(
-                                    egui::RichText::from(format!(
-                                        "{:+09.4}",
-                                        ff.ffb_sum_xy[Y_AXIS_IDX].load(std::sync::atomic::Ordering::Relaxed)
-                                    ))
-                                    // .color(Color32::CYAN)
-                                    .monospace(),
-                                );
-                                ui.separator();
-                            });
-
-                            if ff.egui(&available_abs_ctls, ui) {
-                                changed = true;
-                            }
+                            changed |= ff.egui(&available_abs_ctls, ui);
                         });
                     } else {
                         ui.separator();
@@ -304,10 +290,29 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                         }
                     }
                 } else {
-                    let Some(available_devices) = gui_in.0 else {
-                        unreachable!("Available devices info was not provided!");
-                    };
-                    crate::gui_main::GuiMain::draw_matching_available_devices(available_devices, self, ui);
+                    let matching_available = available_devices.iter().filter(|ad| self.matches_available_device(*ad));
+
+                    crate::gui_main::GuiMain::draw_available_devices(
+                        "Matching devices",
+                        "No devices matched",
+                        matching_available.clone(),
+                        self,
+                        ui,
+                    );
+
+                    if matching_available.clone().collect::<Vec<_>>().len() > 0 {
+                        if let Some(Some(grab)) = self.matcher_grab_ref() {
+                            ui.separator();
+                            crate::gui_main::GuiMain::draw_available_devices(
+                                "Grabbed devices",
+                                "No devices grabbed",
+                                matching_available.filter(|ad| grab.matches_available_device(*ad)),
+                                self,
+                                ui,
+                            );
+                        }
+                    }
+
                     ui.separator();
 
                     changed |= self
@@ -315,7 +320,7 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                         .is_some_and(|filter| filter.egui(available_devices, ui));
                     ui.separator();
                     ui.horizontal(|ui| {
-                        ui.collapsing("Grab", |ui| {
+                        ui.collapsing("Grab sub-filter", |ui| {
                             changed |= self.matcher_grab_mut().is_some_and(|mut v| v.egui(available_devices, ui));
                         }).header_response.on_hover_text(
                             "Grabbing will take matched devices and make them unavailable to other applications. \
@@ -327,85 +332,79 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
 
                 ui.separator();
 
-                ui.collapsing(
-                    format!("Controls (classification: {})", self.get_classification()),
-                    |ui| {
-                        let mut update_classification = false;
-                        for (cn, c) in &mut self.controls {
+                ui.collapsing(format!("Controls"), |ui| {
+                    let mut update_classification = false;
+                    for (cn, c) in &mut self.controls {
+                        ui.separator();
+                        draw_collapsing_ui(ui, None::<()>, Some(cn), |ui| {
                             ui.separator();
-                            draw_collapsing_ui(ui, None::<()>, Some(cn), |ui| {
-                                ui.separator();
-                                let mut val = c.get_last_known_io();
-                                ui.label(egui::RichText::new(format!("{:+09.2}", val)).monospace());
-                                ui.separator();
-                                ui.add(egui::Slider::new(&mut val, c.range.make_range_inclusive()).show_value(false));
-                                ui.separator();
-                                if c.r#type.is_button() || c.r#type.is_key() {
-                                    if val != 0.0 {
-                                        ui.label(egui::RichText::new(egui_phosphor::bold::TRAY_ARROW_DOWN).size(20.0))
-                                            .on_hover_text("Pressed (for any inputs values != 0)");
-                                    } else {
-                                        ui.label(egui::RichText::new(egui_phosphor::bold::TRAY_ARROW_UP).size(20.0))
-                                            .on_hover_text("Not pressed (for any inputs values != 0)");
-                                    }
+                            let mut val = c.get_last_known_io();
+                            ui.label(egui::RichText::new(format!("{:+09.2}", val)).monospace());
+                            ui.separator();
+                            ui.add(egui::Slider::new(&mut val, c.range.make_range_inclusive()).show_value(false));
+                            ui.separator();
+                            if c.r#type.is_button() || c.r#type.is_key() {
+                                if val != 0.0 {
+                                    ui.label(egui::RichText::new(egui_phosphor::bold::TRAY_ARROW_DOWN).size(20.0))
+                                        .on_hover_text("Pressed (for any inputs values != 0)");
                                 } else {
-                                    if c.r#type.is_absolute() {
-                                        ui.label(
-                                            egui::RichText::new(egui_phosphor::bold::ARROWS_OUT_CARDINAL).size(20.0),
-                                        )
-                                        .on_hover_text("Absolute axis");
-                                    } else {
-                                        ui.label(
-                                            egui::RichText::new(if val <= 0.0 {
-                                                egui_phosphor::bold::ARROWS_COUNTER_CLOCKWISE
-                                            } else {
-                                                egui_phosphor::bold::ARROWS_CLOCKWISE
-                                            })
-                                            .size(20.0),
-                                        )
-                                        .on_hover_text("Relative movement");
-                                    }
+                                    ui.label(egui::RichText::new(egui_phosphor::bold::TRAY_ARROW_UP).size(20.0))
+                                        .on_hover_text("Not pressed (for any inputs values != 0)");
                                 }
+                            } else {
+                                if c.r#type.is_absolute() {
+                                    ui.label(egui::RichText::new(egui_phosphor::bold::ARROWS_OUT_CARDINAL).size(20.0))
+                                        .on_hover_text("Absolute axis");
+                                } else {
+                                    ui.label(
+                                        egui::RichText::new(if val <= 0.0 {
+                                            egui_phosphor::bold::ARROWS_COUNTER_CLOCKWISE
+                                        } else {
+                                            egui_phosphor::bold::ARROWS_CLOCKWISE
+                                        })
+                                        .size(20.0),
+                                    )
+                                    .on_hover_text("Relative movement");
+                                }
+                            }
+                            ui.separator();
+                            if ui
+                                .small_button(egui_phosphor::fill::TRASH.to_string())
+                                .on_hover_text("Remove control (will be removed if not referenced)")
+                                .clicked()
+                            {
+                                update_classification = true;
+                                gui_out = Some(GuiCmd::ControlMatcherRemove(GuiCmdControlMatcherRemove {
+                                    device_key: device_key.to_string(),
+                                    control_key: cn.clone(),
+                                }));
+                            }
+                        })
+                        .body(|ui| {
+                            ui.group(|ui| {
                                 ui.separator();
-                                if ui
-                                    .small_button(egui_phosphor::fill::TRASH.to_string())
-                                    .on_hover_text("Remove control (will be removed if not referenced)")
-                                    .clicked()
-                                {
+                                if c.egui((), ui) {
                                     update_classification = true;
-                                    gui_out = Some(GuiCmd::ControlMatcherRemove(GuiCmdControlMatcherRemove {
-                                        device_key: device_key.to_string(),
-                                        control_key: cn.clone(),
+                                    gui_out = Some(GuiCmd::ControlMatcherChange(GuiCmdControlMatcherChange {
+                                        new_cm: ControlMatchers::Hid(c.clone()),
                                     }));
                                 }
-                            })
-                            .body(|ui| {
-                                ui.group(|ui| {
-                                    ui.separator();
-                                    if c.egui((), ui) {
-                                        update_classification = true;
-                                        gui_out = Some(GuiCmd::ControlMatcherChange(GuiCmdControlMatcherChange {
-                                            new_cm: ControlMatchers::Hid(c.clone()),
-                                        }));
-                                    }
-                                });
                             });
-                        }
+                        });
+                    }
 
-                        if let Some((n, ControlMatchers::Hid(cm))) = draw_create_control_matcher_gui(
-                            ui,
-                            GuiDeviceClassifications::Hid(self.get_classification()),
-                        ) && self.controls.insert(n, cm).is_none()
-                        {
-                            update_classification = true;
-                            changed = true;
-                        }
+                    if let Some((n, ControlMatchers::Hid(cm))) =
+                        draw_create_control_matcher_gui(ui, GuiDeviceClassifications::Hid(self.get_classification()))
+                        && self.controls.insert(n, cm).is_none()
+                    {
+                        update_classification = true;
+                        changed = true;
+                    }
 
-                        if update_classification {
-                            self.update_classification();
-                        }
-                    },
-                )
+                    if update_classification {
+                        self.update_classification();
+                    }
+                })
                 .header_response
                 .on_hover_text(
                     "Classification depends on set of controls configured for the device or device matcher.
@@ -476,16 +475,23 @@ impl<'s> DrawEgui<'s> for &mut Option<HidGrabbing> {
         let mut changed = false;
         let mut canceled = false;
         if let Some(grab) = self {
-            changed |= grab.egui(available_devices, ui);
-            ui.separator();
-            if ui
-                .button(egui_phosphor::regular::TRASH)
-                .on_hover_text("Disable matching devices grabbing")
-                .clicked()
-            {
+            let mut disable = false;
+            ui.horizontal(|ui| {
+                if ui
+                    .button(egui_phosphor::regular::TRASH)
+                    .on_hover_text("Disable matching devices grabbing")
+                    .clicked()
+                {
+                    disable = true;
+                    changed = true;
+                }
+                ui.separator();
+                changed |= grab.egui(available_devices, ui);
+            });
+            if disable {
                 **self = None;
-                changed = true;
             }
+            ui.separator();
         } else {
             let enabling_in_progess_id = ui.scope_id().with("grabbing enabling in progress");
             let enabling_in_progress = ui.data(|d| d.get_temp::<bool>(enabling_in_progess_id).unwrap_or_default());
@@ -519,7 +525,7 @@ impl<'s> DrawEgui<'s> for &mut Option<HidGrabbing> {
                         if ui
                             .button("Grab!")
                             .on_hover_text(
-                                "Warning! This can make all the corresponding devices inaccessible \
+                                "Warning! This will (unless re-mapped) make all the corresponding devices inaccessible \
                                     while app is running!",
                             )
                             .clicked()
@@ -547,45 +553,51 @@ impl<'s> DrawEgui<'s> for HidMatchingFilter {
 
     fn egui(&mut self, _available_devices: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut changed = false;
-        ui.collapsing("Match", |ui| {
-            ui.vertical(|ui| {
-                for (label, entry_icon, entries) in [
-                    ("Include", egui_phosphor::regular::SUBSET_OF, &mut self.include),
-                    ("Exclude", egui_phosphor::regular::NOT_SUBSET_OF, &mut self.exclude),
-                ] {
-                    ui.collapsing(label, |ui| {
-                        let mut entry_to_remove = None;
-                        if !entries.is_empty() {
-                            changed |= entries.iter_mut().enumerate().any(|(idx, f)| {
-                                ui.separator();
-                                ui.horizontal(|ui| {
-                                    ui.label(entry_icon);
-                                    ui.separator();
-                                    let mut ret = f.egui((), ui);
-                                    if ui.button(egui_phosphor::regular::TRASH_SIMPLE).clicked() {
-                                        entry_to_remove = Some(idx);
-                                        ret = true;
-                                    }
-                                    ret
-                                })
-                                .inner
-                            });
-                        }
+        ui.vertical(|ui| {
+            for (label, entry_icon, entries) in [
+                ("Include...", egui_phosphor::regular::SUBSET_OF, &mut self.include),
+                ("Exclude...", egui_phosphor::regular::NOT_SUBSET_OF, &mut self.exclude),
+            ] {
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label(label);
+                    ui.separator();
+                    if ui
+                        .button(egui_phosphor::regular::LIST_PLUS)
+                        .on_hover_text("Add filter entry")
+                        .clicked()
+                    {
+                        entries.push(Default::default());
+                        changed = true;
+                    }
+                });
 
-                        if let Some(idx) = entry_to_remove {
-                            entries.remove(idx);
-                        }
-
-                        if ui.button("add match filter").clicked() {
-                            entries.push(Default::default());
-                            changed = true;
-                        }
+                let mut entry_to_remove = None;
+                if !entries.is_empty() {
+                    changed |= entries.iter_mut().enumerate().any(|(idx, f)| {
+                        ui.separator();
+                        ui.horizontal(|ui| {
+                            ui.label(entry_icon);
+                            ui.separator();
+                            let mut ret = f.egui((), ui);
+                            if ui.button(egui_phosphor::regular::TRASH_SIMPLE).clicked() {
+                                entry_to_remove = Some(idx);
+                                ret = true;
+                            }
+                            ret
+                        })
+                        .inner
                     });
                 }
 
-                ui.separator();
-            });
+                if let Some(idx) = entry_to_remove {
+                    entries.remove(idx);
+                }
+            }
+
+            ui.separator();
         });
+
         changed
     }
 }
@@ -597,47 +609,17 @@ impl<'s> DrawEgui<'s> for HidMatchingFilterEntryKinds {
     fn egui(&mut self, _gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
         let mut changed = false;
 
-        let mut edit_regex = |in_regex: &mut regex::Regex, ui: &mut egui::Ui| {
-            let edited_regex_string_id = ui.scope_id().with("edited regex string");
-            let mut regex_compilation_failed = false;
-            let mut regex_string =
-                if let Some(edited_regex_string) = ui.data(|d| d.get_temp::<String>(edited_regex_string_id)) {
-                    regex_compilation_failed = true;
-                    edited_regex_string
-                } else {
-                    in_regex.to_string()
-                };
-            if ui.text_edit_singleline(&mut regex_string).changed() {
-                if let Ok(regex) = Regex::new(&regex_string) {
-                    changed = true;
-                    *in_regex = regex;
-                    log::info!("Compiled regex from string {regex_string}");
-                    ui.data_mut(|d| d.remove_temp::<String>(edited_regex_string_id));
-                } else {
-                    log::error!("Failed to compile regex from string {regex_string}");
-                    ui.data_mut(|d| d.insert_temp(edited_regex_string_id, regex_string));
-                }
+        ui.horizontal(|ui| match self {
+            HidMatchingFilterEntryKinds::NameRegex(regex) => {
+                ui.label("Name regex: ");
+                changed |= draw_regex_editor(regex, ui);
             }
-            if regex_compilation_failed {
-                ui.label(egui::RichText::new("regex compilation failure").color(egui::Color32::RED))
-                    .on_hover_text("Regex string is not saved!");
+            HidMatchingFilterEntryKinds::PathRegex(regex) => {
+                ui.label("Path regex: ");
+                changed |= draw_regex_editor(regex, ui);
             }
-        };
-
-        ui.horizontal(|ui| {
-            match self {
-                HidMatchingFilterEntryKinds::NameRegex(regex) => {
-                    ui.label("Name regex: ");
-                    edit_regex(regex, ui);
-                }
-                HidMatchingFilterEntryKinds::PathRegex(regex) => {
-                    ui.label("Path regex: ");
-                    edit_regex(regex, ui);
-                }
-                HidMatchingFilterEntryKinds::BusSpec(_hid_device_bus_spec_cfg) => {
-                    ui.label("Bus spec regex: TODO ");
-                    //               hid_device_bus_spec_cfg.
-                }
+            HidMatchingFilterEntryKinds::BusSpec(_hid_device_bus_spec_cfg) => {
+                ui.label("Bus spec regex Gui is not yet implemented ");
             }
         });
 

@@ -1,5 +1,5 @@
-use crate::gui_common::GuiDeviceClassifications;
 use crate::gui_common::{DrawEgui, GuiCmd, GuiCmdControlMatcherChange, GuiCmdControlMatcherRemove, draw_collapsing_ui};
+use crate::gui_common::{GuiDeviceClassifications, draw_regex_editor};
 use crate::gui_device::{GuiInDeviceCfg, draw_create_control_matcher_gui};
 use crate::gui_value::GuiInInterval;
 use crate::mapped_controls::{MappedCtls, MappedCtlsMidi};
@@ -208,27 +208,27 @@ impl<'s> DrawEgui<'s> for MidiControlMatcherCfg {
 }
 
 impl<'s> DrawEgui<'s> for MidiMatcherCfg {
-    type In = GuiInDeviceCfg<'s>;
+    type In = (&'s [AvailableMidiDeviceInfo], GuiInDeviceCfg<'s>);
     type Out = Option<GuiCmd>;
     fn egui(&mut self, gui_in: Self::In, ui: &mut egui::Ui) -> Self::Out {
-        match gui_in {
+        let available_devices = gui_in.0;
+
+        match gui_in.1 {
             GuiInDeviceCfg::Edit { device_key } => {
                 let mut changed = false;
-                ui.separator();
-                changed |= ui.checkbox(&mut self.enabled, "Enabled").changed();
-                ui.separator();
 
+                crate::gui_main::GuiMain::draw_available_devices(
+                    "Matched devices",
+                    "No devices matched",
+                    available_devices.iter(),
+                    self,
+                    ui,
+                );
+
+                ui.separator();
                 ui.horizontal(|ui| {
                     ui.label("Device name matching regex: ");
-                    let mut regex_string = self.match_name_regex.to_string();
-                    if ui.text_edit_singleline(&mut regex_string).changed() {
-                        if let Ok(regex) = regex::Regex::new(&regex_string) {
-                            changed = true;
-                            self.match_name_regex = regex;
-                        } else {
-                            log::error!("Failed to compile regex from string: {}", regex_string);
-                        }
-                    }
+                    changed |= draw_regex_editor(&mut self.match_name_regex, ui);
                 });
                 ui.separator();
 

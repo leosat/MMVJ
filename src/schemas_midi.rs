@@ -2,13 +2,14 @@
 use crate::schemas_value::{WithLastKnownIO, WithLastKnownIOSettable, WithNumericValueSettable};
 use crate::{
     base_num::{BaseAtomicT, BaseNumT},
+    device_and_device_manager::WithDeviceClassification,
     mapped_controls::{MappedCtls, MappedCtlsMidi},
     mapping::WithMappingTriggerPredicate,
     num_interval::NumInterval,
     schemas_cfg::DescriptionCfg,
     schemas_common::{
-        BaseTickEnabledFlag, ControlCfgCommonIface, EnabledFlagCfg, MarkedAsFromPredefinedControl, ObjId,
-        WithRuntimeId, deserialize_device_controls,
+        BaseTickEnabledFlag, ControlCfgCommonIface, DeviceCfgCommonIface, EnabledFlagCfg,
+        MarkedAsFromPredefinedControl, ObjId, WithRuntimeId, deserialize_device_controls,
     },
     schemas_predefined::MidiControlPredefined,
     schemas_value::{_WithDstRefCount, WithNumericValue},
@@ -236,6 +237,57 @@ pub(crate) struct MidiMatcherCfg {
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_midi_device_controls")]
     pub(crate) controls: BTreeMap<String, MidiControlMatcherCfg>,
+}
+
+impl DeviceCfgCommonIface for MidiMatcherCfg {
+    fn is_enabled_mut(&mut self) -> &mut bool {
+        &mut self.enabled
+    }
+
+    fn is_persistent_mut(&mut self) -> Option<&mut bool> {
+        None
+    }
+
+    fn _is_virtual(&self) -> bool {
+        false
+    }
+}
+
+impl WithDeviceClassification for MidiMatcherCfg {
+    fn get_classification(&self) -> enumflags2::BitFlags<crate::device_and_device_manager::DeviceKind> {
+        Default::default()
+    }
+
+    fn update_classification(&mut self) {
+        #[cfg(debug_assertions)]
+        {
+            log::warn!("Updating MIDI device classification is no-op.")
+        }
+    }
+
+    fn is_a_joystick(&self) -> bool {
+        false
+    }
+
+    fn is_a_keyboard(&self) -> bool {
+        true /* o_O */
+    }
+
+    fn is_a_gamepad(&self) -> bool {
+        false
+    }
+
+    fn is_a_mouse(&self) -> bool {
+        false
+    }
+
+    fn is_a_virtual(&self) -> bool {
+        false
+    }
+
+    fn is_a_misc_mappable(&self) -> bool {
+        true
+    }
 }
 
 impl MidiMatcherCfg {
