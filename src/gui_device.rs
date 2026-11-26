@@ -38,9 +38,15 @@ pub(crate) fn draw_create_control_matcher_gui(
 
                     #[allow(clippy::type_complexity)]
                     let controls: [(&str, fn((&String, &HidControlPredefined)) -> bool); _] = [
-                        ("\"Joystick\"", |cm| cm.1.r#type.is_a_joystick_control()),
-                        ("\"Gamepad\"", |cm| cm.1.r#type.is_a_gamepad_control()),
-                        ("\"Mouse\"", |cm| cm.1.r#type.is_a_mouse_control()),
+                        ("\"Joystick\"", |cm| {
+                            cm.1.r#type.is_a_joystick_control() || cm.1.r#type.is_a_special_ffb_control()
+                        }),
+                        ("\"Gamepad\"", |cm| {
+                            cm.1.r#type.is_a_gamepad_control() || cm.1.r#type.is_a_special_ffb_control()
+                        }),
+                        ("\"Mouse\"", |cm| {
+                            cm.1.r#type.is_a_mouse_control() || cm.1.r#type.is_a_special_ffb_control()
+                        }),
                         ("\"Keyboard\"", |cm| cm.1.r#type.is_a_keyboard_control()),
                         ("Misc", |cm| cm.1.r#type.is_a_misc_control()),
                     ];

@@ -768,15 +768,16 @@ impl MappedCtls {
             )
     }
 
+    pub(crate) fn is_a_special_ffb_control(&self) -> bool {
+        self.is_special_force_feedback_x() || self.is_special_force_feedback_y()
+    }
+
     pub(crate) fn is_a_keyboard_control(&self) -> bool {
         self.is_key()
     }
 
     pub(crate) fn is_a_joystick_control(&self) -> bool {
-        self.is_absolute()
-            || self.is_special_force_feedback_x()
-            || self.is_special_force_feedback_y()
-            || matches!(self, MappedCtls::BtnJoystick | MappedCtls::BtnTrigger)
+        self.is_absolute() || matches!(self, MappedCtls::BtnJoystick | MappedCtls::BtnTrigger)
     }
 
     pub(crate) fn is_a_gamepad_control(&self) -> bool {
