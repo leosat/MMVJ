@@ -4,11 +4,13 @@
 
 title: Grabbed HW mouse to Virtual Mouse simple mappings
 desc: |+
-  This is the early WIP demo config showcasing device grabbing in one to one HW mouse to Virtual Mouse mapping scenario.
+  This is the early WIP demo config showcasing device grabbing in one to one
+  HW mouse to Virtual Mouse mapping scenario.
 
-  Update matching regex of a grabbed mouse to match the one you want to grab and proxy!
-  If everything works fine, you shall have the same experience with your mouse except for right button will not be working
-  due to corresponding mapping intentionally disabled for demo purpose (see below).
+  Beware, this will grab any device that is a mouse and make it inaccessible
+  to other applications. If everything works fine, you shall have the same
+  experience with your mouse except for right button will not be working
+  due to corresponding mapping intentionally disabled for demo purpose.
 
   Refining this config will bring the following next improvements to the app:
 

@@ -4,18 +4,18 @@
 
 title: Abstract Lua scripting demo
 desc: |
-  Scripting example using Luau.
-  
+  Abstract scripting example using Luau.
+
   inputs[0] is the main script "from-pipeline" input
   outputs[0] is the main script "to-pipeline" output
-  
-  Example script generates some periodic signal. If force feedback on component X 
+
+  Example script generates some periodic signal. If force feedback on component X
   is supplied to the associated virtual joystick it's mixed-in, the strength of the
   former is reduced proportionally to the strength of the force feedback.
-  
+
   Feel free to define any number of auxiliary inputs and outputs for the script.
   Access values under other indexes in inputs and outputs tables.
-  
+
   Have fun!
 global:
   base_rate: 100
@@ -142,55 +142,55 @@ map:
       lang: Luau
       script: |-
         ---------------------------------------------------------
-        
+
         local now = os.clock()
         if last == nil then last = now end
         local dt = now - last
-        
+
         ---------------------------------------------------------
-        
+
         local all_gain = 50
         local ffb_in = read("ffb_in")
         local aux_freq_mul = read("freq_mul") * dt
         local aux_gain = read("gain")
         local out = 0
-        
+
         ---------------------------------------------------------
         print("    ~ Force feedback X input is: ", ffb_in)
         print("    ~ Aux signal gain is: ", aux_gain)
-        
+
         if math.abs(ffb_in) < 0.0001 then
           print "----"
           print "[attention please] No force feedback input detected, use ``ffcfstress -d /dev/input/event<OUR DEVICE NUMBER> '' to inject some force feedback..."
         end
-        
+
         print("---------------------------------------------------------")
-        
+
         ---------------------------------------------------------
         local aux_ps1 = 0
         local aux_ps2 = 0.3
         local aux_ps3 = 2.9
-        
+
         if aux_a1 == nil then aux_a1 = 0 end
         if aux_a2 == nil then aux_a2 = 0 end
         if aux_a3 == nil then aux_a3 = 0 end
-        
+
         aux_a1 += 0.6  * aux_freq_mul
         aux_a2 += 0.1  * aux_freq_mul
         aux_a3 += 0.05 * aux_freq_mul
-        
-        aux_s = math.sin(aux_a1 + aux_ps1) + 
-                math.sin(aux_a2 + aux_ps2)*1.7 + 
+
+        aux_s = math.sin(aux_a1 + aux_ps1) +
+                math.sin(aux_a2 + aux_ps2)*1.7 +
                 math.sin(aux_a3 + aux_ps3)
-        
+
         out = math.clamp(all_gain * (ffb_in + aux_s * (1 - math.abs(ffb_in)) * aux_gain ), -100, 100)
-        
+
         write(0, out)
         write(1, out)
         write(2, out / 2)
         write(3, out)
         write(4, out*10)
-        
+
         last = now
       aux_srcs:
         ffb_in:

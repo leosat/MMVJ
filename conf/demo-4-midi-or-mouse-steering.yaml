@@ -4,8 +4,8 @@
 
 title: Mouse steering and MIDI-controlled joystick
 desc: >-
-  Advanced configuration featuring Mouse steering and MIDI (used for pedals and
-  alternative steering with Pitch Wheel) configuration.
+  Mouse or MIDI-based steering and pedals emulation.
+  MIDI-based steering is bound to a pitch wheel.
 global:
   base_rate: 60
   persistent_joysticks: true

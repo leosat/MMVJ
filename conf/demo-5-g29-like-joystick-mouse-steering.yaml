@@ -4,7 +4,8 @@
 
 title: G29-like joystick, mouse steering only
 desc: |-
-  This configuration is similar to default mouse steering config, however tries to mimic the G29 steering wheel by
+  Similar to simple mouse steering config,
+  but tries to mimic the G29 steering wheel by
   using its device id.
 global:
   base_rate: 120

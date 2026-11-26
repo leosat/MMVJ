@@ -411,7 +411,7 @@ impl eframe::App for GuiMain {
                                 egui_phosphor::regular::DOTS_SIX_VERTICAL,
                             ),
                             |ui| {
-                                for (demo_name, _) in crate::config::DEMO_CFG.lock().unwrap().iter() {
+                                for (demo_name, demo) in crate::config::DEMO_CFG.lock().unwrap().iter() {
                                     if ui
                                         .button(format!(
                                             "{} {} {}",
@@ -419,6 +419,7 @@ impl eframe::App for GuiMain {
                                             egui_phosphor::regular::DOTS_SIX_VERTICAL,
                                             demo_name
                                         ))
+                                        .on_hover_text(&*demo.description)
                                         .clicked()
                                     {
                                         self.submit_post_draw_cmd(GuiCmd::LoadCfgDemo(demo_name.into()));

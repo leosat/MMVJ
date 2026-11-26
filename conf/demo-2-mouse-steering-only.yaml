@@ -4,17 +4,12 @@
 
 title: Mouse steering only
 desc: |+
-
-  #################### A SIMPLE MOUSE STEERING CONFIGURATION EXAMPLE ####################
-  #
+  A simple mouse steering example.
 
   - Move mouse inwards and outwards to simulate hands holding steering wheel firmly or loose.
   - Tweak steering transform settings to your taste: autocentering dynamics, force feedback
     application etc.
   - Some keyboard keys are mapped to joystick buttons, no filters added.
-
-  #
-  ################################# Have fun! ###########################################
 
 global:
   base_rate: 100

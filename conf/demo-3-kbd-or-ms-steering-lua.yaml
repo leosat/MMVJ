@@ -4,11 +4,10 @@
 
 title: Keyboard and mouse steering, lua scripting-based
 desc: |+
+  A variant of mouse + keyboard steerig employing some Lua scripting.
 
-  ############################## MOUSE + KEYBOARD STEERING CONFIGURATION EXAMPLE #########################################
-  #
-
-  - Keyboard or mouse steering is automatically actiated whenever mouse is moved or keyboard keys left/right are pressed.
+  - Keyboard or mouse steering is automatically actiated whenever mouse is moved or keyboard
+    keys left/right are pressed.
   - When mouse steering active,
     1) move mouse inwards and outwards to simulate hands holding steering wheel firmly or loose.
     2) left and right movements are mapped to steering direction.
@@ -16,9 +15,6 @@ desc: |+
     1) down button simulates hold factor and decreases sensitivity,
        up button increases sensitivity, also increasing hold factor.
     2) left and right buttons are mapped to steering direction.
-
-  #
-  ################################################## Have fun! ##########################################################
 
 global:
   base_rate: 70

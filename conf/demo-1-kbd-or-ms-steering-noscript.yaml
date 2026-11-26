@@ -4,19 +4,14 @@
 
 title: Keyboard and mouse steering, no-script
 desc: |+
+  A no-scripting mouse + keyboard steering example, that uses basic
+  transformation steps to feed the steering emulation with keyboard
+  or mouse input.
 
-  #################### EXPERIMENTAL MOUSE + KBD STEERING CONFIGURATION EXAMPLE ##########
-  #
-
-    This is a no-scripting example, that uses basic arithmetic and velocity_to_displacement
-    transformation steps to feed the steering emulation with keyboard or mouse input.
-
-    Hold factor for mouse is bound to Y movement (front-back), for keyboard - to pressing UP or DOWN keys.
-
-    Key UP held pressed increases steering sensitivity (use it for quicker movement when on keyboard).
-
-  #
-  ################################# Have fun! ###########################################
+  - Hold factor for mouse is bound to Y movement (front-back),
+    For keyboard - to pressing UP or DOWN keys.
+  - Key UP held pressed increases steering sensitivity
+    (use it for quicker movement when on keyboard).
 
 global:
   base_rate: 60
