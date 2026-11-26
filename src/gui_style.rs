@@ -33,16 +33,40 @@ pub(crate) const GUI_STYLE_LIGHT: GuiStyle = GuiStyle {
     tfm_title_color_disabled: egui::Color32::DARK_GRAY,
 };
 
+// ----------------------------------------------------
+pub(crate) const GUI_STYLE_GRAY_OUTLINED: GuiStyle = GuiStyle {
+    kind: GuiStyleKind::GrayOutlined,
+    //---
+    value_identity_text_color: egui::Color32::BLUE,
+    value_identity_bg_color: egui::Color32::from_rgba_unmultiplied_const(0, 200, 0, 30),
+    //---
+    tfm_io_info_bg_color_enabled: egui::Color32::from_black_alpha(0),
+    tfm_io_info_color_enabled: egui::Color32::DARK_GREEN,
+    tfm_title_bg_color_enabled: egui::Color32::DARK_GRAY,
+    tfm_title_color_enabled: egui::Color32::LIGHT_GREEN,
+    tfm_title_font_size: 16.0,
+    tfm_title_bg_color_disabled: egui::Color32::LIGHT_GRAY,
+    tfm_title_color_disabled: egui::Color32::DARK_GRAY,
+};
+
 fn setup_egui_ctx_light(ctx: &egui::Context) {
     // cc.egui_ctx..all_styles_mut(|s| s.visuals = get_visuals_high_contrast_light1());
     // cc.egui_ctx.all_styles_mut(|s| s.visuals = get_visuals_w95_1());
     ctx.set_theme(egui::Theme::from_dark_mode(false));
     setup_egui_cc_common(ctx);
+    ctx.set_visuals(egui::Visuals::light());
+}
+
+fn setup_egui_ctx_gray_outlined(ctx: &egui::Context) {
+    ctx.set_theme(egui::Theme::from_dark_mode(false));
+    setup_egui_cc_common(ctx);
+    ctx.set_visuals(get_visuals_gray_outlined());
 }
 
 fn setup_egui_ctx_dark(ctx: &egui::Context) {
     ctx.set_theme(egui::Theme::from_dark_mode(true));
     setup_egui_cc_common(ctx);
+    ctx.set_visuals(egui::Visuals::dark());
 }
 
 fn setup_egui_cc_common(ctx: &egui::Context) {
@@ -101,6 +125,7 @@ fn font_definitions_with_phosphor_fonts() -> egui::FontDefinitions {
 pub(crate) enum GuiStyleKind {
     #[default]
     Light,
+    GrayOutlined,
     Dark,
 }
 
@@ -129,6 +154,7 @@ impl GuiStyle {
         match self.kind {
             GuiStyleKind::Light => setup_egui_ctx_light(ctx),
             GuiStyleKind::Dark => setup_egui_ctx_dark(ctx),
+            GuiStyleKind::GrayOutlined => setup_egui_ctx_gray_outlined(ctx),
         }
     }
     pub(crate) fn value_identity_decorate(&self, vi: egui::RichText) -> egui::RichText {
@@ -177,7 +203,7 @@ impl GuiStyle {
 // --------------------------------------------------------------------------
 
 #[allow(unused)]
-pub fn get_visuals_w95_1() -> egui::Visuals {
+pub fn get_visuals_gray_outlined() -> egui::Visuals {
     use egui::{Stroke, epaint::Shadow};
 
     let mut visuals = egui::Visuals::light();
@@ -202,8 +228,8 @@ pub fn get_visuals_w95_1() -> egui::Visuals {
     visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, black);
 
     visuals.widgets.inactive.bg_fill = w95_gray;
-    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, dark_gray);
-    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, black);
+    // visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, dark_gray);
+    // visuals.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, black);
 
     visuals.widgets.hovered.bg_fill = w95_gray;
     visuals.widgets.hovered.bg_stroke = Stroke::new(1.1_f32, black);

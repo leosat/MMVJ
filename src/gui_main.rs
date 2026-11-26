@@ -17,6 +17,7 @@ use crate::gui_common::{GuiCmdDeviceKeyRename, GuiCmdDeviceMatcherRemove};
 use crate::gui_device::GuiInDeviceCfg;
 use crate::gui_mapping::DndJobMoveTfmStep_Visitor;
 use crate::gui_style::GUI_STYLE_DARK;
+use crate::gui_style::GUI_STYLE_GRAY_OUTLINED;
 use crate::gui_style::GUI_STYLE_LIGHT;
 use crate::gui_style::GuiStyle;
 use crate::gui_telemetry_graph::GuiTelemetryGraphStates;
@@ -503,14 +504,16 @@ impl eframe::App for GuiMain {
                     ui.separator();
                     ui.menu_button("View", |ui| {
                         ui.separator();
+                        if ui.button("Use gray outlined theme").clicked() {
+                            self.set_style(GUI_STYLE_GRAY_OUTLINED, ui);
+                        }
+                        ui.separator();
                         if ui.button("Use light theme").clicked() {
-                            self.style = GUI_STYLE_LIGHT;
-                            self.style.setup_egui_ctx(ui.ctx());
+                            self.set_style(GUI_STYLE_LIGHT, ui);
                         }
                         ui.separator();
                         if ui.button("Use dark theme").clicked() {
-                            self.style = GUI_STYLE_DARK;
-                            self.style.setup_egui_ctx(ui.ctx());
+                            self.set_style(GUI_STYLE_DARK, ui);
                         }
                         ui.separator();
                         if ui.button("Reset UI cache").clicked() {
@@ -886,6 +889,11 @@ impl<'s> DrawEgui<'s> for MapperMode {
 // ================================================================================
 
 impl GuiMain {
+    fn set_style(&mut self, style: GuiStyle, ui: &mut egui::Ui) {
+        self.style = style;
+        self.style.setup_egui_ctx(ui.ctx());
+    }
+
     pub(super) fn reset_runtime_state(&mut self) {
         self.telemetry_graphs.borrow_mut().clear();
         self.transient_states_script_aux_edit.borrow_mut().clear();
