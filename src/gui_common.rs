@@ -489,6 +489,151 @@ pub(crate) fn draw_regex_editor(in_regex: &mut regex::Regex, ui: &mut egui::Ui) 
 
 // -----------------
 
+fn default_ui_callback(_ui: &mut egui::Ui) {}
+fn default_trigger_callback(_ui: &mut egui::Ui) -> bool {
+    false
+}
+
+pub(crate) struct OptionallyWindowed<
+    's,
+    WindowTitleT = &'s str,
+    PlaceholderUiT = fn(&mut egui::Ui),
+    WindowUiT = fn(&mut egui::Ui),
+    TriggerUiT = fn(&mut egui::Ui) -> bool,
+> where
+    WindowTitleT: egui::IntoAtoms<'s>,
+    PlaceholderUiT: FnOnce(&mut egui::Ui),
+    WindowUiT: FnOnce(&mut egui::Ui),
+    TriggerUiT: FnOnce(&mut egui::Ui) -> bool,
+{
+    window_id: egui::Id,
+    window_title: WindowTitleT,
+    window_initial_trigger_ui: TriggerUiT,
+    window_opened_placeholder_ui: PlaceholderUiT,
+    window_ui: WindowUiT,
+    _lifetime: std::marker::PhantomData<&'s ()>,
+}
+
+impl<'s> Default for OptionallyWindowed<'s> {
+    fn default() -> Self {
+        Self::new(egui::Id::NULL)
+    }
+}
+
+impl<'s> OptionallyWindowed<'s> {
+    pub(crate) fn new(window_id: egui::Id) -> Self {
+        Self {
+            window_id,
+            window_title: "",
+            window_initial_trigger_ui: default_trigger_callback,
+            window_opened_placeholder_ui: default_ui_callback,
+            window_ui: default_ui_callback,
+            _lifetime: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<'s, WindowTitleT, PlaceholderUiT, WindowUiT, TriggerUiT>
+    OptionallyWindowed<'s, WindowTitleT, PlaceholderUiT, WindowUiT, TriggerUiT>
+where
+    WindowTitleT: egui::IntoAtoms<'s>,
+    PlaceholderUiT: FnOnce(&mut egui::Ui),
+    WindowUiT: FnOnce(&mut egui::Ui),
+    TriggerUiT: FnOnce(&mut egui::Ui) -> bool,
+{
+    #[allow(unused)]
+    pub(crate) fn with_id(mut self, window_id: egui::Id) -> Self {
+        self.window_id = window_id;
+        self
+    }
+
+    pub(crate) fn with_title<NewWindowTitleT>(
+        self,
+        window_title: NewWindowTitleT,
+    ) -> OptionallyWindowed<'s, NewWindowTitleT, PlaceholderUiT, WindowUiT, TriggerUiT>
+    where
+        NewWindowTitleT: egui::IntoAtoms<'s>,
+    {
+        OptionallyWindowed {
+            window_id: self.window_id,
+            window_title,
+            window_initial_trigger_ui: self.window_initial_trigger_ui,
+            window_opened_placeholder_ui: self.window_opened_placeholder_ui,
+            window_ui: self.window_ui,
+            _lifetime: std::marker::PhantomData,
+        }
+    }
+
+    pub(crate) fn with_initial_trigger_ui<NewTriggerUiT>(
+        self,
+        window_initial_trigger_ui: NewTriggerUiT,
+    ) -> OptionallyWindowed<'s, WindowTitleT, PlaceholderUiT, WindowUiT, NewTriggerUiT>
+    where
+        NewTriggerUiT: FnOnce(&mut egui::Ui) -> bool,
+    {
+        OptionallyWindowed {
+            window_id: self.window_id,
+            window_title: self.window_title,
+            window_initial_trigger_ui,
+            window_opened_placeholder_ui: self.window_opened_placeholder_ui,
+            window_ui: self.window_ui,
+            _lifetime: std::marker::PhantomData,
+        }
+    }
+
+    pub(crate) fn with_placeholder_ui<NewPlaceholderUiT>(
+        self,
+        window_opened_placeholder_ui: NewPlaceholderUiT,
+    ) -> OptionallyWindowed<'s, WindowTitleT, NewPlaceholderUiT, WindowUiT, TriggerUiT>
+    where
+        NewPlaceholderUiT: FnOnce(&mut egui::Ui),
+    {
+        OptionallyWindowed {
+            window_id: self.window_id,
+            window_title: self.window_title,
+            window_initial_trigger_ui: self.window_initial_trigger_ui,
+            window_opened_placeholder_ui,
+            window_ui: self.window_ui,
+            _lifetime: std::marker::PhantomData,
+        }
+    }
+
+    pub(crate) fn with_window_ui<NewWindowUiT>(
+        self,
+        window_ui: NewWindowUiT,
+    ) -> OptionallyWindowed<'s, WindowTitleT, PlaceholderUiT, NewWindowUiT, TriggerUiT>
+    where
+        NewWindowUiT: FnOnce(&mut egui::Ui),
+    {
+        OptionallyWindowed {
+            window_id: self.window_id,
+            window_title: self.window_title,
+            window_initial_trigger_ui: self.window_initial_trigger_ui,
+            window_opened_placeholder_ui: self.window_opened_placeholder_ui,
+            window_ui,
+            _lifetime: std::marker::PhantomData,
+        }
+    }
+
+    pub(crate) fn show(self, ui: &mut egui::Ui) -> bool {
+        let mut window_opened = ui.data_mut(|d| *d.get_temp_mut_or_default::<bool>(self.window_id));
+
+        if window_opened {
+            (self.window_opened_placeholder_ui)(ui);
+            egui::Window::new(self.window_title)
+                .open(&mut window_opened)
+                .resizable(true)
+                .id(self.window_id)
+                .show(ui.ctx(), |ui| (self.window_ui)(ui));
+        } else if (self.window_initial_trigger_ui)(ui) {
+            window_opened = true;
+        }
+
+        ui.data_mut(|d| d.insert_temp(self.window_id, window_opened));
+        window_opened
+    }
+}
+
 pub(crate) fn draw_button_to_window<'s>(
     window_title: impl egui::IntoAtoms<'s>,
     window_id: egui::Id,
