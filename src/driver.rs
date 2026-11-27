@@ -664,7 +664,7 @@ fn handle_cmd<HidManagerT: MappedHidManager, #[cfg(feature = "midi")] MidiManage
                 DriverCmd::ReloadWithInitialCfg => main_loop_action = DriverMainLoopAction::GoToStartWithInitialCfg,
                 DriverCmd::Reload { sync_tx } => {
                     main_loop_action = DriverMainLoopAction::GoToStartWithCurrentCfg;
-                    post_reload_report_back_tx = sync_tx.map(|sync_tx| DriverResponseOneShotChannels::Sync(sync_tx));
+                    post_reload_report_back_tx = sync_tx.map(DriverResponseOneShotChannels::Sync);
                 }
                 DriverCmd::Halt => {
                     log::info!("Terminating due to halt command received, see ya!");

@@ -317,7 +317,7 @@ macro_rules! implement_status_for {
 }
 
 #[allow(unused)]
-pub(crate) static GLOBAL_STATUS_HAY: LazyLock<StatusHayShared> = LazyLock::new(|| Default::default());
+pub(crate) static GLOBAL_STATUS_HAY: LazyLock<StatusHayShared> = LazyLock::new(Default::default);
 
 #[cfg(test)]
 #[test]

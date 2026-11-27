@@ -95,7 +95,7 @@ impl Default for HidMatchingFilterEntryKinds {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub(crate) struct HidMatchingFilterEntry {
     // #[serde(
     //     default,
@@ -218,15 +218,6 @@ pub(crate) struct HidMatcherParamsCfg {
     grab: Option<HidGrabbing>,
 }
 
-impl Default for HidMatchingFilterEntry {
-    fn default() -> Self {
-        Self {
-            // TODO? match_owned_virtual: Default::default(),
-            inner: Default::default(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, TraversableMut, Traversable, JsonSchema, Default, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct HidVirtualParamsCfg {
@@ -299,7 +290,7 @@ pub(crate) struct HidDeviceCfg {
 
 impl DeviceCfgCommonIface for HidDeviceCfg {
     fn is_enabled_mut(&mut self) -> &mut bool {
-        &mut *self.enabled
+        &mut self.enabled
     }
 
     fn _is_virtual(&self) -> bool {
@@ -769,7 +760,7 @@ impl WithSelfSanitize for HIDDeviceForceFeedbackCfg {
                 "Force feedback is enabled, but the list of effects is empty. \
                 Adding Constant force to avoid confusion"
             );
-            self.effects.push(HidFfEffect::Constant.into());
+            self.effects.push(HidFfEffect::Constant);
         }
         if !self.cond_effects_axis_x.is_absolute() {
             self.cond_effects_axis_x = default_ffb_axis_x()

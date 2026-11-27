@@ -122,10 +122,9 @@ fn draw_graph_docked_or_windowed(
                     .clicked();
 
                 ui.collapsing("live monitor", |ui| {
-                    gui_graphs
-                        .borrow_mut()
-                        .get_mut(&tfm_step.get_graph_hash_key_string())
-                        .map(|gui_graph| draw_graph(tfm_step, gui_graph, ui));
+                    if let Some(gui_graph) = gui_graphs.borrow_mut().get_mut(&tfm_step.get_graph_hash_key_string()) {
+                        draw_graph(tfm_step, gui_graph, ui);
+                    }
                     graph_displayed.set(true);
                 });
 
@@ -135,10 +134,9 @@ fn draw_graph_docked_or_windowed(
                 ui.label("... live monitor graph window opened ... ");
             })
             .with_window_ui(|ui| {
-                gui_graphs
-                    .borrow_mut()
-                    .get_mut(&tfm_step.get_graph_hash_key_string())
-                    .map(|gui_graph| draw_graph(tfm_step, gui_graph, ui));
+                if let Some(gui_graph) = gui_graphs.borrow_mut().get_mut(&tfm_step.get_graph_hash_key_string()) {
+                    draw_graph(tfm_step, gui_graph, ui);
+                }
                 graph_displayed.set(true);
             })
             .show(ui);

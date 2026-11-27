@@ -162,7 +162,7 @@ impl WithTfmExec for TfmSeqCfg {
                     "Non-finite value detected in pipeline, further pipeline execution skipped.\n\
                     affected transformation id {} {}",
                     self.get_id(),
-                    step.and_then(|(step_idx, step)| Some(format!(", affected step {} {}", step_idx + 1, step)))
+                    step.map(|(step_idx, step)| format!(", affected step {} {}", step_idx + 1, step))
                         .unwrap_or("value received at pipeline input".into())
                 ));
 

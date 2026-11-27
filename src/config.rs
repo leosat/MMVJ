@@ -137,6 +137,7 @@ where
 
 //-----------------------------------------------------------------
 impl WithSelfSanitize for Config {
+    #[allow(clippy::unit_arg)]
     fn sanitize_inplace(&mut self, _input: Self::SanInputT) {
         self.devices
             .hid

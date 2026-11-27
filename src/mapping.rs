@@ -520,6 +520,7 @@ impl<
         const DBG_MAIN_LOOP_TIMING: bool = false;
         const DBG_CAPPED_MODE: bool = false;
 
+        #[allow(clippy::unnecessary_cast)]
         let mut current_throttle_duration =
             std::time::Duration::from_secs_f32(EMERGENCY_THROTTLE_DURATION_SEC_MIN as f32);
 
@@ -881,7 +882,7 @@ impl<
                     self.device_managers.hid_mgr.drain_events_queue();
                     return "Throttling by incoming HID events backlog (events queue is full)".into();
                 }
-                return None;
+                None
             }()
         {
             branches::mark_unlikely();
@@ -899,6 +900,7 @@ impl<
             );
             log::warn!("{msg}");
             println!("{msg}");
+            #[allow(clippy::unnecessary_cast)]
             if events_count.wrapping_sub(last_throttle_at_events_count)
                 > EMERGENCY_THROTTLE_TIMEOUT_RESET_AFTER_PROCESSED_EVENTS_NUM
             {

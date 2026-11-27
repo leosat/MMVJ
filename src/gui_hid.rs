@@ -300,17 +300,17 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
                         ui,
                     );
 
-                    if matching_available.clone().collect::<Vec<_>>().len() > 0 {
-                        if let Some(Some(grab)) = self.matcher_grab_ref() {
-                            ui.separator();
-                            crate::gui_main::GuiMain::draw_available_devices(
-                                "Grabbed devices",
-                                "No devices grabbed",
-                                matching_available.filter(|ad| grab.matches_available_device(*ad)),
-                                self,
-                                ui,
-                            );
-                        }
+                    if !matching_available.clone().collect::<Vec<_>>().is_empty()
+                        && let Some(Some(grab)) = self.matcher_grab_ref()
+                    {
+                        ui.separator();
+                        crate::gui_main::GuiMain::draw_available_devices(
+                            "Grabbed devices",
+                            "No devices grabbed",
+                            matching_available.filter(|ad| grab.matches_available_device(*ad)),
+                            self,
+                            ui,
+                        );
                     }
 
                     ui.separator();
@@ -332,7 +332,7 @@ impl<'s> DrawEgui<'s> for HidDeviceCfg {
 
                 ui.separator();
 
-                ui.collapsing(format!("Controls"), |ui| {
+                ui.collapsing("Controls", |ui| {
                     let mut update_classification = false;
                     for (cn, c) in &mut self.controls {
                         ui.separator();

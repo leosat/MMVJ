@@ -113,7 +113,7 @@ pub(crate) trait ClippingIface {
 
 impl ClippingIface for Option<Clipping> {
     fn is_not_clipping(&self) -> bool {
-        matches!(self, None)
+        self.is_none()
     }
     fn _is_underflow(&self) -> bool {
         matches!(self, Some(Clipping::Underflow))

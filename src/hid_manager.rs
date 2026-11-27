@@ -437,7 +437,7 @@ impl DeviceManagerCommon for HidManager {
                     .push((Rc::clone(&opened_device), device_cfg.clone()));
             }
 
-            handle_grabbing(&*opened_device.borrow());
+            handle_grabbing(&opened_device.borrow());
 
             Ok(OpenedDeviceInfo {
                 opened_device_id: opened_device.borrow().get_id(),
@@ -448,7 +448,7 @@ impl DeviceManagerCommon for HidManager {
             None,
             None,
             device_matcher_key.to_owned(),
-            &device_cfg,
+            device_cfg,
             self.debug,
         )
         .inspect_err(|e| {

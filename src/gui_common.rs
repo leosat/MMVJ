@@ -377,22 +377,20 @@ pub(crate) fn with_clipping_indicator_state(
     ui: &mut egui::Ui,
     id: egui::Id,
     interval: NumInterval<BaseNumT>,
-    callback: impl Fn(&mut egui::Ui, &mut ClippingIndicator) -> (),
-) -> () {
+    callback: impl Fn(&mut egui::Ui, &mut ClippingIndicator),
+) {
     let mut ci = ui.data_mut(|d| {
         get_or_create_clipping_indicators_cache(d)
             .entry(id)
-            .or_insert(ClippingIndicator::new(interval).into())
+            .or_insert(ClippingIndicator::new(interval))
             .clone()
     });
     callback(ui, &mut ci);
     ui.data_mut(|d| get_or_create_clipping_indicators_cache(d).insert(id, ci));
 }
 
-fn get_or_create_clipping_indicators_cache<'a>(
-    cache: &'a mut IdTypeMap,
-) -> &'a mut HashMap<egui::Id, ClippingIndicator> {
-    cache.get_temp_mut_or_insert_with(egui::Id::unique("CLIPPING INDICATORS CACHE"), || Default::default())
+fn get_or_create_clipping_indicators_cache(cache: &mut IdTypeMap) -> &mut HashMap<egui::Id, ClippingIndicator> {
+    cache.get_temp_mut_or_insert_with(egui::Id::unique("CLIPPING INDICATORS CACHE"), Default::default)
 }
 
 pub(crate) fn clear_clipping_indicators_cache(ui: &mut egui::Ui) {
@@ -402,7 +400,7 @@ pub(crate) fn clear_clipping_indicators_cache(ui: &mut egui::Ui) {
 }
 
 fn get_or_create_dynamic_targets_cache(cache: &mut IdTypeMap) -> &mut HashMap<egui::Id, Vec<DynValueRefs>> {
-    cache.get_temp_mut_or_insert_with(egui::Id::unique("DYNAMIC TARGETS CACHE"), || Default::default())
+    cache.get_temp_mut_or_insert_with(egui::Id::unique("DYNAMIC TARGETS CACHE"), Default::default)
 }
 
 pub(crate) fn clear_dynamic_targets_cache(ui: &mut egui::Ui) {
@@ -643,7 +641,7 @@ pub(crate) fn draw_button_to_window<'s>(
     ui: &'s mut egui::Ui,
     func: impl FnOnce(&mut egui::Ui),
 ) -> bool {
-    let mut window_opened = ui.data_mut(|d| d.get_temp_mut_or_default::<bool>(window_id).clone());
+    let mut window_opened = ui.data_mut(|d| *d.get_temp_mut_or_default::<bool>(window_id));
 
     if window_opened {
         ui.label(window_opened_text);

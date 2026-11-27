@@ -39,7 +39,7 @@ where
     type LastKnownIOValueT = BaseNumT;
 
     fn get_last_known_io(&self) -> Self::LastKnownIOValueT {
-        self.last_known_io.load(Relaxed).into()
+        self.last_known_io.load(Relaxed)
         // {
         //     // if let Some(tfm) = self.port_transformation_ref() {
         //     //     tfm.get_last_known_io().0.into()
@@ -281,7 +281,7 @@ pub(crate) struct RemapPolicyUserDefined {
 impl<ValueT: NumIntervalValue> PortRemapPolicy<ValueT> for RemapPolicyUserDefined {
     fn new(interval: Option<NumInterval<ValueT>>) -> Self {
         Self {
-            remap: std::cell::Cell::new(interval.and_then(|interval| interval.cast::<BaseNumT>()).into()),
+            remap: std::cell::Cell::new(interval.and_then(|interval| interval.cast::<BaseNumT>())),
         }
     }
 

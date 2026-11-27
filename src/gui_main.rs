@@ -594,7 +594,7 @@ impl eframe::App for GuiMain {
                     self.cfg
                         .cfg_file
                         .as_ref()
-                        .and_then(|f| Some(f.to_string_lossy().to_string()))
+                        .map(|f| f.to_string_lossy().to_string())
                         .unwrap_or("no associated file".to_string()),
                     self.cfg.edit_epoch
                 ));
@@ -1170,7 +1170,7 @@ impl GuiMain {
             return;
         }
 
-        if !self.post_draw_cmds.get(0).is_some_and(|cmd| {
+        if !self.post_draw_cmds.first().is_some_and(|cmd| {
             matches!(
                 cmd,
                 PendingCommand {
@@ -1367,7 +1367,7 @@ impl GuiMain {
         ui.separator();
 
         // __________________________________________________
-        Self::draw_devices_editor(
+        if let Some(out) = Self::draw_devices_editor(
             &mut self.cfg.devices.hid,
             self.avail_dev_info_cache.hid(&self.hid_mgr),
             &mut self.transient_states_device_key_edit,
@@ -1378,12 +1378,13 @@ impl GuiMain {
             HidDeviceCfg::new_virtual as fn(&str) -> HidDeviceCfg,
             |d: &HidDeviceCfg| -> bool { d.is_a_virtual() } as fn(&HidDeviceCfg) -> bool,
             ui,
-        )
-        .map(|out| self.submit_post_draw_cmd(out));
+        ) {
+            self.submit_post_draw_cmd(out)
+        }
 
         ui.separator();
 
-        Self::draw_devices_editor(
+        if let Some(out) = Self::draw_devices_editor(
             &mut self.cfg.devices.hid,
             self.avail_dev_info_cache.hid(&self.hid_mgr),
             &mut self.transient_states_device_key_edit,
@@ -1394,11 +1395,13 @@ impl GuiMain {
             |_: &str| -> HidDeviceCfg { HidDeviceCfg::new_matcher() } as fn(&str) -> HidDeviceCfg,
             |d: &HidDeviceCfg| -> bool { !d.is_a_virtual() } as fn(&HidDeviceCfg) -> bool,
             ui,
-        )
-        .map(|out| self.submit_post_draw_cmd(out));
+        ) {
+            self.submit_post_draw_cmd(out)
+        }
     }
 
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     fn draw_devices_editor<'s, DeviceCfgT, AvailDeviceInfoT>(
         devices: &mut std::collections::BTreeMap<String, DeviceCfgT>,
         available_devices: &[AvailDeviceInfoT],
@@ -1468,12 +1471,12 @@ impl GuiMain {
                     })
                     .body(|ui| {
                         let device = devices.get_mut(&cfg_key).unwrap();
-                        device
-                            .egui((available_devices, GuiInDeviceCfg::Edit { device_key: &cfg_key }), ui)
-                            .map(|out| {
-                                device.update_classification(); // TODO?: move to sanitize?
-                                gui_out_mut.replace(out);
-                            });
+                        if let Some(out) =
+                            device.egui((available_devices, GuiInDeviceCfg::Edit { device_key: &cfg_key }), ui)
+                        {
+                            device.update_classification(); // TODO?: move to sanitize?
+                            gui_out_mut.replace(out);
+                        }
                     });
 
                     if drawing_virtual && gui_out_mut.is_some() && changed_virtual_device_cfg_key.is_none() {
@@ -1491,8 +1494,7 @@ impl GuiMain {
                 GuiCmd::BreakOnErr,
                 GuiCmd::ChangeVirtualHid(GuiCmdChangeVirtualHid {
                     virtual_hid_key: changed_virtual_device_cfg_key.clone(),
-                })
-                .into(),
+                }),
             ]));
             if !matches!(
                 *out,

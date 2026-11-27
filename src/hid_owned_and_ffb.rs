@@ -71,11 +71,11 @@ impl FfEffectPlaybackInfo {
             prev_out: 0.0,
             after_delay_start_time: now
                 .checked_add(replay.delay)
-                .unwrap_or_else(|| log_time_instant_calc_overflow_and_get_default()),
+                .unwrap_or_else(log_time_instant_calc_overflow_and_get_default),
             end_time: now
                 .checked_add(replay.delay)
                 .and_then(|t| t.checked_add(replay.length))
-                .unwrap_or_else(|| log_time_instant_calc_overflow_and_get_default()),
+                .unwrap_or_else(log_time_instant_calc_overflow_and_get_default),
             after_delay_length: replay.length,
         }
     }
@@ -84,11 +84,11 @@ impl FfEffectPlaybackInfo {
         self.played_since = now;
         self.after_delay_start_time = now
             .checked_add(delay)
-            .unwrap_or_else(|| log_time_instant_calc_overflow_and_get_default());
+            .unwrap_or_else(log_time_instant_calc_overflow_and_get_default);
         self.end_time = self
             .after_delay_start_time
             .checked_add(self.after_delay_length)
-            .unwrap_or_else(|| log_time_instant_calc_overflow_and_get_default());
+            .unwrap_or_else(log_time_instant_calc_overflow_and_get_default);
     }
 }
 

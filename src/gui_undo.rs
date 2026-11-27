@@ -35,7 +35,7 @@ impl GuiCfgUndo {
             last_fully_applied_epoch: cfg.edit_epoch,
             ..Default::default()
         };
-        tmp.undoer.feed_state(ui_time, &cfg);
+        tmp.undoer.feed_state(ui_time, cfg);
         tmp
     }
 }
@@ -62,13 +62,9 @@ impl GuiCmd {
     fn get_undo_cmd(&self) -> Option<GuiCmd> {
         match self {
             GuiCmd::ChangeVirtualHid(..) => Some(self.clone()),
-            GuiCmd::CmdSeqence(cmds) => GuiCmd::CmdSeqence(
-                cmds.iter()
-                    .map(|cmd| cmd.get_undo_cmd())
-                    .filter_map(|cmd| cmd)
-                    .collect::<Vec<_>>(),
-            )
-            .into(),
+            GuiCmd::CmdSeqence(cmds) => {
+                GuiCmd::CmdSeqence(cmds.iter().filter_map(|cmd| cmd.get_undo_cmd()).collect::<Vec<_>>()).into()
+            }
             GuiCmd::BreakOnErr
             | GuiCmd::SubmitPending(..)
             | GuiCmd::LoadCfgFile(..)
@@ -172,9 +168,9 @@ impl GuiMain {
     pub(super) fn apply_cfg_undo_redo(&mut self, redo: bool, ui: &mut egui::Ui) -> Result<bool, String> {
         self.cfg = {
             let Some(maybe_restored_cfg) = (if redo {
-                self.cfg_undo.undoer.redo(&mut self.cfg)
+                self.cfg_undo.undoer.redo(&self.cfg)
             } else {
-                self.cfg_undo.undoer.undo(&mut self.cfg)
+                self.cfg_undo.undoer.undo(&self.cfg)
             }) else {
                 return Ok(false);
             };

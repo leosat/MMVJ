@@ -1274,7 +1274,9 @@ impl WithSelfSanitize for FilterGatingCfg {
     }
 }
 
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate, Traversable, TraversableMut, WithSelfSanitize)]
+#[derive(
+    Default, JsonSchema, Debug, Clone, Serialize, Deserialize, Validate, Traversable, TraversableMut, WithSelfSanitize,
+)]
 //#[serde(deny_unknown_fields)]
 #[with_doc_str]
 /// An Exponential Moving Average (EMA) filter is a recursive lowpass filter.
@@ -1349,20 +1351,6 @@ impl PartialEq for EmaCfg {
     }
 }
 
-impl Default for EmaCfg {
-    fn default() -> Self {
-        Self {
-            enabled: Default::default(),
-
-            tau: Default::default(),
-            desc: Default::default(),
-            common_state: Default::default(),
-            exe_state: Default::default(),
-            gating: Default::default(),
-        }
-    }
-}
-
 /// Adaptive 1€ (One-Euro) low-pass filter transform step.
 ///
 /// Implements the [1€ Filter](https://cristal.univ-lille.fr/~casiez/1euro/)
@@ -1377,7 +1365,9 @@ impl Default for EmaCfg {
 /// Ideal for smoothing noisy relative inputs (mouse,
 /// trackball) before a steering step, as a final output smoother
 /// after steering, or inside a force-feedback sub-pipeline.
-#[derive(JsonSchema, Debug, Clone, Serialize, Deserialize, Validate, Traversable, TraversableMut, WithSelfSanitize)]
+#[derive(
+    Default, JsonSchema, Debug, Clone, Serialize, Deserialize, Validate, Traversable, TraversableMut, WithSelfSanitize,
+)]
 #[serde(deny_unknown_fields)]
 #[with_doc_str]
 pub(crate) struct OneEuroFilterCfg {
@@ -1505,21 +1495,6 @@ impl PartialEq for OneEuroFilterCfg {
             && self.beta == other.beta
             && self.min_cutoff_hz == other.min_cutoff_hz
             && self.d_cutoff_hz == other.d_cutoff_hz
-    }
-}
-
-impl Default for OneEuroFilterCfg {
-    fn default() -> Self {
-        Self {
-            enabled: Default::default(),
-            beta: Default::default(),
-            min_cutoff_hz: Default::default(),
-            d_cutoff_hz: Default::default(),
-            desc: Default::default(),
-            common_state: Default::default(),
-            exe_state: Default::default(),
-            gating: Default::default(),
-        }
     }
 }
 
@@ -2812,21 +2787,14 @@ impl Default for RaiseFallCfg {
 /// Scripting language selector for the [`ScriptCfg`] transform step.
 ///
 /// Currently only [`Luau`](ScriptLanguage::Luau) is supported.
-#[derive(JsonSchema, Display, Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Default, JsonSchema, Display, Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[cfg(feature = "scripting")]
 pub(crate) enum ScriptLanguage {
     /// Luau — a fast, sandboxed dialect of Lua 5.1 with gradual typing,
     /// executed via the `mlua` crate.
     #[cfg(feature = "lua")]
+    #[default]
     Luau,
-}
-
-#[cfg(feature = "scripting")]
-#[cfg(feature = "lua")]
-impl Default for ScriptLanguage {
-    fn default() -> Self {
-        Self::Luau
-    }
 }
 
 /// User-script transform step.
@@ -2991,7 +2959,7 @@ impl ScriptCfg {
         let out_relativity = self
             .output_relativity
             .unwrap_or(self.common_state_ref().get_in_relativity());
-        for (_, ref mut tfm) in self.aux_transformations.iter_mut() {
+        for ref mut tfm in self.aux_transformations.values_mut() {
             *tfm.in_meta_mut() = tfm.in_meta_mut().make_manual();
         }
         self.common_state_mut().set_out_interval(out_interval);

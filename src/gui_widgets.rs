@@ -96,7 +96,7 @@ impl ClippingIndicator {
             Some(Clipping::Underflow) => draw_half_circle(&painter, center, r, fill, true),
             Some(Clipping::Overflow) => draw_half_circle(&painter, center, r, fill, false),
             None => {
-                painter.circle_filled(center, r as f32, fill);
+                painter.circle_filled(center, r, fill);
             }
         };
 
