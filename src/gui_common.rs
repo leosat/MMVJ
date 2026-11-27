@@ -509,6 +509,7 @@ pub(crate) struct OptionallyWindowed<
     window_initial_trigger_ui: TriggerUiT,
     window_opened_placeholder_ui: PlaceholderUiT,
     window_ui: WindowUiT,
+    window_min_width: f32,
     _lifetime: std::marker::PhantomData<&'s ()>,
 }
 
@@ -527,6 +528,7 @@ impl<'s> OptionallyWindowed<'s> {
             window_opened_placeholder_ui: default_ui_callback,
             window_ui: default_ui_callback,
             _lifetime: std::marker::PhantomData,
+            window_min_width: Self::DEFAULT_MIN_WIDTH,
         }
     }
 }
@@ -539,12 +541,16 @@ where
     WindowUiT: FnOnce(&mut egui::Ui),
     TriggerUiT: FnOnce(&mut egui::Ui) -> bool,
 {
+    const DEFAULT_MIN_WIDTH: f32 = 300.0;
+
     #[allow(unused)]
+    #[must_use]
     pub(crate) fn with_id(mut self, window_id: egui::Id) -> Self {
         self.window_id = window_id;
         self
     }
 
+    #[must_use]
     pub(crate) fn with_title<NewWindowTitleT>(
         self,
         window_title: NewWindowTitleT,
@@ -558,10 +564,12 @@ where
             window_initial_trigger_ui: self.window_initial_trigger_ui,
             window_opened_placeholder_ui: self.window_opened_placeholder_ui,
             window_ui: self.window_ui,
+            window_min_width: self.window_min_width,
             _lifetime: std::marker::PhantomData,
         }
     }
 
+    #[must_use]
     pub(crate) fn with_initial_trigger_ui<NewTriggerUiT>(
         self,
         window_initial_trigger_ui: NewTriggerUiT,
@@ -575,10 +583,12 @@ where
             window_initial_trigger_ui,
             window_opened_placeholder_ui: self.window_opened_placeholder_ui,
             window_ui: self.window_ui,
+            window_min_width: self.window_min_width,
             _lifetime: std::marker::PhantomData,
         }
     }
 
+    #[must_use]
     pub(crate) fn with_placeholder_ui<NewPlaceholderUiT>(
         self,
         window_opened_placeholder_ui: NewPlaceholderUiT,
@@ -592,10 +602,12 @@ where
             window_initial_trigger_ui: self.window_initial_trigger_ui,
             window_opened_placeholder_ui,
             window_ui: self.window_ui,
+            window_min_width: self.window_min_width,
             _lifetime: std::marker::PhantomData,
         }
     }
 
+    #[must_use]
     pub(crate) fn with_window_ui<NewWindowUiT>(
         self,
         window_ui: NewWindowUiT,
@@ -609,6 +621,24 @@ where
             window_initial_trigger_ui: self.window_initial_trigger_ui,
             window_opened_placeholder_ui: self.window_opened_placeholder_ui,
             window_ui,
+            window_min_width: self.window_min_width,
+            _lifetime: std::marker::PhantomData,
+        }
+    }
+
+    #[allow(unused)]
+    #[must_use]
+    pub(crate) fn with_window_min_width(
+        self,
+        window_min_width: f32,
+    ) -> OptionallyWindowed<'s, WindowTitleT, PlaceholderUiT, WindowUiT, TriggerUiT> {
+        OptionallyWindowed {
+            window_id: self.window_id,
+            window_title: self.window_title,
+            window_initial_trigger_ui: self.window_initial_trigger_ui,
+            window_opened_placeholder_ui: self.window_opened_placeholder_ui,
+            window_ui: self.window_ui,
+            window_min_width: window_min_width,
             _lifetime: std::marker::PhantomData,
         }
     }
@@ -620,6 +650,7 @@ where
             (self.window_opened_placeholder_ui)(ui);
             egui::Window::new(self.window_title)
                 .open(&mut window_opened)
+                .min_width(self.window_min_width)
                 .resizable(true)
                 .id(self.window_id)
                 .show(ui.ctx(), |ui| (self.window_ui)(ui));

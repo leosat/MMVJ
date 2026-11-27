@@ -1603,200 +1603,235 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
         let mut gui_out = None;
         let gui_out_mut = &mut gui_out;
 
-        // -----------------------------------------------
-        // -----------------------------------------------
-        // -----------------------------------------------
-        {
-            let mut draw_aux_data_ui = |aux_kind: ScriptAuxKind| {
-                ui.separator();
+        ui.horizontal(|ui| {
+            let mut draw_aux_data_ui = |aux_kind: ScriptAuxKind, separator| {
                 ui.push_id(aux_kind, |ui| {
-                    let c = draw_collapsing_ui(
-                        ui,
-                        None::<()>,
-                        Some(match aux_kind {
-                            ScriptAuxKind::Source => "Aux sources",
-                            ScriptAuxKind::Destination => "Aux destinations",
-                            ScriptAuxKind::Transformation => "Aux transformations",
-                        }),
-                        |ui| {
-                            ui.separator();
-                            if ui
-                                .button(egui_phosphor::bold::LIST_PLUS.to_string())
-                                .on_hover_text(match aux_kind {
-                                    ScriptAuxKind::Source => "add source",
-                                    ScriptAuxKind::Destination => "add destination",
-                                    ScriptAuxKind::Transformation => "add transformation",
-                                })
-                                .clicked()
-                            {
-                                match aux_kind {
-                                    ScriptAuxKind::Source => {
-                                        self.aux_srcs.insert(
-                                            get_item_name_with_random_suffix("Src", self.aux_srcs.len() + 1),
-                                            Default::default(),
-                                        );
-                                    }
-                                    ScriptAuxKind::Destination => {
-                                        self.aux_dsts.insert(
-                                            get_item_name_with_random_suffix("Dst", self.aux_dsts.len() + 1),
-                                            Default::default(),
-                                        );
-                                    }
-                                    ScriptAuxKind::Transformation => {
-                                        self.aux_transformations.insert(
-                                            get_item_name_with_random_suffix("Tfm", self.aux_transformations.len() + 1),
-                                            TfmSeqCfg::new_with_manual_input_params(),
-                                        );
-                                    }
-                                };
-                                changed_settings_general = true;
-                            }
-                        },
-                    )
-                    .body(|ui| {
-                        ui.separator();
+                    let title = match aux_kind {
+                        ScriptAuxKind::Source => "Aux sources",
+                        ScriptAuxKind::Destination => "Aux destinations",
+                        ScriptAuxKind::Transformation => "Aux transformations",
+                    };
 
-                        let keys: Vec<String> = match aux_kind {
-                            ScriptAuxKind::Source => self.aux_srcs.keys().cloned().collect(),
-                            ScriptAuxKind::Destination => self.aux_dsts.keys().cloned().collect(),
-                            ScriptAuxKind::Transformation => self.aux_transformations.keys().cloned().collect(),
-                        };
-                        for (idx, name) in keys.iter().enumerate() {
-                            let key = (idx.into(), aux_kind);
-
-                            ui.separator();
-                            draw_collapsing_ui(ui, Some(idx), Some(name), |ui| {
-                                {
-                                    ui.separator();
-                                    let is_editing = gui_in.1.transient_script_aux_edits.borrow().contains_key(&key);
-                                    if !is_editing {
-                                        if ui
-                                            .button(egui_phosphor::bold::IDENTIFICATION_BADGE.to_string())
-                                            .on_hover_text("Click to rename")
-                                            .clicked()
-                                        {
-                                            gui_in
-                                                .1
-                                                .transient_script_aux_edits
-                                                .borrow_mut()
-                                                .insert(key, (name.clone(), name.clone()));
-                                        }
-                                    } else {
-                                        let rename_state = &mut *gui_in.1.transient_script_aux_edits.borrow_mut();
-                                        let (old, new) = rename_state.get_mut(&key).unwrap();
-                                        ui.text_edit_singleline(new);
-                                        ui.separator();
-                                        if ui.button("done").clicked() {
-                                            if old != new && !new.is_empty() {
-                                                *gui_out_mut = Some(GuiCmd::ScriptAuxRename(GuiCmdScriptAuxRename {
-                                                    tfm_step_id,
-                                                    kind: aux_kind,
-                                                    old_key: old.clone(),
-                                                    new_key: new.clone(),
-                                                }));
-                                            }
-                                            rename_state.remove(&key);
-                                        }
-                                        ui.separator();
-                                        if ui.small_button("cancel").clicked() {
-                                            rename_state.remove(&key);
-                                        }
-                                    }
-                                }
-                                ui.separator();
-                                let remove = ui
-                                    .button(egui_phosphor::bold::TRASH.to_string())
-                                    .on_hover_text("Remove")
-                                    .clicked();
-                                match aux_kind {
-                                    ScriptAuxKind::Source => {
-                                        if remove {
-                                            self.aux_srcs.remove(name);
-                                            changed_settings_general = true;
-                                        }
-                                    }
-                                    ScriptAuxKind::Destination => {
-                                        if remove {
-                                            self.aux_dsts.remove(name);
-                                            changed_settings_general = true;
-                                        }
-                                    }
-                                    ScriptAuxKind::Transformation => {
-                                        if remove {
-                                            self.aux_transformations.remove(name);
-                                            changed_settings_general = true;
-                                        }
-                                    }
-                                }
-                            })
-                            .body(|ui| {
-                                ui.group(|ui| {
-                                    ui.horizontal(|ui| match aux_kind {
-                                        ScriptAuxKind::Source => {
-                                            if let Some(src) = self.aux_srcs.get_mut(name) {
-                                                let window_title = format!("Choose script input {} ", name);
-                                                src.egui(
-                                                    GuiInValue::Edit(GuiInValueEditParams {
-                                                        name: &window_title,
-                                                        choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
-                                                        allow_interval_edit: true,
-                                                        slider_log_scale: false,
-                                                        gui_common_ctx: &gui_in.1,
-                                                    }),
-                                                    ui,
-                                                )
-                                                .inspect(|out| *gui_out_mut = Some(out.clone()));
-                                            }
-                                        }
-                                        ScriptAuxKind::Destination => {
-                                            if let Some(dst) = self.aux_dsts.get_mut(name) {
-                                                let window_title = format!("Choose script output {} ", name);
-                                                dst.egui(
-                                                    GuiInValue::Edit(GuiInValueEditParams {
-                                                        name: &window_title,
-                                                        choice_case: ValueUsageContext::TfmStepAuxDst.into(),
-                                                        allow_interval_edit: true,
-                                                        slider_log_scale: false,
-                                                        gui_common_ctx: &gui_in.1,
-                                                    }),
-                                                    ui,
-                                                )
-                                                .inspect(|out| *gui_out_mut = Some(out.clone()));
-                                            }
-                                        }
-                                        ScriptAuxKind::Transformation => {
-                                            if let Some(tfm) = self.aux_transformations.get_mut(name) {
-                                                ui.push_id(idx, |ui| {
-                                                    ui.vertical(|ui| {
-                                                        tfm.egui(gui_in.1, ui)
-                                                            .inspect(|out| *gui_out_mut = Some(out.clone()));
-                                                    });
-                                                });
-                                            }
-                                        }
-                                    });
-                                });
-                            });
-                        }
-                    });
-
-                    c.0.on_hover_text(match aux_kind {
+                    let hover_str = match aux_kind {
                         ScriptAuxKind::Source => self.aux_srcs_doc_str(),
                         ScriptAuxKind::Destination => self.aux_dsts_doc_str(),
                         ScriptAuxKind::Transformation => self.aux_transformations_doc_str(),
-                    });
+                    };
+
+                    let aux_data_opt_windowed = OptionallyWindowed::new(ui.scope_id().with(aux_kind))
+                        .with_title(title)
+                        .with_initial_trigger_ui(|ui| {
+                            if separator {
+                                ui.separator();
+                            }
+                            ui.button(title).on_hover_text(hover_str).clicked()
+                        })
+                        .with_placeholder_ui(|ui| {
+                            ui.label(format!("{title} editor window opened..."));
+                        })
+                        .with_window_ui(|ui| {
+                            egui::ScrollArea::vertical().max_height(f32::INFINITY).show(ui, |ui| {
+                                if ui
+                                    .button(egui_phosphor::bold::LIST_PLUS.to_string())
+                                    .on_hover_text(match aux_kind {
+                                        ScriptAuxKind::Source => "add source",
+                                        ScriptAuxKind::Destination => "add destination",
+                                        ScriptAuxKind::Transformation => "add transformation",
+                                    })
+                                    .clicked()
+                                {
+                                    match aux_kind {
+                                        ScriptAuxKind::Source => {
+                                            self.aux_srcs.insert(
+                                                get_item_name_with_random_suffix("Src", self.aux_srcs.len() + 1),
+                                                Default::default(),
+                                            );
+                                        }
+                                        ScriptAuxKind::Destination => {
+                                            self.aux_dsts.insert(
+                                                get_item_name_with_random_suffix("Dst", self.aux_dsts.len() + 1),
+                                                Default::default(),
+                                            );
+                                        }
+                                        ScriptAuxKind::Transformation => {
+                                            self.aux_transformations.insert(
+                                                get_item_name_with_random_suffix(
+                                                    "Tfm",
+                                                    self.aux_transformations.len() + 1,
+                                                ),
+                                                TfmSeqCfg::new_with_manual_input_params(),
+                                            );
+                                        }
+                                    };
+                                    changed_settings_general = true;
+                                }
+
+                                ui.separator();
+
+                                let keys: Vec<String> = match aux_kind {
+                                    ScriptAuxKind::Source => self.aux_srcs.keys().cloned().collect(),
+                                    ScriptAuxKind::Destination => self.aux_dsts.keys().cloned().collect(),
+                                    ScriptAuxKind::Transformation => self.aux_transformations.keys().cloned().collect(),
+                                };
+
+                                for (idx, name) in keys.iter().enumerate() {
+                                    let key = (idx.into(), aux_kind);
+
+                                    ui.separator();
+                                    draw_collapsing_ui(ui, Some(idx), Some(name), |ui| {
+                                        ui.separator();
+                                        let is_editing =
+                                            gui_in.1.transient_script_aux_edits.borrow().contains_key(&key);
+                                        if !is_editing {
+                                            if ui
+                                                .button(egui_phosphor::bold::IDENTIFICATION_BADGE.to_string())
+                                                .on_hover_text("Click to rename")
+                                                .clicked()
+                                            {
+                                                gui_in
+                                                    .1
+                                                    .transient_script_aux_edits
+                                                    .borrow_mut()
+                                                    .insert(key, (name.clone(), name.clone()));
+                                            }
+                                        } else {
+                                            let rename_state = &mut *gui_in.1.transient_script_aux_edits.borrow_mut();
+                                            let (old, new) = rename_state.get_mut(&key).unwrap();
+                                            ui.text_edit_singleline(new);
+                                            ui.separator();
+                                            if ui.button("done").clicked() {
+                                                if old != new && !new.is_empty() {
+                                                    *gui_out_mut =
+                                                        Some(GuiCmd::ScriptAuxRename(GuiCmdScriptAuxRename {
+                                                            tfm_step_id,
+                                                            kind: aux_kind,
+                                                            old_key: old.clone(),
+                                                            new_key: new.clone(),
+                                                        }));
+                                                }
+                                                rename_state.remove(&key);
+                                            }
+                                            ui.separator();
+                                            if ui.small_button("cancel").clicked() {
+                                                rename_state.remove(&key);
+                                            }
+                                        }
+
+                                        ui.separator();
+                                        let remove = ui
+                                            .button(egui_phosphor::bold::TRASH.to_string())
+                                            .on_hover_text("Remove")
+                                            .clicked();
+                                        match aux_kind {
+                                            ScriptAuxKind::Source => {
+                                                if remove {
+                                                    self.aux_srcs.remove(name);
+                                                    changed_settings_general = true;
+                                                }
+                                            }
+                                            ScriptAuxKind::Destination => {
+                                                if remove {
+                                                    self.aux_dsts.remove(name);
+                                                    changed_settings_general = true;
+                                                }
+                                            }
+                                            ScriptAuxKind::Transformation => {
+                                                if remove {
+                                                    self.aux_transformations.remove(name);
+                                                    changed_settings_general = true;
+                                                }
+                                            }
+                                        }
+                                    })
+                                    .body(|ui| {
+                                        ui.group(|ui| {
+                                            ui.horizontal(|ui| match aux_kind {
+                                                ScriptAuxKind::Source => {
+                                                    if let Some(src) = self.aux_srcs.get_mut(name) {
+                                                        let window_title = format!("Choose script input {} ", name);
+                                                        src.egui(
+                                                            GuiInValue::Edit(GuiInValueEditParams {
+                                                                name: &window_title,
+                                                                choice_case: ValueUsageContext::TfmStepAuxSrc.into(),
+                                                                allow_interval_edit: true,
+                                                                slider_log_scale: false,
+                                                                gui_common_ctx: &gui_in.1,
+                                                            }),
+                                                            ui,
+                                                        )
+                                                        .inspect(|out| *gui_out_mut = Some(out.clone()));
+                                                    }
+                                                }
+                                                ScriptAuxKind::Destination => {
+                                                    if let Some(dst) = self.aux_dsts.get_mut(name) {
+                                                        let window_title = format!("Choose script output {} ", name);
+                                                        dst.egui(
+                                                            GuiInValue::Edit(GuiInValueEditParams {
+                                                                name: &window_title,
+                                                                choice_case: ValueUsageContext::TfmStepAuxDst.into(),
+                                                                allow_interval_edit: true,
+                                                                slider_log_scale: false,
+                                                                gui_common_ctx: &gui_in.1,
+                                                            }),
+                                                            ui,
+                                                        )
+                                                        .inspect(|out| *gui_out_mut = Some(out.clone()));
+                                                    }
+                                                }
+                                                ScriptAuxKind::Transformation => {
+                                                    if let Some(tfm) = self.aux_transformations.get_mut(name) {
+                                                        ui.push_id(idx, |ui| {
+                                                            ui.vertical(|ui| {
+                                                                tfm.egui(gui_in.1, ui)
+                                                                    .inspect(|out| *gui_out_mut = Some(out.clone()));
+                                                            });
+                                                        });
+                                                    }
+                                                }
+                                            });
+                                        });
+                                    });
+                                }
+                            });
+                        });
+
+                    aux_data_opt_windowed.show(ui);
                 });
             };
 
             // -----------------------------------------------
-            // -----------------------------------------------
-            draw_aux_data_ui(ScriptAuxKind::Source);
-            draw_aux_data_ui(ScriptAuxKind::Destination);
-            draw_aux_data_ui(ScriptAuxKind::Transformation);
-        }
+            draw_aux_data_ui(ScriptAuxKind::Source, false);
+            draw_aux_data_ui(ScriptAuxKind::Destination, true);
+            draw_aux_data_ui(ScriptAuxKind::Transformation, true);
+        });
 
-        // -------------------------------------------------------
-        // -------------------------------------------------------
+        ui.separator();
+        let script_doc_str = self.script_doc_str();
+        OptionallyWindowed::new(ui.scope_id().with("Script text"))
+            .with_title("Script editor")
+            .with_initial_trigger_ui(|ui| ui.button("Edit script").on_hover_text(script_doc_str).clicked())
+            .with_placeholder_ui(|ui| {
+                ui.label("Script is being edited...");
+            })
+            .with_window_min_width(500.0)
+            .with_window_ui(|ui| {
+                egui::ScrollArea::vertical().max_height(f32::INFINITY).show(ui, |ui| {
+                    ui.label(egui::RichText::new(format!("Language: {}", self.lang)).strong())
+                        .on_hover_text(self.lang_doc_str());
+                    ui.separator();
+                    changed_script = ui
+                        .add(
+                            egui::TextEdit::multiline(&mut self.script)
+                                .font(egui::TextStyle::Monospace)
+                                .interactive(true)
+                                .desired_width(f32::INFINITY)
+                                .hint_text("Create your script"),
+                        )
+                        .changed()
+                });
+            })
+            .show(ui);
+
         ui.separator();
         let mut use_custom_interval = self.output_interval.is_some();
         changed_settings_simple |= ui
@@ -1807,7 +1842,7 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
             ui.separator();
             ui.horizontal(|ui| {
                 if self.output_interval.is_none() {
-                    self.output_interval = Some(SYMM_UNIT_INTERVAL);
+                    self.output_interval = Some(self.common_state_ref().get_in_interval());
                     changed_settings_simple = true;
                 }
                 if let Some(interval) = &mut self.output_interval {
@@ -1850,25 +1885,6 @@ impl<'s> DrawEgui<'s> for ScriptCfg {
             self.output_relativity = None;
         }
 
-        ui.separator();
-        let c = draw_collapsing_ui(ui, None::<()>, Some("Script text"), |_| {}).body(|ui| {
-            ui.separator();
-            ui.label(egui::RichText::new(format!("Language: {}", self.lang)).strong())
-                .on_hover_text(self.lang_doc_str());
-            ui.separator();
-            changed_script = ui
-                .add(
-                    egui::TextEdit::multiline(&mut self.script)
-                        .font(egui::TextStyle::Monospace)
-                        .interactive(true)
-                        .desired_width(f32::INFINITY)
-                        .hint_text("Create your script"),
-                )
-                .changed()
-        });
-        c.0.on_hover_text(self.script_doc_str());
-
-        ui.separator();
         if changed_script {
             self.edit_epoch += 1;
             gui_out = Some(GuiCmd::ConfigChangeSimple)
