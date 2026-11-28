@@ -510,6 +510,7 @@ pub(crate) struct OptionallyWindowed<
     window_opened_placeholder_ui: PlaceholderUiT,
     window_ui: WindowUiT,
     window_min_width: f32,
+    window_min_height: f32,
     _lifetime: std::marker::PhantomData<&'s ()>,
 }
 
@@ -529,6 +530,7 @@ impl<'s> OptionallyWindowed<'s> {
             window_ui: default_ui_callback,
             _lifetime: std::marker::PhantomData,
             window_min_width: Self::DEFAULT_MIN_WIDTH,
+            window_min_height: Self::DEFAULT_MIN_HEIGHT,
         }
     }
 }
@@ -542,6 +544,7 @@ where
     TriggerUiT: FnOnce(&mut egui::Ui) -> bool,
 {
     const DEFAULT_MIN_WIDTH: f32 = 300.0;
+    const DEFAULT_MIN_HEIGHT: f32 = 100.0;
 
     #[allow(unused)]
     #[must_use]
@@ -565,6 +568,7 @@ where
             window_opened_placeholder_ui: self.window_opened_placeholder_ui,
             window_ui: self.window_ui,
             window_min_width: self.window_min_width,
+            window_min_height: self.window_min_height,
             _lifetime: std::marker::PhantomData,
         }
     }
@@ -584,6 +588,7 @@ where
             window_opened_placeholder_ui: self.window_opened_placeholder_ui,
             window_ui: self.window_ui,
             window_min_width: self.window_min_width,
+            window_min_height: self.window_min_height,
             _lifetime: std::marker::PhantomData,
         }
     }
@@ -603,6 +608,7 @@ where
             window_opened_placeholder_ui,
             window_ui: self.window_ui,
             window_min_width: self.window_min_width,
+            window_min_height: self.window_min_height,
             _lifetime: std::marker::PhantomData,
         }
     }
@@ -622,6 +628,7 @@ where
             window_opened_placeholder_ui: self.window_opened_placeholder_ui,
             window_ui,
             window_min_width: self.window_min_width,
+            window_min_height: self.window_min_height,
             _lifetime: std::marker::PhantomData,
         }
     }
@@ -629,18 +636,21 @@ where
     #[allow(unused)]
     #[must_use]
     pub(crate) fn with_window_min_width(
-        self,
+        mut self,
         window_min_width: f32,
     ) -> OptionallyWindowed<'s, WindowTitleT, PlaceholderUiT, WindowUiT, TriggerUiT> {
-        OptionallyWindowed {
-            window_id: self.window_id,
-            window_title: self.window_title,
-            window_initial_trigger_ui: self.window_initial_trigger_ui,
-            window_opened_placeholder_ui: self.window_opened_placeholder_ui,
-            window_ui: self.window_ui,
-            window_min_width: window_min_width,
-            _lifetime: std::marker::PhantomData,
-        }
+        self.window_min_width = window_min_width;
+        self
+    }
+
+    #[allow(unused)]
+    #[must_use]
+    pub(crate) fn with_window_min_height(
+        mut self,
+        window_min_height: f32,
+    ) -> OptionallyWindowed<'s, WindowTitleT, PlaceholderUiT, WindowUiT, TriggerUiT> {
+        self.window_min_height = window_min_height;
+        self
     }
 
     pub(crate) fn show(self, ui: &mut egui::Ui) -> bool {
@@ -651,6 +661,7 @@ where
             egui::Window::new(self.window_title)
                 .open(&mut window_opened)
                 .min_width(self.window_min_width)
+                .min_height(self.window_min_height)
                 .resizable(true)
                 .id(self.window_id)
                 .show(ui.ctx(), |ui| (self.window_ui)(ui));
